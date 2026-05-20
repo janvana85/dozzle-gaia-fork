@@ -46,6 +46,79 @@
                 </div>
               </div>
               <p class="text-base-content/50 text-xs">{{ $t("notifications.settings.quiet-hours-hint") }}</p>
+
+              <!-- Stacking settings -->
+              <div class="divider my-2 text-xs">Stacking</div>
+              <div class="flex items-center gap-3">
+                <div>
+                  <label class="label text-sm">Stack threshold</label>
+                  <input
+                    type="number"
+                    v-model.number="quietHours.stackThreshold"
+                    min="2"
+                    max="20"
+                    class="input input-sm focus:input-primary w-24"
+                    @change="saveQuietHours"
+                  />
+                </div>
+                <div>
+                  <label class="label text-sm">Stack window (min)</label>
+                  <input
+                    type="number"
+                    v-model.number="quietHours.stackWindow"
+                    min="1"
+                    max="1440"
+                    class="input input-sm focus:input-primary w-24"
+                    @change="saveQuietHours"
+                  />
+                </div>
+                <div>
+                  <label class="label text-sm">Stacked priority</label>
+                  <input
+                    type="number"
+                    v-model.number="quietHours.stackedPriority"
+                    min="1"
+                    max="5"
+                    class="input input-sm focus:input-primary w-24"
+                    @change="saveQuietHours"
+                  />
+                </div>
+              </div>
+
+              <!-- Topic routing -->
+              <div class="divider my-2 text-xs">Topic routing</div>
+              <div>
+                <label class="label text-sm">Quiet topic (optional)</label>
+                <input
+                  type="text"
+                  v-model="quietHours.quietTopic"
+                  placeholder="alerts-quiet"
+                  class="input input-sm focus:input-primary w-full"
+                  @change="saveQuietHours"
+                />
+              </div>
+              <label class="flex cursor-pointer items-center gap-3 mt-2">
+                <input
+                  type="checkbox"
+                  v-model="quietHours.stackedUsesQuietTopic"
+                  class="checkbox checkbox-primary checkbox-sm"
+                  @change="saveQuietHours"
+                />
+                <span class="text-sm">Send stacked alerts to quiet topic</span>
+              </label>
+
+              <!-- Timezone -->
+              <div class="divider my-2 text-xs">Timezone</div>
+              <div>
+                <label class="label text-sm">Timezone</label>
+                <input
+                  type="text"
+                  v-model="quietHours.timezone"
+                  placeholder="Europe/Prague"
+                  class="input input-sm focus:input-primary w-full"
+                  @change="saveQuietHours"
+                />
+              </div>
             </template>
           </div>
         </div>
@@ -150,7 +223,17 @@ const route = useRoute();
 // State
 const alerts = ref<NotificationRule[]>([]);
 const dispatchers = ref<Dispatcher[]>([]);
-const quietHours = ref({ enabled: false, start: "22:00", end: "08:00" });
+const quietHours = ref({
+  enabled: false,
+  start: "22:00",
+  end: "08:00",
+  timezone: "",
+  stackThreshold: 3,
+  stackWindow: 15,
+  stackedPriority: 4,
+  quietTopic: "",
+  stackedUsesQuietTopic: false,
+});
 
 async function fetchAlerts() {
   const res = await fetch(withBase("/api/notifications/rules"));
@@ -164,14 +247,24 @@ async function fetchDispatchers() {
 
 async function fetchQuietHours() {
   const res = await fetch(withBase("/api/notifications/quiet-hours"));
-  if (res.ok) quietHours.value = await res.json();
+  if (res.ok) {
+    const data = await res.json();
+    quietHours.value = {
+      ...data,
+      stackWindow: Math.round((data.stackWindow || 900) / 60),
+    };
+  }
 }
 
 async function saveQuietHours() {
+  const payload = {
+    ...quietHours.value,
+    stackWindow: quietHours.value.stackWindow * 60,
+  };
   await fetch(withBase("/api/notifications/quiet-hours"), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(quietHours.value),
+    body: JSON.stringify(payload),
   });
 }
 
