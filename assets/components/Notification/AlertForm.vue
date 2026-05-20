@@ -204,11 +204,23 @@
         <div class="grid grid-cols-3 gap-2">
           <div>
             <label class="label text-sm">{{ $t("notifications.alert-form.burst-count") }}</label>
-            <input v-model.number="burstCount" type="number" min="0" class="input focus:input-primary w-full" placeholder="0" />
+            <input
+              v-model.number="burstCount"
+              type="number"
+              min="0"
+              class="input focus:input-primary w-full"
+              placeholder="0"
+            />
           </div>
           <div>
             <label class="label text-sm">{{ $t("notifications.alert-form.burst-window") }}</label>
-            <input v-model.number="burstWindow" type="number" min="0" class="input focus:input-primary w-full" placeholder="60" />
+            <input
+              v-model.number="burstWindow"
+              type="number"
+              min="0"
+              class="input focus:input-primary w-full"
+              placeholder="60"
+            />
           </div>
           <div>
             <label class="label text-sm">{{ $t("notifications.alert-form.burst-priority") }}</label>
@@ -230,8 +242,15 @@
             <span class="text-sm">{{ $t("notifications.alert-form.bypass-quiet-hours") }}</span>
           </label>
           <label class="flex cursor-pointer items-center gap-2">
-            <input type="checkbox" v-model="holdDuringQuiet" :disabled="bypassQuietHours" class="checkbox checkbox-primary" />
-            <span class="text-sm" :class="bypassQuietHours ? 'opacity-40' : ''">{{ $t("notifications.alert-form.hold-during-quiet") }}</span>
+            <input
+              type="checkbox"
+              v-model="holdDuringQuiet"
+              :disabled="bypassQuietHours"
+              class="checkbox checkbox-primary"
+            />
+            <span class="text-sm" :class="bypassQuietHours ? 'opacity-40' : ''">{{
+              $t("notifications.alert-form.hold-during-quiet")
+            }}</span>
           </label>
           <div v-if="!bypassQuietHours && !holdDuringQuiet">
             <label class="label text-sm">{{ $t("notifications.alert-form.quiet-priority") }}</label>
@@ -249,7 +268,9 @@
       <fieldset class="fieldset">
         <legend class="fieldset-legend text-lg">
           {{ $t("notifications.alert-form.hold-clear-window") }}
-          <span class="text-base-content/50 ml-2 text-xs font-normal">{{ $t("notifications.alert-form.hold-clear-hint") }}</span>
+          <span class="text-base-content/50 ml-2 text-xs font-normal">{{
+            $t("notifications.alert-form.hold-clear-hint")
+          }}</span>
         </legend>
         <input
           v-model.number="holdClearWindow"
@@ -258,6 +279,41 @@
           class="input focus:input-primary w-full"
           placeholder="0"
         />
+      </fieldset>
+    </template>
+
+    <!-- Watchdog / Coupled Messages (log alerts only) -->
+    <template v-if="alertType === 'log'">
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend text-lg">{{ $t("notifications.alert-form.watchdog-title") }}</legend>
+        <div class="space-y-3">
+          <div>
+            <label class="label text-sm">{{ $t("notifications.alert-form.watchdog-window") }}</label>
+            <div class="flex items-center gap-2">
+              <input
+                v-model.number="watchdogWindowMins"
+                type="number"
+                min="0"
+                class="input focus:input-primary w-32"
+                placeholder="0"
+              />
+              <span class="text-base-content/60 text-sm">{{
+                $t("notifications.alert-form.watchdog-window-unit")
+              }}</span>
+            </div>
+            <p class="text-base-content/50 mt-1 text-xs">{{ $t("notifications.alert-form.watchdog-window-hint") }}</p>
+          </div>
+          <div v-if="watchdogWindowMins > 0">
+            <label class="label text-sm">{{ $t("notifications.alert-form.watchdog-pattern") }}</label>
+            <input
+              v-model="watchdogPattern"
+              type="text"
+              class="input focus:input-primary w-full text-base"
+              :placeholder="$t('notifications.alert-form.watchdog-pattern-placeholder')"
+            />
+            <p class="text-base-content/50 mt-1 text-xs">{{ $t("notifications.alert-form.watchdog-pattern-hint") }}</p>
+          </div>
+        </div>
       </fieldset>
     </template>
 
@@ -341,11 +397,18 @@ const burstCount = ref(props.alert?.burstCount ?? 0);
 const burstWindow = ref(props.alert?.burstWindow ?? 0);
 const burstPriority = ref(props.alert?.burstPriority ?? 0);
 
+// watchdog / coupled messages
+const watchdogPattern = ref(props.alert?.watchdogPattern ?? "");
+const watchdogWindowMins = ref(props.alert?.watchdogWindow ? Math.round(props.alert.watchdogWindow / 60) : 0);
+
 const ntfyFields = computed(() => ({
   ntfyTopic: ntfyTopic.value.trim() || undefined,
   ntfyPriority: ntfyPriority.value || undefined,
   ntfyTags: ntfyTagsInput.value.trim()
-    ? ntfyTagsInput.value.split(",").map((t) => t.trim()).filter(Boolean)
+    ? ntfyTagsInput.value
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean)
     : undefined,
   bypassQuietHours: bypassQuietHours.value || undefined,
   quietPriority: quietPriority.value || undefined,
@@ -361,7 +424,14 @@ const canSave = computed(() => baseCanSave.value && (fieldsRef.value?.canSave ??
 async function save() {
   if (!canSave.value || !fieldsRef.value) return;
   const extra = selectedDestination.value?.type === "ntfy" ? ntfyFields.value : {};
-  await saveAlert({ ...fieldsRef.value.typeFields, ...extra });
+  const watchdog =
+    alertType.value === "log" && watchdogWindowMins.value > 0
+      ? {
+          watchdogPattern: watchdogPattern.value.trim() || undefined,
+          watchdogWindow: watchdogWindowMins.value * 60,
+        }
+      : {};
+  await saveAlert({ ...fieldsRef.value.typeFields, ...extra, ...watchdog });
 }
 
 // Container editor

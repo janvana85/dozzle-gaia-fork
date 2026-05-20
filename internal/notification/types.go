@@ -147,11 +147,16 @@ type Subscription struct {
 	BurstWindow   int `json:"burstWindow,omitempty" yaml:"burstWindow,omitempty"`
 	BurstPriority int `json:"burstPriority,omitempty" yaml:"burstPriority,omitempty"`
 
+	// Watchdog / coupled-messages: fires if resolve pattern doesn't arrive within WatchdogWindow seconds
+	WatchdogPattern string `json:"watchdogPattern,omitempty" yaml:"watchdogPattern,omitempty"`
+	WatchdogWindow  int    `json:"watchdogWindow,omitempty" yaml:"watchdogWindow,omitempty"` // seconds; 0 = disabled
+
 	// Compiled filter expressions
 	LogProgram       *vm.Program `json:"-" yaml:"-"`
 	ContainerProgram *vm.Program `json:"-" yaml:"-"`
 	MetricProgram    *vm.Program `json:"-" yaml:"-"`
 	EventProgram     *vm.Program `json:"-" yaml:"-"`
+	WatchdogProgram  *vm.Program `json:"-" yaml:"-"`
 
 	// Runtime stats (not persisted)
 	TriggerCount          atomic.Int64                 `json:"-" yaml:"-"`
@@ -168,6 +173,9 @@ type Subscription struct {
 
 	// Per-container burst trigger timestamps (recent N triggers within BurstWindow)
 	BurstTrackers *xsync.Map[string, []time.Time] `json:"-" yaml:"-"`
+
+	// Per-container watchdog timers
+	WatchdogTimers *xsync.Map[string, *time.Timer] `json:"-" yaml:"-"`
 }
 
 // QuietHoursConfig defines a daily quiet window during which non-bypass alerts
@@ -229,6 +237,14 @@ func (s *Subscription) CompileExpressions() error {
 		s.EventProgram = program
 	}
 
+	if s.WatchdogPattern != "" {
+		program, err := expr.Compile(s.WatchdogPattern, expr.Env(types.NotificationLog{}))
+		if err != nil {
+			return fmt.Errorf("failed to compile watchdog pattern: %w", err)
+		}
+		s.WatchdogProgram = program
+	}
+
 	return nil
 }
 
@@ -246,6 +262,36 @@ type DispatcherConfig struct {
 	Priority int      `json:"priority,omitempty" yaml:"priority,omitempty"` // 1-5
 	Tags     []string `json:"tags,omitempty" yaml:"tags,omitempty"`
 	Token    string   `json:"token,omitempty" yaml:"token,omitempty"`
+}
+
+// MatchesWatchdog checks if a log matches the watchdog resolve pattern.
+func (s *Subscription) MatchesWatchdog(l types.NotificationLog) bool {
+	if s.WatchdogProgram == nil {
+		return false
+	}
+	result, err := expr.Run(s.WatchdogProgram, l)
+	if err != nil {
+		return false
+	}
+	match, ok := result.(bool)
+	return ok && match
+}
+
+// ResetWatchdogTimer cancels any existing watchdog timer and starts a new one for the container.
+func (s *Subscription) ResetWatchdogTimer(containerID string, fire func(), window int) {
+	if old, ok := s.WatchdogTimers.Load(containerID); ok {
+		old.Stop()
+	}
+	t := time.AfterFunc(time.Duration(window)*time.Second, fire)
+	s.WatchdogTimers.Store(containerID, t)
+}
+
+// CancelWatchdogTimer stops and removes the watchdog timer for a container.
+func (s *Subscription) CancelWatchdogTimer(containerID string) {
+	if t, ok := s.WatchdogTimers.Load(containerID); ok {
+		t.Stop()
+		s.WatchdogTimers.Delete(containerID)
+	}
 }
 
 // Config represents the persisted notification configuration

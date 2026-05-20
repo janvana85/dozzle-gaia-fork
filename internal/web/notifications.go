@@ -35,6 +35,8 @@ type NotificationRuleResponse struct {
 	TriggeredContainers int                 `json:"triggeredContainers"`
 	LastTriggeredAt     *time.Time          `json:"lastTriggeredAt"`
 	Dispatcher          *DispatcherResponse `json:"dispatcher"`
+	WatchdogPattern     string              `json:"watchdogPattern,omitempty"`
+	WatchdogWindow      int                 `json:"watchdogWindow,omitempty"`
 }
 
 type DispatcherResponse struct {
@@ -49,6 +51,7 @@ type DispatcherResponse struct {
 	Topic    *string  `json:"topic,omitempty"`
 	Priority *int     `json:"priority,omitempty"`
 	Tags     []string `json:"tags,omitempty"`
+	TokenSet bool     `json:"tokenSet,omitempty"` // true if an auth token is configured (token itself is never returned)
 }
 
 type NotificationRuleInput struct {
@@ -71,6 +74,8 @@ type NotificationRuleInput struct {
 	BurstCount          int      `json:"burstCount,omitempty"`
 	BurstWindow         int      `json:"burstWindow,omitempty"`
 	BurstPriority       int      `json:"burstPriority,omitempty"`
+	WatchdogPattern     string   `json:"watchdogPattern,omitempty"`
+	WatchdogWindow      int      `json:"watchdogWindow,omitempty"`
 }
 
 type NotificationRuleUpdateInput struct {
@@ -189,6 +194,8 @@ func subscriptionToResponse(sub *notification.Subscription, dispatchers []notifi
 		TriggerCount:        triggerCount,
 		LastTriggeredAt:     lastTriggeredAt,
 		TriggeredContainers: triggeredContainers,
+		WatchdogPattern:     sub.WatchdogPattern,
+		WatchdogWindow:      sub.WatchdogWindow,
 	}
 }
 
@@ -226,6 +233,9 @@ func dispatcherConfigToResponse(d *notification.DispatcherConfig) *DispatcherRes
 	}
 	if len(d.Tags) > 0 {
 		resp.Tags = d.Tags
+	}
+	if d.Token != "" {
+		resp.TokenSet = true
 	}
 	return resp
 }
@@ -301,6 +311,8 @@ func (h *handler) createNotificationRule(w http.ResponseWriter, r *http.Request)
 		BurstCount:          input.BurstCount,
 		BurstWindow:         input.BurstWindow,
 		BurstPriority:       input.BurstPriority,
+		WatchdogPattern:     input.WatchdogPattern,
+		WatchdogWindow:      input.WatchdogWindow,
 	}
 
 	if err := h.hostService.AddSubscription(sub); err != nil {
@@ -345,6 +357,8 @@ func (h *handler) replaceNotificationRule(w http.ResponseWriter, r *http.Request
 		BurstCount:          input.BurstCount,
 		BurstWindow:         input.BurstWindow,
 		BurstPriority:       input.BurstPriority,
+		WatchdogPattern:     input.WatchdogPattern,
+		WatchdogWindow:      input.WatchdogWindow,
 	}
 
 	if err := h.hostService.ReplaceSubscription(sub); err != nil {
@@ -566,8 +580,16 @@ func (h *handler) updateDispatcher(w http.ResponseWriter, r *http.Request) {
 			priority = *input.Priority
 		}
 		token := ""
-		if input.Token != nil {
+		if input.Token != nil && *input.Token != "" {
 			token = *input.Token
+		} else {
+			// Preserve existing token when not provided
+			for _, d := range h.hostService.Dispatchers() {
+				if d.ID == id && d.Type == "ntfy" {
+					token = d.Token
+					break
+				}
+			}
 		}
 		ntfy, err := dispatcher.NewNtfyDispatcher(input.Name, serverURL, topic, priority, token)
 		if err != nil {

@@ -102,6 +102,8 @@ type SubscriptionConfig struct {
 	BurstCount          int      `json:"burstCount,omitempty"`
 	BurstWindow         int      `json:"burstWindow,omitempty"`
 	BurstPriority       int      `json:"burstPriority,omitempty"`
+	WatchdogPattern     string   `json:"watchdogPattern,omitempty"`
+	WatchdogWindow      int      `json:"watchdogWindow,omitempty"` // seconds
 }
 
 // SubscriptionStats represents runtime stats for a notification subscription

@@ -57,9 +57,12 @@
         v-model="token"
         type="password"
         class="input focus:input-primary w-full text-base"
-        placeholder="tk_..."
+        :placeholder="destination?.tokenSet ? $t('notifications.destination-form.ntfy-token-set') : 'tk_...'"
         autocomplete="new-password"
       />
+      <p v-if="destination?.tokenSet && !token" class="fieldset-label text-base-content/50 text-xs">
+        {{ $t("notifications.destination-form.ntfy-token-keep") }}
+      </p>
     </fieldset>
 
     <!-- Error -->
@@ -106,7 +109,7 @@ const name = ref(destination?.name ?? "");
 const serverUrl = ref(destination?.url ?? "https://ntfy.sh");
 const topic = ref(destination?.topic ?? "");
 const priority = ref(destination?.priority ?? 3);
-const token = ref("");
+const token = ref(""); // always starts empty; backend preserves existing token if left blank
 
 const isTesting = ref(false);
 const isSaving = ref(false);
@@ -133,7 +136,6 @@ async function testDestination() {
   isTesting.value = true;
   testResult.value = null;
   try {
-    const url = serverUrl.value.trim().replace(/\/$/, "") + "/" + topic.value.trim();
     const res = await fetch(withBase("/api/notifications/test-ntfy"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -158,14 +160,17 @@ async function saveDestination() {
   isSaving.value = true;
   error.value = null;
   try {
-    const input = {
+    const input: Record<string, unknown> = {
       name: name.value.trim(),
       type: "ntfy",
       url: serverUrl.value.trim(),
       topic: topic.value.trim(),
       priority: priority.value,
-      token: token.value.trim() || undefined,
     };
+    // Only include token if the user typed something; backend preserves the existing token otherwise
+    if (token.value.trim()) {
+      input.token = token.value.trim();
+    }
     const endpoint = isEditing
       ? withBase(`/api/notifications/dispatchers/${destination!.id}`)
       : withBase("/api/notifications/dispatchers");

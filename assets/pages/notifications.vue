@@ -7,6 +7,50 @@
         <p class="text-base-content/60">{{ $t("notifications.description") }}</p>
       </div>
 
+      <!-- Quiet Hours Settings -->
+      <div class="mb-8">
+        <h3 class="text-base-content/60 mb-4 font-semibold tracking-wide uppercase">
+          {{ $t("notifications.settings.title") }}
+        </h3>
+        <div class="card bg-base-200 p-4 md:w-96">
+          <div class="space-y-3">
+            <label class="flex cursor-pointer items-center gap-3">
+              <input
+                type="checkbox"
+                v-model="quietHours.enabled"
+                class="checkbox checkbox-primary"
+                @change="saveQuietHours"
+              />
+              <span class="font-medium">{{ $t("notifications.settings.quiet-hours-enabled") }}</span>
+            </label>
+            <template v-if="quietHours.enabled">
+              <div class="flex items-center gap-3">
+                <div>
+                  <label class="label text-sm">{{ $t("notifications.settings.quiet-start") }}</label>
+                  <input
+                    type="time"
+                    v-model="quietHours.start"
+                    class="input input-sm focus:input-primary"
+                    @change="saveQuietHours"
+                  />
+                </div>
+                <span class="text-base-content/40 mt-5">→</span>
+                <div>
+                  <label class="label text-sm">{{ $t("notifications.settings.quiet-end") }}</label>
+                  <input
+                    type="time"
+                    v-model="quietHours.end"
+                    class="input input-sm focus:input-primary"
+                    @change="saveQuietHours"
+                  />
+                </div>
+              </div>
+              <p class="text-base-content/50 text-xs">{{ $t("notifications.settings.quiet-hours-hint") }}</p>
+            </template>
+          </div>
+        </div>
+      </div>
+
       <!-- Destinations Section -->
       <div class="mb-8">
         <h3 class="text-base-content/60 mb-4 font-semibold tracking-wide uppercase">
@@ -106,6 +150,7 @@ const route = useRoute();
 // State
 const alerts = ref<NotificationRule[]>([]);
 const dispatchers = ref<Dispatcher[]>([]);
+const quietHours = ref({ enabled: false, start: "22:00", end: "08:00" });
 
 async function fetchAlerts() {
   const res = await fetch(withBase("/api/notifications/rules"));
@@ -117,8 +162,21 @@ async function fetchDispatchers() {
   dispatchers.value = await res.json();
 }
 
+async function fetchQuietHours() {
+  const res = await fetch(withBase("/api/notifications/quiet-hours"));
+  if (res.ok) quietHours.value = await res.json();
+}
+
+async function saveQuietHours() {
+  await fetch(withBase("/api/notifications/quiet-hours"), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(quietHours.value),
+  });
+}
+
 async function fetchAll() {
-  await Promise.all([fetchAlerts(), fetchDispatchers()]);
+  await Promise.all([fetchAlerts(), fetchDispatchers(), fetchQuietHours()]);
 }
 
 const highlightId = ref<number | null>(null);

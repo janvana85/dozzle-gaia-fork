@@ -23,6 +23,9 @@ export interface NotificationRule {
   burstCount?: number;
   burstWindow?: number;
   burstPriority?: number;
+  // watchdog / coupled messages
+  watchdogPattern?: string;
+  watchdogWindow?: number; // seconds
 }
 
 export interface Dispatcher {
@@ -38,6 +41,7 @@ export interface Dispatcher {
   topic?: string;
   priority?: number;
   tags?: string[];
+  tokenSet?: boolean; // true if an auth token is configured (token value never returned)
 }
 
 export interface NotificationRuleInput {
@@ -60,6 +64,8 @@ export interface NotificationRuleInput {
   burstCount?: number;
   burstWindow?: number;
   burstPriority?: number;
+  watchdogPattern?: string;
+  watchdogWindow?: number;
 }
 
 export interface QuietHoursConfig {

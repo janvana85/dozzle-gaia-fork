@@ -316,6 +316,19 @@ notifications:
     hold-during-quiet: Hold until quiet hours end
     hold-clear-window: Hold/Clear Window (seconds)
     hold-clear-hint: Delay firing; if container recovers within window the alert is dropped
+    watchdog-title: Watchdog
+    watchdog-window: Window
+    watchdog-window-unit: minutes (0 = disabled)
+    watchdog-window-hint: Fire an alert if the trigger pattern isn't seen again within this time
+    watchdog-pattern: Resolve Pattern (optional)
+    watchdog-pattern-placeholder: e.g. message contains "backup completed"
+    watchdog-pattern-hint: If this matches, the watchdog timer is reset. Leave blank for heartbeat mode.
+  settings:
+    title: Settings
+    quiet-hours-enabled: Enable Quiet Hours
+    quiet-start: Start
+    quiet-end: End
+    quiet-hours-hint: During quiet hours, alerts are held or sent at reduced priority depending on each alert's settings
   destination-form:
     create-title: Add Destination
     edit-title: Edit Destination
@@ -333,6 +346,8 @@ notifications:
     ntfy-topic-placeholder: dozzle-alerts
     ntfy-priority: Default Priority
     ntfy-token: Auth Token (optional)
+    ntfy-token-set: "••••••••"
+    ntfy-token-keep: Token already set. Leave blank to keep it, or enter a new value to replace.
     ntfy-priority-1: "1 - min (silent)"
     ntfy-priority-2: "2 - low"
     ntfy-priority-3: "3 - default"

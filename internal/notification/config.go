@@ -59,6 +59,8 @@ func (m *Manager) LoadConfig(r io.Reader) error {
 			EventExpression:     sub.EventExpression,
 			Cooldown:            sub.Cooldown,
 			SampleWindow:        sub.SampleWindow,
+			WatchdogPattern:     sub.WatchdogPattern,
+			WatchdogWindow:      sub.WatchdogWindow,
 		}
 	}
 
@@ -145,6 +147,8 @@ func (m *Manager) HandleNotificationConfig(subscriptions []types.SubscriptionCon
 			BurstCount:          sub.BurstCount,
 			BurstWindow:         sub.BurstWindow,
 			BurstPriority:       sub.BurstPriority,
+			WatchdogPattern:     sub.WatchdogPattern,
+			WatchdogWindow:      sub.WatchdogWindow,
 		}
 
 		if old, ok := existing[sub.ID]; ok {
@@ -249,6 +253,9 @@ func (m *Manager) loadSubscription(sub *Subscription) error {
 	}
 	if sub.BurstTrackers == nil {
 		sub.BurstTrackers = xsync.NewMap[string, []time.Time]()
+	}
+	if sub.WatchdogTimers == nil {
+		sub.WatchdogTimers = xsync.NewMap[string, *time.Timer]()
 	}
 
 	m.subscriptions.Store(sub.ID, sub)

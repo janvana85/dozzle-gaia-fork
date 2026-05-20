@@ -52,6 +52,57 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 		if !sub.MatchesContainer(notificationContainer) {
 			return true
 		}
+
+		// Watchdog mode: trigger starts/resets a timer; resolve pattern cancels it
+		if sub.WatchdogWindow > 0 {
+			// Resolve: cancel the watchdog timer if the resolve pattern matches
+			if sub.WatchdogProgram != nil && sub.MatchesWatchdog(notificationLog) {
+				sub.CancelWatchdogTimer(logEvent.ContainerID)
+			}
+			// Trigger: reset the watchdog timer if the trigger pattern matches
+			if sub.MatchesLog(notificationLog) {
+				if d, ok := m.getDispatcher(sub.DispatcherID); ok {
+					priority := sub.DetectBurst(logEvent.ContainerID, sub.NtfyPriority)
+					detail := fmt.Sprintf("Watchdog: no follow-up received within %d seconds", sub.WatchdogWindow)
+					if sub.WatchdogPattern == "" {
+						detail = fmt.Sprintf("Watchdog: no heartbeat seen for %d seconds", sub.WatchdogWindow)
+					}
+					notif := types.Notification{
+						ID:           fmt.Sprintf("%s-watchdog-%d", c.ID, time.Now().UnixNano()),
+						Type:         types.LogNotification,
+						Detail:       detail,
+						Container:    notificationContainer,
+						Log:          &notificationLog,
+						NtfyTopic:    sub.NtfyTopic,
+						NtfyPriority: priority,
+						NtfyTags:     sub.NtfyTags,
+						Subscription: types.SubscriptionConfig{
+							ID:                  sub.ID,
+							Name:                sub.Name,
+							Enabled:             sub.Enabled,
+							DispatcherID:        sub.DispatcherID,
+							LogExpression:       sub.LogExpression,
+							ContainerExpression: sub.ContainerExpression,
+							NtfyTopic:           sub.NtfyTopic,
+							NtfyPriority:        priority,
+							NtfyTags:            sub.NtfyTags,
+							BypassQuietHours:    sub.BypassQuietHours,
+						},
+						Timestamp: time.Now(),
+					}
+					sub.ResetWatchdogTimer(logEvent.ContainerID, func() {
+						sub.TriggerCount.Add(1)
+						now := time.Now()
+						sub.LastTriggeredAt.Store(&now)
+						sub.AddTriggeredContainer(notificationContainer.ID)
+						m.sendOrQueue(d, notif, sub)
+					}, sub.WatchdogWindow)
+				}
+			}
+			return true
+		}
+
+		// Normal mode: send immediately when trigger matches
 		if !sub.MatchesLog(notificationLog) {
 			return true
 		}
@@ -71,7 +122,6 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 
 		log.Debug().Str("containerID", notificationContainer.ID).Interface("log", notificationLog.Message).Msg("Matched subscription")
 
-		// Resolve ntfy priority (with burst escalation)
 		priority := sub.NtfyPriority
 		priority = sub.DetectBurst(logEvent.ContainerID, priority)
 
