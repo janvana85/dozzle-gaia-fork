@@ -30,14 +30,15 @@ type Notification struct {
 
 // NotificationContainer represents a simplified container structure for notifications
 type NotificationContainer struct {
-	ID       string            `json:"id" expr:"id"`
-	Name     string            `json:"name" expr:"name"`
-	Image    string            `json:"image" expr:"image"`
-	State    string            `json:"state" expr:"state"`
-	Health   string            `json:"health" expr:"health"`
-	HostID   string            `json:"hostId" expr:"hostId"`
-	HostName string            `json:"hostName" expr:"hostName"`
-	Labels   map[string]string `json:"labels" expr:"labels"`
+	ID        string            `json:"id" expr:"id"`
+	Name      string            `json:"name" expr:"name"`
+	Image     string            `json:"image" expr:"image"`
+	State     string            `json:"state" expr:"state"`
+	Health    string            `json:"health" expr:"health"`
+	HostID    string            `json:"hostId" expr:"hostId"`
+	HostName  string            `json:"hostName" expr:"hostName"`
+	HostGroup string            `json:"hostGroup" expr:"hostGroup"`
+	Labels    map[string]string `json:"labels" expr:"labels"`
 }
 
 // NotificationLog represents a log entry with message that can be string or object

@@ -54,14 +54,15 @@ func FromContainerMounts(c container.Container) []types.NotificationMount {
 // FromContainerModel converts internal container.Container to types.NotificationContainer
 func FromContainerModel(c container.Container, host container.Host) types.NotificationContainer {
 	return types.NotificationContainer{
-		ID:       c.ID,
-		Name:     c.Name,
-		Image:    c.Image,
-		State:    c.State,
-		Health:   c.Health,
-		HostID:   host.ID,
-		HostName: host.Name,
-		Labels:   c.Labels,
+		ID:        c.ID,
+		Name:      c.Name,
+		Image:     c.Image,
+		State:     c.State,
+		Health:    c.Health,
+		HostID:    host.ID,
+		HostName:  host.Name,
+		HostGroup: host.Group,
+		Labels:    c.Labels,
 	}
 }
 
