@@ -27,6 +27,7 @@ export function createContainerHints(
   containerNames: string[],
   imageNames: string[],
   hostNames: string[],
+  hostGroups: string[] = [],
 ): Completion[] {
   return [
     { label: "name", detail: "container name", type: "property" },
@@ -34,7 +35,8 @@ export function createContainerHints(
     { label: "image", detail: "container image", type: "property" },
     { label: "state", detail: "running, exited, etc.", type: "property" },
     { label: "health", detail: "healthy, unhealthy, none", type: "property" },
-    { label: "host", detail: "docker host", type: "property" },
+    { label: "hostName", detail: "docker host display name", type: "property" },
+    { label: "hostGroup", detail: "agent group (from DOZZLE_REMOTE_AGENT)", type: "property" },
     { label: "labels", detail: "container labels map", type: "property" },
     ...exprOperators,
     { label: '"running"', detail: "state value", type: "string" },
@@ -47,6 +49,7 @@ export function createContainerHints(
     ...containerNames.map((name) => ({ label: `"${name}"`, detail: "container name", type: "string" }) as Completion),
     ...imageNames.map((image) => ({ label: `"${image}"`, detail: "image name", type: "string" }) as Completion),
     ...hostNames.map((host) => ({ label: `"${host}"`, detail: "host name", type: "string" }) as Completion),
+    ...hostGroups.map((group) => ({ label: `"${group}"`, detail: "host group", type: "string" }) as Completion),
   ];
 }
 

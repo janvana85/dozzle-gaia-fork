@@ -47,6 +47,15 @@ export function useAlertForm(options: AlertFormOptions) {
   const imageNames = computed(() => [...new Set(containers.value.map((c) => c.image))]);
   const hostNames = computed(() => [...new Set(containers.value.map((c) => c.host))]);
 
+  const { hosts } = useHosts();
+  const hostGroups = computed(() => [
+    ...new Set(
+      Object.values(hosts.value)
+        .map((h) => h.group)
+        .filter((g): g is string => !!g),
+    ),
+  ]);
+
   // Container validation
   const containerResult = ref<ContainerResult | null>(null);
   const isLoading = ref(false);
@@ -64,7 +73,7 @@ export function useAlertForm(options: AlertFormOptions) {
     useExprEditorField(editorRef, {
       placeholder: 'name contains "api"',
       initialValue: options.alert?.containerExpression ?? options.prefill?.containerExpression ?? "",
-      getHints: () => createContainerHints(containerNames.value, imageNames.value, hostNames.value),
+      getHints: () => createContainerHints(containerNames.value, imageNames.value, hostNames.value, hostGroups.value),
       onChange: (v) => (containerExpression.value = v),
     });
   }
