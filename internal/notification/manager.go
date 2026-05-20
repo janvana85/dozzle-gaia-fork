@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -106,7 +108,7 @@ func (m *Manager) GetQuietHours() QuietHoursConfig {
 	return m.quietHours
 }
 
-// isQuietHours returns true if the current local time falls within the quiet window.
+// isQuietHours returns true if the current time (in the configured timezone) falls within the quiet window.
 func (m *Manager) isQuietHours() bool {
 	m.quietHoursMu.RLock()
 	qh := m.quietHours
@@ -116,12 +118,13 @@ func (m *Manager) isQuietHours() bool {
 		return false
 	}
 
-	now := time.Now()
+	loc := m.resolveLocation(qh.Timezone)
+	now := time.Now().In(loc)
 	startH, startM := parseHHMM(qh.Start)
 	endH, endM := parseHHMM(qh.End)
 
-	start := time.Date(now.Year(), now.Month(), now.Day(), startH, startM, 0, 0, now.Location())
-	end := time.Date(now.Year(), now.Month(), now.Day(), endH, endM, 0, 0, now.Location())
+	start := time.Date(now.Year(), now.Month(), now.Day(), startH, startM, 0, 0, loc)
+	end := time.Date(now.Year(), now.Month(), now.Day(), endH, endM, 0, 0, loc)
 
 	if start.Before(end) {
 		return !now.Before(start) && now.Before(end)
@@ -130,15 +133,30 @@ func (m *Manager) isQuietHours() bool {
 	return !now.Before(start) || now.Before(end)
 }
 
-// nextQuietEnd returns the next time quiet hours end.
+// resolveLocation returns the time.Location for the given timezone string.
+// Falls back to time.Local if the string is empty or invalid.
+func (m *Manager) resolveLocation(tz string) *time.Location {
+	if tz == "" {
+		return time.Local
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		log.Warn().Str("timezone", tz).Msg("Invalid quiet hours timezone, using local time")
+		return time.Local
+	}
+	return loc
+}
+
+// nextQuietEnd returns the next time quiet hours end (in the configured timezone).
 func (m *Manager) nextQuietEnd() time.Time {
 	m.quietHoursMu.RLock()
 	qh := m.quietHours
 	m.quietHoursMu.RUnlock()
 
+	loc := m.resolveLocation(qh.Timezone)
 	endH, endM := parseHHMM(qh.End)
-	now := time.Now()
-	candidate := time.Date(now.Year(), now.Month(), now.Day(), endH, endM, 0, 0, now.Location())
+	now := time.Now().In(loc)
+	candidate := time.Date(now.Year(), now.Month(), now.Day(), endH, endM, 0, 0, loc)
 	if candidate.Before(now) {
 		candidate = candidate.Add(24 * time.Hour)
 	}
@@ -569,4 +587,71 @@ func (m *Manager) Dispatchers() []DispatcherConfig {
 		return a.ID - b.ID
 	})
 	return result
+}
+
+// RestorePersistentState loads cooldowns from SQLite after subscriptions have been loaded.
+func (m *Manager) RestorePersistentState() {
+	if m.queue == nil {
+		return
+	}
+
+	cooldowns, err := m.queue.LoadCooldowns()
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to load cooldowns from SQLite")
+		return
+	}
+
+	restored := 0
+	for key, expiresAt := range cooldowns {
+		// key format: "<subID>:<containerID>:<type>"
+		colonIdx := strings.Index(key, ":")
+		if colonIdx < 0 {
+			continue
+		}
+		subIDStr := key[:colonIdx]
+		rest := key[colonIdx+1:]
+		lastColon := strings.LastIndex(rest, ":")
+		if lastColon < 0 {
+			continue
+		}
+		containerID := rest[:lastColon]
+		cooldownType := rest[lastColon+1:]
+
+		subID, err := strconv.Atoi(subIDStr)
+		if err != nil {
+			continue
+		}
+
+		sub, ok := m.subscriptions.Load(subID)
+		if !ok {
+			continue
+		}
+
+		// Convert expiresAt back to the lastTriggered time the maps expect.
+		// The maps store time.Now() at trigger time; IsXCooldownActive checks
+		// time.Now().Before(lastTriggered.Add(cooldownDuration)).
+		// So we restore lastTriggered = expiresAt - cooldownDuration.
+		cooldownDur := time.Duration(sub.Cooldown) * time.Second
+		lastTriggered := expiresAt.Add(-cooldownDur)
+
+		switch cooldownType {
+		case "log":
+			if sub.LogCooldowns != nil {
+				sub.LogCooldowns.Store(containerID, lastTriggered)
+			}
+		case "metric":
+			if sub.MetricCooldowns != nil {
+				sub.MetricCooldowns.Store(containerID, lastTriggered)
+			}
+		case "event":
+			if sub.EventCooldowns != nil {
+				sub.EventCooldowns.Store(containerID, lastTriggered)
+			}
+		}
+		restored++
+	}
+
+	if restored > 0 {
+		log.Info().Int("cooldowns", restored).Msg("Restored cooldown state from SQLite")
+	}
 }

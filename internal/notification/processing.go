@@ -113,6 +113,13 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 		}
 		if sub.Cooldown > 0 {
 			sub.SetLogCooldown(logEvent.ContainerID)
+			if m.queue != nil {
+				expiresAt := time.Now().Add(time.Duration(sub.Cooldown) * time.Second)
+				key := fmt.Sprintf("%d:%s:log", sub.ID, logEvent.ContainerID)
+				if err := m.queue.SetCooldown(key, expiresAt); err != nil {
+					log.Debug().Err(err).Msg("Failed to persist log cooldown")
+				}
+			}
 		}
 
 		sub.AddTriggeredContainer(notificationContainer.ID)
@@ -206,6 +213,13 @@ func (m *Manager) processStatEvent(event *ContainerStatEvent) {
 
 		// Set cooldown and update stats
 		sub.SetMetricCooldown(event.Stat.ID)
+		if m.queue != nil && sub.Cooldown > 0 {
+			expiresAt := time.Now().Add(time.Duration(sub.Cooldown) * time.Second)
+			key := fmt.Sprintf("%d:%s:metric", sub.ID, event.Stat.ID)
+			if err := m.queue.SetCooldown(key, expiresAt); err != nil {
+				log.Debug().Err(err).Msg("Failed to persist metric cooldown")
+			}
+		}
 		sub.AddTriggeredContainer(event.Stat.ID)
 		sub.TriggerCount.Add(1)
 		now := time.Now()
@@ -297,6 +311,13 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 
 		if sub.Cooldown > 0 {
 			sub.SetEventCooldown(event.Event.ActorID)
+			if m.queue != nil {
+				expiresAt := time.Now().Add(time.Duration(sub.Cooldown) * time.Second)
+				key := fmt.Sprintf("%d:%s:event", sub.ID, event.Event.ActorID)
+				if err := m.queue.SetCooldown(key, expiresAt); err != nil {
+					log.Debug().Err(err).Msg("Failed to persist event cooldown")
+				}
+			}
 		}
 
 		sub.AddTriggeredContainer(event.Event.ActorID)

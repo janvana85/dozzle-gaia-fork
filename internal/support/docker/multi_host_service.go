@@ -214,6 +214,7 @@ func (m *MultiHostService) StartNotificationManager(ctx context.Context) error {
 	}
 
 	m.persister.Load()
+	m.notificationManager.RestorePersistentState()
 
 	// Broadcast loaded config to any already-connected agents
 	m.broadcastNotificationConfig()
