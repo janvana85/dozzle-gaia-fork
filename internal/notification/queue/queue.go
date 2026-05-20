@@ -26,6 +26,24 @@ CREATE TABLE IF NOT EXISTS notification_queue (
 	status TEXT NOT NULL DEFAULT 'pending'
 );
 CREATE INDEX IF NOT EXISTS idx_nq_status_deliver ON notification_queue(status, deliver_at);
+
+CREATE TABLE IF NOT EXISTS alert_state (
+    fingerprint      TEXT PRIMARY KEY,
+    subscription_id  INTEGER NOT NULL,
+    host_name        TEXT NOT NULL,
+    container_name   TEXT NOT NULL,
+    alert_type       TEXT NOT NULL,
+    count            INTEGER NOT NULL DEFAULT 1,
+    window_start     INTEGER NOT NULL,
+    quiet_first_sent INTEGER NOT NULL DEFAULT 0,
+    stacked_sent     INTEGER NOT NULL DEFAULT 0,
+    updated_at       INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS cooldown_state (
+    key        TEXT PRIMARY KEY,
+    expires_at INTEGER NOT NULL
+);
 `
 
 // QueuedNotification is a row from the notification_queue table.
@@ -36,6 +54,20 @@ type QueuedNotification struct {
 	Notification   types.Notification
 	DeliverAt      time.Time
 	Attempts       int
+}
+
+// AlertState is a row from the alert_state table.
+type AlertState struct {
+	Fingerprint    string
+	SubscriptionID int
+	HostName       string
+	ContainerName  string
+	AlertType      string
+	Count          int
+	WindowStart    time.Time
+	QuietFirstSent bool
+	StackedSent    bool
+	UpdatedAt      time.Time
 }
 
 // Queue is an SQLite-backed notification queue that survives container restarts.
@@ -159,4 +191,110 @@ func (q *Queue) Cleanup(maxAge time.Duration) {
 	); err != nil {
 		log.Warn().Err(err).Msg("Failed to clean notification queue")
 	}
+}
+
+// GetOrCreateAlertState atomically loads the alert_state row for fp, creating
+// it if absent.
+func (q *Queue) GetOrCreateAlertState(fp string, subscriptionID int, hostName, containerName, alertType string) (*AlertState, error) {
+	now := time.Now()
+	_, err := q.db.Exec(`
+		INSERT OR IGNORE INTO alert_state
+			(fingerprint, subscription_id, host_name, container_name, alert_type, count, window_start, quiet_first_sent, stacked_sent, updated_at)
+		VALUES (?, ?, ?, ?, ?, 0, ?, 0, 0, ?)`,
+		fp, subscriptionID, hostName, containerName, alertType, now.Unix(), now.Unix(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("insert alert_state: %w", err)
+	}
+
+	row := q.db.QueryRow(`
+		SELECT subscription_id, host_name, container_name, alert_type, count, window_start, quiet_first_sent, stacked_sent, updated_at
+		FROM alert_state WHERE fingerprint = ?`, fp)
+
+	var s AlertState
+	s.Fingerprint = fp
+	var windowStartUnix, updatedAtUnix int64
+	var quietFirstSentInt, stackedSentInt int
+	if err := row.Scan(&s.SubscriptionID, &s.HostName, &s.ContainerName, &s.AlertType,
+		&s.Count, &windowStartUnix, &quietFirstSentInt, &stackedSentInt, &updatedAtUnix); err != nil {
+		return nil, fmt.Errorf("scan alert_state: %w", err)
+	}
+	s.WindowStart = time.Unix(windowStartUnix, 0)
+	s.UpdatedAt = time.Unix(updatedAtUnix, 0)
+	s.QuietFirstSent = quietFirstSentInt != 0
+	s.StackedSent = stackedSentInt != 0
+	return &s, nil
+}
+
+// UpsertAlertState writes the alert state back to SQLite.
+func (q *Queue) UpsertAlertState(s *AlertState) error {
+	now := time.Now()
+	s.UpdatedAt = now
+	_, err := q.db.Exec(`
+		INSERT INTO alert_state
+			(fingerprint, subscription_id, host_name, container_name, alert_type, count, window_start, quiet_first_sent, stacked_sent, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(fingerprint) DO UPDATE SET
+			count            = excluded.count,
+			window_start     = excluded.window_start,
+			quiet_first_sent = excluded.quiet_first_sent,
+			stacked_sent     = excluded.stacked_sent,
+			updated_at       = excluded.updated_at`,
+		s.Fingerprint, s.SubscriptionID, s.HostName, s.ContainerName, s.AlertType,
+		s.Count, s.WindowStart.Unix(), boolToInt(s.QuietFirstSent), boolToInt(s.StackedSent), now.Unix(),
+	)
+	return err
+}
+
+// CleanupAlertState removes alert_state rows not updated within retention.
+func (q *Queue) CleanupAlertState(retention time.Duration) {
+	cutoff := time.Now().Add(-retention).Unix()
+	if _, err := q.db.Exec(`DELETE FROM alert_state WHERE updated_at < ?`, cutoff); err != nil {
+		log.Warn().Err(err).Msg("Failed to clean alert_state")
+	}
+}
+
+// SetCooldown writes or refreshes a cooldown entry. key is "<subscriptionID>:<containerID>:<type>".
+func (q *Queue) SetCooldown(key string, expiresAt time.Time) error {
+	_, err := q.db.Exec(`
+		INSERT INTO cooldown_state (key, expires_at) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET expires_at = excluded.expires_at`,
+		key, expiresAt.Unix(),
+	)
+	return err
+}
+
+// LoadCooldowns returns all non-expired cooldown entries.
+func (q *Queue) LoadCooldowns() (map[string]time.Time, error) {
+	now := time.Now().Unix()
+	rows, err := q.db.Query(`SELECT key, expires_at FROM cooldown_state WHERE expires_at > ?`, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]time.Time)
+	for rows.Next() {
+		var key string
+		var expiresAtUnix int64
+		if err := rows.Scan(&key, &expiresAtUnix); err != nil {
+			return nil, err
+		}
+		result[key] = time.Unix(expiresAtUnix, 0)
+	}
+	return result, rows.Err()
+}
+
+// CleanupCooldowns removes expired cooldown entries.
+func (q *Queue) CleanupCooldowns() {
+	if _, err := q.db.Exec(`DELETE FROM cooldown_state WHERE expires_at <= ?`, time.Now().Unix()); err != nil {
+		log.Warn().Err(err).Msg("Failed to clean cooldown_state")
+	}
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
