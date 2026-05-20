@@ -68,6 +68,7 @@ func (h *handler) executeTemplate(w http.ResponseWriter, req *http.Request) {
 
 		config["authProvider"] = h.config.Authorization.Provider
 		config["version"] = h.config.Version
+		config["appName"] = h.config.AppName
 		config["hostname"] = h.config.Hostname
 		config["mode"] = h.config.Mode
 		config["hosts"] = hosts

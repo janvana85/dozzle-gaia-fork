@@ -285,6 +285,7 @@ func createServer(args cli.Args, hostService web.HostService, cloudHooks web.Clo
 		EnableShell:      args.EnableShell,
 		EnableMCP:        args.EnableMCP,
 		DisableAvatars:   args.DisableAvatars,
+		AppName:          args.AppName,
 		ReleaseCheckMode: releaseCheckMode,
 		Labels:           args.Filter,
 		Cloud:            cloudHooks,

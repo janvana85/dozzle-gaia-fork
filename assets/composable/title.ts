@@ -1,6 +1,6 @@
-const { hostname } = config;
+const { hostname, appName } = config;
 let subtitle = $ref("");
-const title = $computed(() => (subtitle ? `${subtitle} - ` : "") + "Dozzle" + (hostname ? ` @ ${hostname}` : ""));
+const title = $computed(() => (subtitle ? `${subtitle} - ` : "") + appName + (hostname ? ` @ ${hostname}` : ""));
 
 useTitle($$(title));
 

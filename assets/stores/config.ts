@@ -7,6 +7,7 @@ export interface Config {
   version: string;
   base: string;
   maxLogs: number;
+  appName: string;
   hostname: string;
   mode: "server" | "swarm" | "k8s";
   hosts: Host[];
@@ -41,6 +42,7 @@ const config: Config = {
   maxLogs: 400,
   version: "v0.0.0",
   hosts: [],
+  appName: "Dozzle Gaia",
   ...pageConfig,
 };
 

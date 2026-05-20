@@ -27,6 +27,7 @@ type Args struct {
 	EnableShell      bool                `arg:"--enable-shell,env:DOZZLE_ENABLE_SHELL" default:"false" help:"enables shell access to containers from the web interface."`
 	EnableMCP        bool                `arg:"--enable-mcp,env:DOZZLE_ENABLE_MCP" default:"false" help:"enables the MCP (Model Context Protocol) endpoint for LLM integration."`
 	DisableAvatars   bool                `arg:"--disable-avatars,env:DOZZLE_DISABLE_AVATARS" default:"false" help:"disables avatars for authenticated users."`
+	AppName          string              `arg:"--app-name,env:DOZZLE_APP_NAME" default:"Dozzle Gaia" help:"application name shown in the UI"`
 	FilterStrings    []string            `arg:"env:DOZZLE_FILTER,--filter,separate" help:"filters docker containers using Docker syntax."`
 	Filter           map[string][]string `arg:"-"`
 	ReleaseCheckMode string              `arg:"--release-check-mode,env:DOZZLE_RELEASE_CHECK_MODE" default:"automatic" help:"sets the release check mode. When manual, releases will not be automatically fetched."`

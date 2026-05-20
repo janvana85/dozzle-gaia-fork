@@ -51,6 +51,7 @@ type Config struct {
 	EnableShell      bool
 	EnableMCP        bool
 	DisableAvatars   bool
+	AppName          string
 	ReleaseCheckMode ReleaseCheckMode
 	Labels           container.ContainerLabels
 	Cloud            CloudHooks
