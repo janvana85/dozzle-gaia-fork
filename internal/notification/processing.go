@@ -383,9 +383,9 @@ func formatLogMessage(message any) string {
 	}
 }
 
-// sendOrQueue decides whether to send immediately, queue for quiet hours, or hold for the clear window.
+// sendOrQueue decides whether to send immediately, apply quiet-hours stacking, queue for hold-window, or suppress.
 func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notification, sub *Subscription) {
-	// Hold/clear window: delay delivery; deliver via queue after HoldClearWindow seconds
+	// Hold/clear window: delay delivery via queue
 	if sub.HoldClearWindow > 0 && m.queue != nil {
 		deliverAt := time.Now().Add(time.Duration(sub.HoldClearWindow) * time.Second)
 		if err := m.queue.Enqueue(notification, deliverAt); err != nil {
@@ -396,6 +396,7 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 
 	// Quiet hours handling
 	if m.isQuietHours() && !sub.BypassQuietHours {
+		// Legacy: hold entire notification until quiet ends
 		if sub.HoldDuringQuiet && m.queue != nil {
 			deliverAt := m.nextQuietEnd()
 			if err := m.queue.Enqueue(notification, deliverAt); err != nil {
@@ -403,7 +404,115 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 			}
 			return
 		}
-		// Downgrade priority
+
+		// Stacking logic (requires queue/DB)
+		if m.queue != nil {
+			qh := m.GetQuietHours()
+
+			threshold := qh.StackThreshold
+			if threshold <= 0 {
+				threshold = 3
+			}
+			if sub.QuietStackThreshold > 0 {
+				threshold = sub.QuietStackThreshold
+			}
+
+			stackWindowSec := qh.StackWindow
+			if stackWindowSec <= 0 {
+				stackWindowSec = 900
+			}
+			if sub.QuietStackWindow > 0 {
+				stackWindowSec = sub.QuietStackWindow
+			}
+
+			stackedPriority := qh.StackedPriority
+			if stackedPriority <= 0 {
+				stackedPriority = 4
+			}
+
+			fp := alertFingerprint(
+				sub.Name,
+				notification.Container.HostName,
+				notification.Container.Name,
+				string(notification.Type),
+				notification.Detail,
+			)
+
+			state, err := m.queue.GetOrCreateAlertState(fp, sub.ID,
+				notification.Container.HostName, notification.Container.Name, string(notification.Type))
+			if err != nil {
+				log.Warn().Err(err).Msg("Failed to get alert state; sending without stacking")
+				go m.sendWithRetry(d, notification, sub.DispatcherID)
+				return
+			}
+
+			now := time.Now()
+			windowExpired := now.After(state.WindowStart.Add(time.Duration(stackWindowSec) * time.Second))
+
+			if !state.QuietFirstSent || windowExpired {
+				// Reset window if expired
+				if windowExpired {
+					state.Count = 0
+					state.StackedSent = false
+					state.WindowStart = now
+				}
+				// Send first quiet notification
+				quietNotif := notification
+				if sub.QuietPriority > 0 {
+					quietNotif.NtfyPriority = sub.QuietPriority
+				}
+				if qh.QuietTopic != "" {
+					quietNotif.NtfyTopic = qh.QuietTopic
+				}
+				state.QuietFirstSent = true
+				state.Count++
+				if err := m.queue.UpsertAlertState(state); err != nil {
+					log.Debug().Err(err).Msg("Failed to upsert alert_state")
+				}
+				go m.sendWithRetry(d, quietNotif, sub.DispatcherID)
+				return
+			}
+
+			// Increment counter
+			state.Count++
+			if err := m.queue.UpsertAlertState(state); err != nil {
+				log.Debug().Err(err).Msg("Failed to upsert alert_state")
+			}
+
+			// Escalate if threshold reached
+			if state.Count >= threshold && !state.StackedSent {
+				windowMins := stackWindowSec / 60
+				stackedNotif := notification
+				stackedNotif.NtfyPriority = stackedPriority
+				stackedNotif.Detail = fmt.Sprintf(
+					"Repeated alert during quiet hours\n\nAlert: %s\nHost: %s\nContainer: %s\nCount: %d in %d min\n\nEscalated because it repeated %d times within the quiet window.",
+					sub.Name, notification.Container.HostName, notification.Container.Name,
+					state.Count, windowMins, state.Count,
+				)
+				if !qh.StackedUsesQuietTopic {
+					stackedNotif.NtfyTopic = "" // use default dispatcher topic
+				} else if qh.QuietTopic != "" {
+					stackedNotif.NtfyTopic = qh.QuietTopic
+				}
+				state.StackedSent = true
+				if err := m.queue.UpsertAlertState(state); err != nil {
+					log.Debug().Err(err).Msg("Failed to upsert alert_state after stacking")
+				}
+				go m.sendWithRetry(d, stackedNotif, sub.DispatcherID)
+				return
+			}
+
+			// Suppress: within window, below threshold, first already sent
+			log.Debug().
+				Str("fingerprint", fp).
+				Int("count", state.Count).
+				Int("threshold", threshold).
+				Str("subscription", sub.Name).
+				Msg("Alert suppressed during quiet hours")
+			return
+		}
+
+		// Fallback: no queue available, just downgrade priority
 		if sub.QuietPriority > 0 {
 			notification.NtfyPriority = sub.QuietPriority
 		}
