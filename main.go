@@ -250,7 +250,11 @@ func createServer(args cli.Args, hostService web.HostService, cloudHooks web.Clo
 				log.Fatal().Err(err).Msg("Could not parse auth ttl")
 			}
 		}
-		authorizer = auth.NewSimpleAuth(db, ttl)
+		jwtSecret, err := auth.LoadOrCreateJWTSecret("./data/jwt_secret")
+		if err != nil {
+			log.Fatal().Err(err).Msg("Could not load or create JWT secret")
+		}
+		authorizer = auth.NewSimpleAuth(db, ttl, jwtSecret)
 	}
 
 	authTTL := time.Duration(0)

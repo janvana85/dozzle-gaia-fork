@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"crypto/sha256"
 	"errors"
 	"net/http"
 	"time"
@@ -17,14 +16,8 @@ type simpleAuthContext struct {
 
 var ErrInvalidCredentials = errors.New("invalid credentials")
 
-func NewSimpleAuth(userDatabase UserDatabase, ttl time.Duration) *simpleAuthContext {
-	h := sha256.New()
-	for _, user := range userDatabase.Users {
-		h.Write([]byte(user.Password))
-		h.Write([]byte(user.RolesConfigured))
-	}
-
-	tokenAuth := jwtauth.New("HS256", h.Sum(nil), nil)
+func NewSimpleAuth(userDatabase UserDatabase, ttl time.Duration, secret []byte) *simpleAuthContext {
+	tokenAuth := jwtauth.New("HS256", secret, nil)
 
 	return &simpleAuthContext{
 		UserDatabase: userDatabase,
