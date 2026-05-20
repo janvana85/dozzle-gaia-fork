@@ -17,6 +17,12 @@ services:
       # - DOZZLE_HOSTNAME=my-server
       # Optional: log level (debug, info, warn, error)
       # - DOZZLE_LEVEL=info
+    networks:
+      - npm-bridge
 
 volumes:
   dozzle-data:
+
+networks:
+  npm-bridge:
+    external: true
