@@ -33,7 +33,7 @@ func Test_createRoutes_simple_redirect(t *testing.T) {
 						Password: "$2a$10$4Tvzu0ms9shlv4B8pIfqI.TM9CoqsamsAznP91A1NGuwg/68SGS1m",
 					},
 				},
-			}, time.Second*100),
+			}, time.Second*100, []byte("test-secret")),
 		},
 	})
 	req, err := http.NewRequest("GET", "/", nil)
@@ -58,7 +58,7 @@ func Test_createRoutes_simple_valid_token(t *testing.T) {
 						Password: "$2a$10$4Tvzu0ms9shlv4B8pIfqI.TM9CoqsamsAznP91A1NGuwg/68SGS1m",
 					},
 				},
-			}, time.Second*100),
+			}, time.Second*100, []byte("test-secret")),
 		},
 	})
 
@@ -103,7 +103,7 @@ func Test_createRoutes_simple_bad_password(t *testing.T) {
 						Password: "$2a$10$4Tvzu0ms9shlv4B8pIfqI.TM9CoqsamsAznP91A1NGuwg/68SGS1m",
 					},
 				},
-			}, time.Second*100),
+			}, time.Second*100, []byte("test-secret")),
 		},
 	})
 
