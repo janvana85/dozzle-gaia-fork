@@ -29,7 +29,7 @@ RUN pnpm build
 
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
-RUN apk add --no-cache ca-certificates && mkdir /dozzle
+RUN apk add --no-cache ca-certificates openssl && mkdir /dozzle
 
 WORKDIR /dozzle
 
@@ -43,7 +43,10 @@ COPY proto ./proto
 COPY types ./types
 COPY main.go ./
 COPY protos ./protos
-COPY shared_key.pem shared_cert.pem ./
+RUN openssl genpkey -algorithm Ed25519 -out shared_key.pem && \
+    openssl req -new -key shared_key.pem -out shared_request.csr -subj "/C=US/ST=California/L=San Francisco/O=Dozzle" && \
+    openssl x509 -req -in shared_request.csr -signkey shared_key.pem -out shared_cert.pem -days 1825 && \
+    rm shared_request.csr
 
 # Copy assets built with node
 COPY --from=node /build/dist ./dist
