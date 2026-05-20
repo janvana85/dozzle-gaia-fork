@@ -177,14 +177,28 @@ type Subscription struct {
 
 	// Per-container watchdog timers
 	WatchdogTimers *xsync.Map[string, *time.Timer] `json:"-" yaml:"-"`
+
+	// Per-subscription quiet hours overrides (0 = use global)
+	QuietStackThreshold int `json:"quietStackThreshold,omitempty" yaml:"quietStackThreshold,omitempty"`
+	QuietStackWindow    int `json:"quietStackWindow,omitempty" yaml:"quietStackWindow,omitempty"`
 }
 
 // QuietHoursConfig defines a daily quiet window during which non-bypass alerts
 // are either held (queued) or sent with a downgraded priority.
 type QuietHoursConfig struct {
-	Enabled bool   `json:"enabled" yaml:"enabled"`
-	Start   string `json:"start" yaml:"start"` // "22:00" (24h local time)
-	End     string `json:"end" yaml:"end"`     // "08:00" (24h local time)
+	Enabled  bool   `json:"enabled" yaml:"enabled"`
+	Start    string `json:"start" yaml:"start"`       // "22:00"
+	End      string `json:"end" yaml:"end"`           // "07:00"
+	Timezone string `json:"timezone" yaml:"timezone"` // e.g. "Europe/Prague"; empty = local
+
+	// Stacking
+	StackThreshold  int `json:"stackThreshold" yaml:"stackThreshold"`   // 0 = default 3
+	StackWindow     int `json:"stackWindow" yaml:"stackWindow"`         // seconds; 0 = default 900
+	StackedPriority int `json:"stackedPriority" yaml:"stackedPriority"` // 0 = default 4
+
+	// Topic routing
+	QuietTopic            string `json:"quietTopic" yaml:"quietTopic"`
+	StackedUsesQuietTopic bool   `json:"stackedUsesQuietTopic" yaml:"stackedUsesQuietTopic"`
 }
 
 // TriggeredContainersCount returns the number of unique containers that triggered this subscription

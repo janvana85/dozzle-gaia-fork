@@ -61,6 +61,8 @@ func (m *Manager) LoadConfig(r io.Reader) error {
 			SampleWindow:        sub.SampleWindow,
 			WatchdogPattern:     sub.WatchdogPattern,
 			WatchdogWindow:      sub.WatchdogWindow,
+			QuietStackThreshold: sub.QuietStackThreshold,
+			QuietStackWindow:    sub.QuietStackWindow,
 		}
 	}
 
@@ -149,6 +151,8 @@ func (m *Manager) HandleNotificationConfig(subscriptions []types.SubscriptionCon
 			BurstPriority:       sub.BurstPriority,
 			WatchdogPattern:     sub.WatchdogPattern,
 			WatchdogWindow:      sub.WatchdogWindow,
+			QuietStackThreshold: sub.QuietStackThreshold,
+			QuietStackWindow:    sub.QuietStackWindow,
 		}
 
 		if old, ok := existing[sub.ID]; ok {
