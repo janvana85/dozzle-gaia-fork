@@ -126,28 +126,56 @@ type Subscription struct {
 	ContainerExpression string `json:"containerExpression" yaml:"containerExpression"`
 	MetricExpression    string `json:"metricExpression,omitempty" yaml:"metricExpression,omitempty"`
 	EventExpression     string `json:"eventExpression,omitempty" yaml:"eventExpression,omitempty"`
-	Cooldown            int    `json:"cooldown,omitempty" yaml:"cooldown,omitempty"`         // seconds between metric notifications, default 300
-	SampleWindow        int    `json:"sampleWindow,omitempty" yaml:"sampleWindow,omitempty"` // seconds of samples to evaluate, default 15
+	Cooldown            int    `json:"cooldown,omitempty" yaml:"cooldown,omitempty"`
+	SampleWindow        int    `json:"sampleWindow,omitempty" yaml:"sampleWindow,omitempty"`
+
+	// ntfy per-rule routing overrides
+	NtfyTopic      string   `json:"ntfyTopic,omitempty" yaml:"ntfyTopic,omitempty"`
+	NtfyPriority   int      `json:"ntfyPriority,omitempty" yaml:"ntfyPriority,omitempty"` // 1-5; 0 = use dispatcher default
+	NtfyTags       []string `json:"ntfyTags,omitempty" yaml:"ntfyTags,omitempty"`
+
+	// Quiet hours behaviour for this rule
+	BypassQuietHours bool `json:"bypassQuietHours,omitempty" yaml:"bypassQuietHours,omitempty"`
+	QuietPriority    int  `json:"quietPriority,omitempty" yaml:"quietPriority,omitempty"` // priority used during quiet hours; 0 = hold
+	HoldDuringQuiet  bool `json:"holdDuringQuiet,omitempty" yaml:"holdDuringQuiet,omitempty"`
+
+	// Hold/clear window: queue notification, deliver after N seconds
+	HoldClearWindow int `json:"holdClearWindow,omitempty" yaml:"holdClearWindow,omitempty"`
+
+	// Burst detection: escalate priority after N triggers in BurstWindow seconds
+	BurstCount    int `json:"burstCount,omitempty" yaml:"burstCount,omitempty"`
+	BurstWindow   int `json:"burstWindow,omitempty" yaml:"burstWindow,omitempty"`
+	BurstPriority int `json:"burstPriority,omitempty" yaml:"burstPriority,omitempty"`
 
 	// Compiled filter expressions
-	LogProgram       *vm.Program `json:"-" yaml:"-"` // Compiled log filter expression
-	ContainerProgram *vm.Program `json:"-" yaml:"-"` // Compiled container filter expression
-	MetricProgram    *vm.Program `json:"-" yaml:"-"` // Compiled metric filter expression
-	EventProgram     *vm.Program `json:"-" yaml:"-"` // Compiled event filter expression
+	LogProgram       *vm.Program `json:"-" yaml:"-"`
+	ContainerProgram *vm.Program `json:"-" yaml:"-"`
+	MetricProgram    *vm.Program `json:"-" yaml:"-"`
+	EventProgram     *vm.Program `json:"-" yaml:"-"`
 
 	// Runtime stats (not persisted)
 	TriggerCount          atomic.Int64                 `json:"-" yaml:"-"`
 	LastTriggeredAt       atomic.Pointer[time.Time]    `json:"-" yaml:"-"`
-	TriggeredContainerIDs *xsync.Map[string, struct{}] `json:"-" yaml:"-"` // unique container IDs that triggered
+	TriggeredContainerIDs *xsync.Map[string, struct{}] `json:"-" yaml:"-"`
 
-	// Per-container cooldown tracking for metric alerts (containerID -> last triggered time)
+	// Per-container cooldown tracking
 	MetricCooldowns *xsync.Map[string, time.Time] `json:"-" yaml:"-"`
+	EventCooldowns  *xsync.Map[string, time.Time] `json:"-" yaml:"-"`
+	LogCooldowns    *xsync.Map[string, time.Time] `json:"-" yaml:"-"`
 
-	// Per-container cooldown tracking for event alerts (containerID -> last triggered time)
-	EventCooldowns *xsync.Map[string, time.Time] `json:"-" yaml:"-"`
-
-	// Per-container sample buffers for windowed metric evaluation (containerID -> ring buffer of match results)
+	// Per-container sample buffers for windowed metric evaluation
 	MetricSampleBuffers *xsync.Map[string, *utils.RingBuffer[bool]] `json:"-" yaml:"-"`
+
+	// Per-container burst trigger timestamps (recent N triggers within BurstWindow)
+	BurstTrackers *xsync.Map[string, []time.Time] `json:"-" yaml:"-"`
+}
+
+// QuietHoursConfig defines a daily quiet window during which non-bypass alerts
+// are either held (queued) or sent with a downgraded priority.
+type QuietHoursConfig struct {
+	Enabled bool   `json:"enabled" yaml:"enabled"`
+	Start   string `json:"start" yaml:"start"` // "22:00" (24h local time)
+	End     string `json:"end" yaml:"end"`     // "08:00" (24h local time)
 }
 
 // TriggeredContainersCount returns the number of unique containers that triggered this subscription
@@ -208,17 +236,23 @@ func (s *Subscription) CompileExpressions() error {
 type DispatcherConfig struct {
 	ID       int               `json:"id" yaml:"id"`
 	Name     string            `json:"name" yaml:"name"`
-	Type     string            `json:"type" yaml:"type"` // "webhook" or "cloud"
+	Type     string            `json:"type" yaml:"type"` // "webhook", "ntfy", or "cloud"
 	URL      string            `json:"url,omitempty" yaml:"url,omitempty"`
-	Template string            `json:"template,omitempty" yaml:"template,omitempty"` // Go template for custom payload format
-	Headers  map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`   // Custom HTTP headers
-	Prefix   string            `json:"prefix,omitempty" yaml:"-"`                    // Cloud dispatcher API key prefix (not persisted)
+	Template string            `json:"template,omitempty" yaml:"template,omitempty"`
+	Headers  map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
+	Prefix   string            `json:"prefix,omitempty" yaml:"-"` // Cloud only, not persisted
+	// ntfy-specific fields
+	Topic    string   `json:"topic,omitempty" yaml:"topic,omitempty"`
+	Priority int      `json:"priority,omitempty" yaml:"priority,omitempty"` // 1-5
+	Tags     []string `json:"tags,omitempty" yaml:"tags,omitempty"`
+	Token    string   `json:"token,omitempty" yaml:"token,omitempty"`
 }
 
 // Config represents the persisted notification configuration
 type Config struct {
 	Subscriptions []*Subscription    `json:"subscriptions" yaml:"subscriptions"`
 	Dispatchers   []DispatcherConfig `json:"dispatchers" yaml:"dispatchers"`
+	QuietHours    QuietHoursConfig   `json:"quietHours,omitempty" yaml:"quietHours,omitempty"`
 }
 
 // MatchesContainer checks if a container matches this subscription's container filter
@@ -390,3 +424,56 @@ func (s *Subscription) RecordMetricSample(containerID string, matched bool) bool
 
 	return float64(trueCount)/float64(buf.Len()) >= 0.8
 }
+
+// IsLogCooldownActive checks if the log cooldown is still active for a given container.
+func (s *Subscription) IsLogCooldownActive(containerID string) bool {
+	if s.Cooldown == 0 || s.LogCooldowns == nil {
+		return false
+	}
+	lastTriggered, ok := s.LogCooldowns.Load(containerID)
+	if !ok {
+		return false
+	}
+	cooldown := time.Duration(s.Cooldown) * time.Second
+	return time.Now().Before(lastTriggered.Add(cooldown))
+}
+
+// SetLogCooldown records the current time as the last log-triggered time for a container.
+func (s *Subscription) SetLogCooldown(containerID string) {
+	if s.LogCooldowns != nil {
+		s.LogCooldowns.Store(containerID, time.Now())
+	}
+}
+
+// DetectBurst records the trigger and returns the escalated priority if the burst threshold
+// has been reached within BurstWindow seconds; otherwise returns basePriority.
+func (s *Subscription) DetectBurst(containerID string, basePriority int) int {
+	if s.BurstCount <= 0 || s.BurstWindow <= 0 || s.BurstTrackers == nil {
+		return basePriority
+	}
+
+	now := time.Now()
+	window := time.Duration(s.BurstWindow) * time.Second
+	cutoff := now.Add(-window)
+
+	timestamps, _ := s.BurstTrackers.LoadOrCompute(containerID, func() ([]time.Time, bool) {
+		return []time.Time{}, false
+	})
+
+	// Prune old entries then append current trigger
+	pruned := timestamps[:0]
+	for _, t := range timestamps {
+		if t.After(cutoff) {
+			pruned = append(pruned, t)
+		}
+	}
+	pruned = append(pruned, now)
+	s.BurstTrackers.Store(containerID, pruned)
+
+	if len(pruned) >= s.BurstCount && s.BurstPriority > 0 {
+		return s.BurstPriority
+	}
+	return basePriority
+}
+
+// Config represents the persisted notification configuration

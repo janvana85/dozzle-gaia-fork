@@ -45,18 +45,32 @@ type DispatcherResponse struct {
 	Template *string           `json:"template,omitempty"`
 	Headers  map[string]string `json:"headers,omitempty"`
 	Prefix   *string           `json:"prefix,omitempty"`
+	// ntfy-specific (no token returned)
+	Topic    *string  `json:"topic,omitempty"`
+	Priority *int     `json:"priority,omitempty"`
+	Tags     []string `json:"tags,omitempty"`
 }
 
 type NotificationRuleInput struct {
-	Name                string `json:"name"`
-	Enabled             bool   `json:"enabled"`
-	DispatcherID        int    `json:"dispatcherId"`
-	LogExpression       string `json:"logExpression"`
-	ContainerExpression string `json:"containerExpression"`
-	MetricExpression    string `json:"metricExpression,omitempty"`
-	EventExpression     string `json:"eventExpression,omitempty"`
-	Cooldown            int    `json:"cooldown,omitempty"`
-	SampleWindow        int    `json:"sampleWindow,omitempty"`
+	Name                string   `json:"name"`
+	Enabled             bool     `json:"enabled"`
+	DispatcherID        int      `json:"dispatcherId"`
+	LogExpression       string   `json:"logExpression"`
+	ContainerExpression string   `json:"containerExpression"`
+	MetricExpression    string   `json:"metricExpression,omitempty"`
+	EventExpression     string   `json:"eventExpression,omitempty"`
+	Cooldown            int      `json:"cooldown,omitempty"`
+	SampleWindow        int      `json:"sampleWindow,omitempty"`
+	NtfyTopic           string   `json:"ntfyTopic,omitempty"`
+	NtfyPriority        int      `json:"ntfyPriority,omitempty"`
+	NtfyTags            []string `json:"ntfyTags,omitempty"`
+	BypassQuietHours    bool     `json:"bypassQuietHours,omitempty"`
+	QuietPriority       int      `json:"quietPriority,omitempty"`
+	HoldDuringQuiet     bool     `json:"holdDuringQuiet,omitempty"`
+	HoldClearWindow     int      `json:"holdClearWindow,omitempty"`
+	BurstCount          int      `json:"burstCount,omitempty"`
+	BurstWindow         int      `json:"burstWindow,omitempty"`
+	BurstPriority       int      `json:"burstPriority,omitempty"`
 }
 
 type NotificationRuleUpdateInput struct {
@@ -77,6 +91,10 @@ type DispatcherInput struct {
 	URL      *string           `json:"url,omitempty"`
 	Template *string           `json:"template,omitempty"`
 	Headers  map[string]string `json:"headers,omitempty"`
+	Topic    *string           `json:"topic,omitempty"`
+	Priority *int              `json:"priority,omitempty"`
+	Tags     []string          `json:"tags,omitempty"`
+	Token    *string           `json:"token,omitempty"`
 }
 
 type PreviewInput struct {
@@ -101,6 +119,13 @@ type TestWebhookInput struct {
 	URL      string            `json:"url"`
 	Template *string           `json:"template,omitempty"`
 	Headers  map[string]string `json:"headers,omitempty"`
+}
+
+type TestNtfyInput struct {
+	URL      string `json:"url"`
+	Topic    string `json:"topic"`
+	Priority int    `json:"priority,omitempty"`
+	Token    string `json:"token,omitempty"`
 }
 
 type TestWebhookResult struct {
@@ -184,7 +209,7 @@ func dispatcherConfigToResponse(d *notification.DispatcherConfig) *DispatcherRes
 	if d.Prefix != "" {
 		prefix = &d.Prefix
 	}
-	return &DispatcherResponse{
+	resp := &DispatcherResponse{
 		ID:       d.ID,
 		Name:     d.Name,
 		Type:     d.Type,
@@ -193,6 +218,16 @@ func dispatcherConfigToResponse(d *notification.DispatcherConfig) *DispatcherRes
 		Headers:  headers,
 		Prefix:   prefix,
 	}
+	if d.Topic != "" {
+		resp.Topic = &d.Topic
+	}
+	if d.Priority != 0 {
+		resp.Priority = &d.Priority
+	}
+	if len(d.Tags) > 0 {
+		resp.Tags = d.Tags
+	}
+	return resp
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {
@@ -256,6 +291,16 @@ func (h *handler) createNotificationRule(w http.ResponseWriter, r *http.Request)
 		EventExpression:     input.EventExpression,
 		Cooldown:            input.Cooldown,
 		SampleWindow:        input.SampleWindow,
+		NtfyTopic:           input.NtfyTopic,
+		NtfyPriority:        input.NtfyPriority,
+		NtfyTags:            input.NtfyTags,
+		BypassQuietHours:    input.BypassQuietHours,
+		QuietPriority:       input.QuietPriority,
+		HoldDuringQuiet:     input.HoldDuringQuiet,
+		HoldClearWindow:     input.HoldClearWindow,
+		BurstCount:          input.BurstCount,
+		BurstWindow:         input.BurstWindow,
+		BurstPriority:       input.BurstPriority,
 	}
 
 	if err := h.hostService.AddSubscription(sub); err != nil {
@@ -290,6 +335,16 @@ func (h *handler) replaceNotificationRule(w http.ResponseWriter, r *http.Request
 		EventExpression:     input.EventExpression,
 		Cooldown:            input.Cooldown,
 		SampleWindow:        input.SampleWindow,
+		NtfyTopic:           input.NtfyTopic,
+		NtfyPriority:        input.NtfyPriority,
+		NtfyTags:            input.NtfyTags,
+		BypassQuietHours:    input.BypassQuietHours,
+		QuietPriority:       input.QuietPriority,
+		HoldDuringQuiet:     input.HoldDuringQuiet,
+		HoldClearWindow:     input.HoldClearWindow,
+		BurstCount:          input.BurstCount,
+		BurstWindow:         input.BurstWindow,
+		BurstPriority:       input.BurstPriority,
 	}
 
 	if err := h.hostService.ReplaceSubscription(sub); err != nil {
@@ -421,6 +476,29 @@ func (h *handler) createDispatcher(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		d = webhook
+	case "ntfy":
+		serverURL := ""
+		if input.URL != nil {
+			serverURL = *input.URL
+		}
+		topic := ""
+		if input.Topic != nil {
+			topic = *input.Topic
+		}
+		priority := 0
+		if input.Priority != nil {
+			priority = *input.Priority
+		}
+		token := ""
+		if input.Token != nil {
+			token = *input.Token
+		}
+		ntfy, err := dispatcher.NewNtfyDispatcher(input.Name, serverURL, topic, priority, token)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		d = ntfy
 	default:
 		writeError(w, http.StatusBadRequest, "unknown dispatcher type")
 		return
@@ -434,6 +512,9 @@ func (h *handler) createDispatcher(w http.ResponseWriter, r *http.Request) {
 		Type:     input.Type,
 		URL:      input.URL,
 		Template: input.Template,
+		Topic:    input.Topic,
+		Priority: input.Priority,
+		Tags:     input.Tags,
 	}
 	if len(input.Headers) > 0 {
 		resp.Headers = input.Headers
@@ -471,6 +552,29 @@ func (h *handler) updateDispatcher(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		d = webhook
+	case "ntfy":
+		serverURL := ""
+		if input.URL != nil {
+			serverURL = *input.URL
+		}
+		topic := ""
+		if input.Topic != nil {
+			topic = *input.Topic
+		}
+		priority := 0
+		if input.Priority != nil {
+			priority = *input.Priority
+		}
+		token := ""
+		if input.Token != nil {
+			token = *input.Token
+		}
+		ntfy, err := dispatcher.NewNtfyDispatcher(input.Name, serverURL, topic, priority, token)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		d = ntfy
 	default:
 		writeError(w, http.StatusBadRequest, "unknown dispatcher type")
 		return
@@ -484,6 +588,9 @@ func (h *handler) updateDispatcher(w http.ResponseWriter, r *http.Request) {
 		Type:     input.Type,
 		URL:      input.URL,
 		Template: input.Template,
+		Topic:    input.Topic,
+		Priority: input.Priority,
+		Tags:     input.Tags,
 	}
 	if len(input.Headers) > 0 {
 		resp.Headers = input.Headers
@@ -713,6 +820,57 @@ func (h *handler) testWebhook(w http.ResponseWriter, r *http.Request) {
 		StatusCode: statusCode,
 		Error:      errStr,
 	})
+}
+
+func (h *handler) testNtfy(w http.ResponseWriter, r *http.Request) {
+	var input TestNtfyInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	ntfy, err := dispatcher.NewNtfyDispatcher("test", input.URL, input.Topic, input.Priority, input.Token)
+	if err != nil {
+		errStr := err.Error()
+		writeJSON(w, http.StatusOK, &TestWebhookResult{Success: false, Error: &errStr})
+		return
+	}
+
+	mockNotification := types.Notification{
+		ID:           "test-notification",
+		Type:         types.LogNotification,
+		Detail:       "This is a test notification from Dozzle",
+		Timestamp:    time.Now(),
+		NtfyTopic:    input.Topic,
+		NtfyPriority: input.Priority,
+		Container: types.NotificationContainer{
+			Name:     "test-container",
+			HostName: "localhost",
+		},
+	}
+
+	if err := ntfy.Send(r.Context(), mockNotification); err != nil {
+		errStr := err.Error()
+		writeJSON(w, http.StatusOK, &TestWebhookResult{Success: false, Error: &errStr})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, &TestWebhookResult{Success: true})
+}
+
+// Quiet hours handlers
+func (h *handler) getQuietHours(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.hostService.GetQuietHours())
+}
+
+func (h *handler) setQuietHours(w http.ResponseWriter, r *http.Request) {
+	var cfg notification.QuietHoursConfig
+	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	h.hostService.SetQuietHours(cfg)
+	writeJSON(w, http.StatusOK, cfg)
 }
 
 // Releases handler

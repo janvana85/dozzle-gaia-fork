@@ -12,6 +12,17 @@ export interface NotificationRule {
   triggeredContainers: number;
   lastTriggeredAt: string | null;
   dispatcher: Dispatcher | null;
+  // ntfy per-rule routing
+  ntfyTopic?: string;
+  ntfyPriority?: number;
+  ntfyTags?: string[];
+  bypassQuietHours?: boolean;
+  quietPriority?: number;
+  holdDuringQuiet?: boolean;
+  holdClearWindow?: number;
+  burstCount?: number;
+  burstWindow?: number;
+  burstPriority?: number;
 }
 
 export interface Dispatcher {
@@ -23,6 +34,10 @@ export interface Dispatcher {
   headers?: Record<string, string>;
   prefix?: string;
   expiresAt?: string;
+  // ntfy-specific (no token returned by API)
+  topic?: string;
+  priority?: number;
+  tags?: string[];
 }
 
 export interface NotificationRuleInput {
@@ -35,6 +50,22 @@ export interface NotificationRuleInput {
   eventExpression?: string;
   cooldown?: number;
   sampleWindow?: number;
+  ntfyTopic?: string;
+  ntfyPriority?: number;
+  ntfyTags?: string[];
+  bypassQuietHours?: boolean;
+  quietPriority?: number;
+  holdDuringQuiet?: boolean;
+  holdClearWindow?: number;
+  burstCount?: number;
+  burstWindow?: number;
+  burstPriority?: number;
+}
+
+export interface QuietHoursConfig {
+  enabled: boolean;
+  start: string;
+  end: string;
 }
 
 export interface PreviewResult {

@@ -148,7 +148,7 @@ func (m *K8sClusterService) StartNotificationManager(ctx context.Context) error 
 	listener := notification.NewContainerLogListener(ctx, clients)
 	statsListener := notification.NewContainerStatsListener(ctx, clients)
 	eventListener := notification.NewContainerEventListener(ctx, clients)
-	m.notificationManager = notification.NewManager(listener, statsListener, eventListener)
+	m.notificationManager = notification.NewManager(listener, statsListener, eventListener, "./data/notifications.db")
 	m.persister = &notification.Persister{
 		Manager:          m.notificationManager,
 		NotificationPath: notification.DefaultNotificationConfigPath,
@@ -217,6 +217,15 @@ func (m *K8sClusterService) RemoveDispatcher(id int) {
 
 func (m *K8sClusterService) Dispatchers() []notification.DispatcherConfig {
 	return m.notificationManager.Dispatchers()
+}
+
+func (m *K8sClusterService) GetQuietHours() notification.QuietHoursConfig {
+	return m.notificationManager.GetQuietHours()
+}
+
+func (m *K8sClusterService) SetQuietHours(cfg notification.QuietHoursConfig) {
+	m.notificationManager.SetQuietHours(cfg)
+	m.persister.SaveNotifications()
 }
 
 func (m *K8sClusterService) FetchAgentNotificationStats() map[int]types.SubscriptionStats {

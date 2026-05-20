@@ -29,7 +29,6 @@ func (m *Manager) processLogEvents() {
 
 // processLogEvent processes a single log event and sends notifications for matching subscriptions
 func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
-	// Get container and host from log event's ContainerID
 	ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 	defer cancel()
 
@@ -39,7 +38,6 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 		return
 	}
 
-	// Skip logs from Dozzle's own containers to avoid feedback loops
 	if isDozzleContainer(c) {
 		return
 	}
@@ -48,22 +46,24 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 	notificationLog := FromLogEvent(*logEvent)
 
 	m.subscriptions.Range(func(_ int, sub *Subscription) bool {
-		// Skip disabled or non-log subscriptions
 		if !sub.Enabled || !sub.IsLogAlert() {
 			return true
 		}
-
-		// Check container filter
 		if !sub.MatchesContainer(notificationContainer) {
 			return true
 		}
-
-		// Check log filter
 		if !sub.MatchesLog(notificationLog) {
 			return true
 		}
 
-		// Update stats
+		// Per-container log cooldown
+		if sub.Cooldown > 0 && sub.IsLogCooldownActive(logEvent.ContainerID) {
+			return true
+		}
+		if sub.Cooldown > 0 {
+			sub.SetLogCooldown(logEvent.ContainerID)
+		}
+
 		sub.AddTriggeredContainer(notificationContainer.ID)
 		sub.TriggerCount.Add(1)
 		now := time.Now()
@@ -71,13 +71,19 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 
 		log.Debug().Str("containerID", notificationContainer.ID).Interface("log", notificationLog.Message).Msg("Matched subscription")
 
-		// Create notification
+		// Resolve ntfy priority (with burst escalation)
+		priority := sub.NtfyPriority
+		priority = sub.DetectBurst(logEvent.ContainerID, priority)
+
 		notification := types.Notification{
-			ID:        fmt.Sprintf("%s-%d", c.ID, time.Now().UnixNano()),
-			Type:      types.LogNotification,
-			Detail:    formatLogMessage(notificationLog.Message),
-			Container: notificationContainer,
-			Log:       &notificationLog,
+			ID:           fmt.Sprintf("%s-%d", c.ID, time.Now().UnixNano()),
+			Type:         types.LogNotification,
+			Detail:       formatLogMessage(notificationLog.Message),
+			Container:    notificationContainer,
+			Log:          &notificationLog,
+			NtfyTopic:    sub.NtfyTopic,
+			NtfyPriority: priority,
+			NtfyTags:     sub.NtfyTags,
 			Subscription: types.SubscriptionConfig{
 				ID:                  sub.ID,
 				Name:                sub.Name,
@@ -85,13 +91,16 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 				DispatcherID:        sub.DispatcherID,
 				LogExpression:       sub.LogExpression,
 				ContainerExpression: sub.ContainerExpression,
+				NtfyTopic:           sub.NtfyTopic,
+				NtfyPriority:        priority,
+				NtfyTags:            sub.NtfyTags,
+				BypassQuietHours:    sub.BypassQuietHours,
 			},
 			Timestamp: time.Now(),
 		}
 
-		// Send to the subscription's dispatcher
 		if d, ok := m.getDispatcher(sub.DispatcherID); ok {
-			go m.sendNotification(d, notification, sub.DispatcherID)
+			m.sendOrQueue(d, notification, sub)
 		}
 		return true
 	})
@@ -159,12 +168,17 @@ func (m *Manager) processStatEvent(event *ContainerStatEvent) {
 			Str("subscription", sub.Name).
 			Msg("Metric alert triggered")
 
+		priority := sub.DetectBurst(event.Stat.ID, sub.NtfyPriority)
+
 		notification := types.Notification{
-			ID:        fmt.Sprintf("%s-metric-%d", event.Stat.ID, time.Now().UnixNano()),
-			Type:      types.MetricNotification,
-			Detail:    fmt.Sprintf("CPU: %.1f%%, Memory: %.1f%%", notificationStat.CPUPercent, notificationStat.MemoryPercent),
-			Container: notificationContainer,
-			Stat:      &notificationStat,
+			ID:           fmt.Sprintf("%s-metric-%d", event.Stat.ID, time.Now().UnixNano()),
+			Type:         types.MetricNotification,
+			Detail:       fmt.Sprintf("CPU: %.1f%%, Memory: %.1f%%", notificationStat.CPUPercent, notificationStat.MemoryPercent),
+			Container:    notificationContainer,
+			Stat:         &notificationStat,
+			NtfyTopic:    sub.NtfyTopic,
+			NtfyPriority: priority,
+			NtfyTags:     sub.NtfyTags,
 			Subscription: types.SubscriptionConfig{
 				ID:                  sub.ID,
 				Name:                sub.Name,
@@ -174,12 +188,16 @@ func (m *Manager) processStatEvent(event *ContainerStatEvent) {
 				ContainerExpression: sub.ContainerExpression,
 				Cooldown:            sub.Cooldown,
 				SampleWindow:        sub.SampleWindow,
+				NtfyTopic:           sub.NtfyTopic,
+				NtfyPriority:        priority,
+				NtfyTags:            sub.NtfyTags,
+				BypassQuietHours:    sub.BypassQuietHours,
 			},
 			Timestamp: time.Now(),
 		}
 
 		if d, ok := m.getDispatcher(sub.DispatcherID); ok {
-			go m.sendNotification(d, notification, sub.DispatcherID)
+			m.sendOrQueue(d, notification, sub)
 		}
 		return true
 	})
@@ -247,12 +265,17 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 			detail = fmt.Sprintf("Container event: %s (exit code %s)", event.Event.Name, exitCode)
 		}
 
+		priority := sub.DetectBurst(event.Event.ActorID, sub.NtfyPriority)
+
 		notification := types.Notification{
-			ID:        fmt.Sprintf("%s-event-%d", event.Event.ActorID, time.Now().UnixNano()),
-			Type:      types.EventNotification,
-			Detail:    detail,
-			Container: notificationContainer,
-			Event:     &notificationEvent,
+			ID:           fmt.Sprintf("%s-event-%d", event.Event.ActorID, time.Now().UnixNano()),
+			Type:         types.EventNotification,
+			Detail:       detail,
+			Container:    notificationContainer,
+			Event:        &notificationEvent,
+			NtfyTopic:    sub.NtfyTopic,
+			NtfyPriority: priority,
+			NtfyTags:     sub.NtfyTags,
 			Subscription: types.SubscriptionConfig{
 				ID:                  sub.ID,
 				Name:                sub.Name,
@@ -261,12 +284,16 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 				EventExpression:     sub.EventExpression,
 				ContainerExpression: sub.ContainerExpression,
 				Cooldown:            sub.Cooldown,
+				NtfyTopic:           sub.NtfyTopic,
+				NtfyPriority:        priority,
+				NtfyTags:            sub.NtfyTags,
+				BypassQuietHours:    sub.BypassQuietHours,
 			},
 			Timestamp: time.Now(),
 		}
 
 		if d, ok := m.getDispatcher(sub.DispatcherID); ok {
-			go m.sendNotification(d, notification, sub.DispatcherID)
+			m.sendOrQueue(d, notification, sub)
 		}
 		return true
 	})
@@ -285,20 +312,63 @@ func formatLogMessage(message any) string {
 	}
 }
 
-// sendNotification sends a notification using the dispatcher
-func (m *Manager) sendNotification(d dispatcher.Dispatcher, notification types.Notification, id int) {
+// sendOrQueue decides whether to send immediately, queue for quiet hours, or hold for the clear window.
+func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notification, sub *Subscription) {
+	// Hold/clear window: delay delivery; deliver via queue after HoldClearWindow seconds
+	if sub.HoldClearWindow > 0 && m.queue != nil {
+		deliverAt := time.Now().Add(time.Duration(sub.HoldClearWindow) * time.Second)
+		if err := m.queue.Enqueue(notification, deliverAt); err != nil {
+			log.Warn().Err(err).Msg("Failed to enqueue hold/clear notification")
+		}
+		return
+	}
+
+	// Quiet hours handling
+	if m.isQuietHours() && !sub.BypassQuietHours {
+		if sub.HoldDuringQuiet && m.queue != nil {
+			deliverAt := m.nextQuietEnd()
+			if err := m.queue.Enqueue(notification, deliverAt); err != nil {
+				log.Warn().Err(err).Msg("Failed to enqueue quiet-hours notification")
+			}
+			return
+		}
+		// Downgrade priority
+		if sub.QuietPriority > 0 {
+			notification.NtfyPriority = sub.QuietPriority
+		}
+	}
+
+	go m.sendWithRetry(d, notification, sub.DispatcherID)
+}
+
+// sendWithRetry sends a notification with up to 3 attempts and quadratic backoff (30s, 120s).
+func (m *Manager) sendWithRetry(d dispatcher.Dispatcher, notification types.Notification, dispatcherID int) {
 	acquireCtx, acquireCancel := context.WithTimeout(m.ctx, time.Minute)
 	defer acquireCancel()
 	if err := m.sendSem.Acquire(acquireCtx, 1); err != nil {
-		log.Warn().Err(err).Int("subscription", id).Msg("Notification dropped: too many pending")
+		log.Warn().Err(err).Int("dispatcher", dispatcherID).Msg("Notification dropped: too many pending")
 		return
 	}
 	defer m.sendSem.Release(1)
 
-	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
-	defer cancel()
-
-	if err := d.Send(ctx, notification); err != nil {
-		log.Error().Err(err).Int("subscription", id).Msg("Failed to send notification")
+	for attempt := 1; attempt <= 3; attempt++ {
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		err := d.Send(ctx, notification)
+		cancel()
+		if err == nil {
+			return
+		}
+		if attempt < 3 {
+			backoff := time.Duration(attempt*attempt) * 30 * time.Second
+			log.Warn().Err(err).Int("attempt", attempt).Int("dispatcher", dispatcherID).
+				Dur("backoff", backoff).Msg("Notification send failed, retrying")
+			select {
+			case <-m.ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+		} else {
+			log.Error().Err(err).Int("dispatcher", dispatcherID).Msg("Notification failed after 3 attempts")
+		}
 	}
 }

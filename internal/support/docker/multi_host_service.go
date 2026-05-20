@@ -198,7 +198,7 @@ func (m *MultiHostService) StartNotificationManager(ctx context.Context) error {
 	listener := notification.NewContainerLogListener(ctx, clients)
 	statsListener := notification.NewContainerStatsListener(ctx, clients)
 	eventListener := notification.NewContainerEventListener(ctx, clients)
-	m.notificationManager = notification.NewManager(listener, statsListener, eventListener)
+	m.notificationManager = notification.NewManager(listener, statsListener, eventListener, "./data/notifications.db")
 	m.persister = &notification.Persister{
 		Manager:          m.notificationManager,
 		NotificationPath: notification.DefaultNotificationConfigPath,
@@ -485,6 +485,17 @@ func (m *MultiHostService) Subscriptions() []*notification.Subscription {
 // Dispatchers returns all dispatchers
 func (m *MultiHostService) Dispatchers() []notification.DispatcherConfig {
 	return m.notificationManager.Dispatchers()
+}
+
+// GetQuietHours returns the current quiet hours configuration.
+func (m *MultiHostService) GetQuietHours() notification.QuietHoursConfig {
+	return m.notificationManager.GetQuietHours()
+}
+
+// SetQuietHours updates the quiet hours configuration and persists it.
+func (m *MultiHostService) SetQuietHours(cfg notification.QuietHoursConfig) {
+	m.notificationManager.SetQuietHours(cfg)
+	m.persister.SaveNotifications()
 }
 
 // NotificationStatsProvider is an interface for clients that can report notification stats

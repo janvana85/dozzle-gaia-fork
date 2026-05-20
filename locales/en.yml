@@ -262,6 +262,7 @@ notifications:
     last-triggered: "Last: {time}"
   destination:
     http-webhook: HTTP Webhook
+    ntfy: ntfy Push Notifications
     dozzle-cloud: Dozzle Cloud
     edit: Edit
     duplicate: Duplicate
@@ -299,6 +300,22 @@ notifications:
     event-alert: Event Alert
     event-filter: Event Expression
     event-fields-hint: "Available fields: {fields}"
+    ntfy-options: ntfy Routing
+    ntfy-topic-override: Topic Override
+    ntfy-priority-override: Priority Override
+    ntfy-priority-default: Use dispatcher default
+    ntfy-tags: Tags
+    ntfy-tags-hint: comma-separated, e.g. warning,container
+    burst-detection: Burst Detection
+    burst-count: Trigger Count
+    burst-window: Window (seconds)
+    burst-priority: Escalated Priority
+    quiet-hours: Quiet Hours
+    bypass-quiet-hours: Always send (bypass quiet hours)
+    quiet-priority: Quiet Hours Priority
+    hold-during-quiet: Hold until quiet hours end
+    hold-clear-window: Hold/Clear Window (seconds)
+    hold-clear-hint: Delay firing; if container recovers within window the alert is dropped
   destination-form:
     create-title: Add Destination
     edit-title: Edit Destination
@@ -308,6 +325,19 @@ notifications:
     type: Type
     webhook-title: HTTP Webhook
     webhook-description: Slack, Discord, custom endpoint
+    ntfy-title: ntfy
+    ntfy-description: Push notifications via ntfy.sh or self-hosted server
+    ntfy-server-url: Server URL
+    ntfy-server-url-placeholder: https://ntfy.sh
+    ntfy-topic: Default Topic
+    ntfy-topic-placeholder: dozzle-alerts
+    ntfy-priority: Default Priority
+    ntfy-token: Auth Token (optional)
+    ntfy-priority-1: "1 - min (silent)"
+    ntfy-priority-2: "2 - low"
+    ntfy-priority-3: "3 - default"
+    ntfy-priority-4: "4 - high"
+    ntfy-priority-5: "5 - max (breaks DND)"
     cloud-title: Dozzle Cloud
     cloud-description: Push notifications, email alerts, and AI-powered summaries
     webhook-url: Webhook URL

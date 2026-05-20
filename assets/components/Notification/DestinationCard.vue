@@ -4,6 +4,7 @@
       <div class="flex items-start gap-3">
         <div class="flex h-10 w-10 items-center justify-center rounded-lg">
           <mdi:webhook v-if="destination.type === 'webhook'" class="text-lg" />
+          <mdi:bell-ring v-else-if="destination.type === 'ntfy'" class="text-lg" />
           <mdi:cloud v-else class="text-primary-content text-lg" />
         </div>
         <div class="flex-1">
@@ -12,7 +13,9 @@
             {{
               destination.type === "webhook"
                 ? $t("notifications.destination.http-webhook")
-                : $t("notifications.destination.dozzle-cloud")
+                : destination.type === "ntfy"
+                  ? $t("notifications.destination.ntfy")
+                  : $t("notifications.destination.dozzle-cloud")
             }}
           </p>
         </div>
@@ -33,6 +36,7 @@
             <li v-if="destination.type !== 'cloud'">
               <a class="text-error" @click="deleteDestination">{{ $t("notifications.destination.delete") }}</a>
             </li>
+
           </ul>
         </div>
       </div>

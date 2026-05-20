@@ -22,6 +22,10 @@ type Notification struct {
 	Event        *NotificationEvent    `json:"event,omitempty"`
 	Subscription SubscriptionConfig    `json:"subscription"`
 	Timestamp    time.Time             `json:"timestamp"`
+	// ntfy routing hints (set by processing layer, used by NtfyDispatcher)
+	NtfyTopic    string   `json:"ntfyTopic,omitempty"`
+	NtfyPriority int      `json:"ntfyPriority,omitempty"`
+	NtfyTags     []string `json:"ntfyTags,omitempty"`
 }
 
 // NotificationContainer represents a simplified container structure for notifications
@@ -78,16 +82,26 @@ type NotificationEvent struct {
 
 // SubscriptionConfig represents a notification subscription configuration
 type SubscriptionConfig struct {
-	ID                  int    `json:"id"`
-	Name                string `json:"name"`
-	Enabled             bool   `json:"-"`
-	DispatcherID        int    `json:"-"`
-	LogExpression       string `json:"logExpression,omitempty"`
-	ContainerExpression string `json:"containerExpression"`
-	MetricExpression    string `json:"metricExpression,omitempty"`
-	EventExpression     string `json:"eventExpression,omitempty"`
-	Cooldown            int    `json:"cooldown,omitempty"`
-	SampleWindow        int    `json:"sampleWindow,omitempty"`
+	ID                  int      `json:"id"`
+	Name                string   `json:"name"`
+	Enabled             bool     `json:"-"`
+	DispatcherID        int      `json:"-"`
+	LogExpression       string   `json:"logExpression,omitempty"`
+	ContainerExpression string   `json:"containerExpression"`
+	MetricExpression    string   `json:"metricExpression,omitempty"`
+	EventExpression     string   `json:"eventExpression,omitempty"`
+	Cooldown            int      `json:"cooldown,omitempty"`
+	SampleWindow        int      `json:"sampleWindow,omitempty"`
+	NtfyTopic           string   `json:"ntfyTopic,omitempty"`
+	NtfyPriority        int      `json:"ntfyPriority,omitempty"`
+	NtfyTags            []string `json:"ntfyTags,omitempty"`
+	BypassQuietHours    bool     `json:"bypassQuietHours,omitempty"`
+	QuietPriority       int      `json:"quietPriority,omitempty"`
+	HoldDuringQuiet     bool     `json:"holdDuringQuiet,omitempty"`
+	HoldClearWindow     int      `json:"holdClearWindow,omitempty"`
+	BurstCount          int      `json:"burstCount,omitempty"`
+	BurstWindow         int      `json:"burstWindow,omitempty"`
+	BurstPriority       int      `json:"burstPriority,omitempty"`
 }
 
 // SubscriptionStats represents runtime stats for a notification subscription
@@ -113,4 +127,9 @@ type DispatcherConfig struct {
 	URL      string
 	Template string
 	Headers  map[string]string
+	// ntfy-specific fields
+	Topic    string
+	Priority int
+	Tags     []string
+	Token    string
 }

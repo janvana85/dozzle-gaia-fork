@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/amir20/dozzle/internal/container"
 	"github.com/amir20/dozzle/internal/notification/dispatcher"
+	"github.com/amir20/dozzle/internal/notification/queue"
 	"github.com/amir20/dozzle/internal/utils"
 	"github.com/amir20/dozzle/types"
 	"github.com/expr-lang/expr"
@@ -30,10 +32,15 @@ type Manager struct {
 	ctx                 context.Context
 	cancel              context.CancelFunc
 	sendSem             *semaphore.Weighted
+	queue               *queue.Queue
+	quietHours          QuietHoursConfig
+	quietHoursMu        sync.RWMutex
 }
 
-// NewManager creates a new notification manager
-func NewManager(listener *ContainerLogListener, statsListener *ContainerStatsListener, eventListener *ContainerEventListener) *Manager {
+// NewManager creates a new notification manager.
+// dbPath is the path to the SQLite database for the notification queue;
+// pass an empty string to disable persistence (in-memory only).
+func NewManager(listener *ContainerLogListener, statsListener *ContainerStatsListener, eventListener *ContainerEventListener, dbPath string) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 	m := &Manager{
 		subscriptions: xsync.NewMap[int, *Subscription](),
@@ -46,13 +53,18 @@ func NewManager(listener *ContainerLogListener, statsListener *ContainerStatsLis
 		sendSem:       semaphore.NewWeighted(5),
 	}
 
-	// Start processing log events from the listener
+	if dbPath != "" {
+		q, err := queue.NewQueue(dbPath)
+		if err != nil {
+			log.Warn().Err(err).Str("path", dbPath).Msg("Failed to open notification queue; persistence disabled")
+		} else {
+			m.queue = q
+			go m.drainQueue()
+		}
+	}
+
 	go m.processLogEvents()
-
-	// Start processing stat events from the stats listener
 	go m.processStatEvents()
-
-	// Start processing Docker events from the event listener
 	go m.processDockerEvents()
 
 	return m
@@ -80,6 +92,125 @@ func (m *Manager) ShouldListenToContainer(c container.Container) bool {
 	return shouldListen
 }
 
+// SetQuietHours updates the global quiet hours configuration.
+func (m *Manager) SetQuietHours(cfg QuietHoursConfig) {
+	m.quietHoursMu.Lock()
+	m.quietHours = cfg
+	m.quietHoursMu.Unlock()
+}
+
+// GetQuietHours returns the current quiet hours configuration.
+func (m *Manager) GetQuietHours() QuietHoursConfig {
+	m.quietHoursMu.RLock()
+	defer m.quietHoursMu.RUnlock()
+	return m.quietHours
+}
+
+// isQuietHours returns true if the current local time falls within the quiet window.
+func (m *Manager) isQuietHours() bool {
+	m.quietHoursMu.RLock()
+	qh := m.quietHours
+	m.quietHoursMu.RUnlock()
+
+	if !qh.Enabled || qh.Start == "" || qh.End == "" {
+		return false
+	}
+
+	now := time.Now()
+	startH, startM := parseHHMM(qh.Start)
+	endH, endM := parseHHMM(qh.End)
+
+	start := time.Date(now.Year(), now.Month(), now.Day(), startH, startM, 0, 0, now.Location())
+	end := time.Date(now.Year(), now.Month(), now.Day(), endH, endM, 0, 0, now.Location())
+
+	if start.Before(end) {
+		return !now.Before(start) && now.Before(end)
+	}
+	// overnight window (e.g., 22:00 – 08:00)
+	return !now.Before(start) || now.Before(end)
+}
+
+// nextQuietEnd returns the next time quiet hours end.
+func (m *Manager) nextQuietEnd() time.Time {
+	m.quietHoursMu.RLock()
+	qh := m.quietHours
+	m.quietHoursMu.RUnlock()
+
+	endH, endM := parseHHMM(qh.End)
+	now := time.Now()
+	candidate := time.Date(now.Year(), now.Month(), now.Day(), endH, endM, 0, 0, now.Location())
+	if candidate.Before(now) {
+		candidate = candidate.Add(24 * time.Hour)
+	}
+	return candidate
+}
+
+// parseHHMM parses a "HH:MM" string, returns (0,0) on parse failure.
+func parseHHMM(s string) (int, int) {
+	var h, min int
+	fmt.Sscanf(s, "%d:%d", &h, &min)
+	return h, min
+}
+
+// drainQueue processes the SQLite queue every 60 seconds and delivers ready notifications.
+func (m *Manager) drainQueue() {
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-m.ctx.Done():
+			return
+		case <-ticker.C:
+			m.flushQueue()
+		}
+	}
+}
+
+func (m *Manager) flushQueue() {
+	if m.queue == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+	defer cancel()
+
+	items, err := m.queue.DrainReady(ctx)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to drain notification queue")
+		return
+	}
+
+	for _, item := range items {
+		d, ok := m.getDispatcher(item.DispatcherID)
+		if !ok {
+			log.Warn().Int("dispatcher_id", item.DispatcherID).Msg("Dispatcher not found for queued notification; dropping")
+			_ = m.queue.MarkFailed(item.ID, 3)
+			continue
+		}
+		id := item.ID
+		dispID := item.DispatcherID
+		notification := item.Notification
+		attempts := item.Attempts
+		go func() {
+			sendCtx, sendCancel := context.WithTimeout(m.ctx, 30*time.Second)
+			defer sendCancel()
+			if err := d.Send(sendCtx, notification); err != nil {
+				log.Warn().Err(err).Int64("queue_id", id).Msg("Queued notification failed")
+				if qErr := m.queue.MarkFailed(id, attempts); qErr != nil {
+					log.Warn().Err(qErr).Msg("Failed to update queue status")
+				}
+			} else {
+				log.Debug().Int64("queue_id", id).Int("dispatcher_id", dispID).Msg("Delivered queued notification")
+				if qErr := m.queue.MarkSent(id); qErr != nil {
+					log.Warn().Err(qErr).Msg("Failed to mark notification sent")
+				}
+			}
+		}()
+	}
+
+	m.queue.Cleanup(7 * 24 * time.Hour)
+}
+
 // AddSubscription adds a new subscription with compiled expressions
 func (m *Manager) AddSubscription(sub *Subscription) error {
 	// Auto-increment ID using atomic counter
@@ -88,6 +219,8 @@ func (m *Manager) AddSubscription(sub *Subscription) error {
 	sub.MetricCooldowns = xsync.NewMap[string, time.Time]()
 	sub.MetricSampleBuffers = xsync.NewMap[string, *utils.RingBuffer[bool]]()
 	sub.EventCooldowns = xsync.NewMap[string, time.Time]()
+	sub.LogCooldowns = xsync.NewMap[string, time.Time]()
+	sub.BurstTrackers = xsync.NewMap[string, []time.Time]()
 
 	if err := sub.CompileExpressions(); err != nil {
 		return err
@@ -115,6 +248,8 @@ func (m *Manager) ReplaceSubscription(sub *Subscription) error {
 	sub.MetricCooldowns = xsync.NewMap[string, time.Time]()
 	sub.MetricSampleBuffers = xsync.NewMap[string, *utils.RingBuffer[bool]]()
 	sub.EventCooldowns = xsync.NewMap[string, time.Time]()
+	sub.LogCooldowns = xsync.NewMap[string, time.Time]()
+	sub.BurstTrackers = xsync.NewMap[string, []time.Time]()
 
 	if err := sub.CompileExpressions(); err != nil {
 		return err
@@ -416,6 +551,16 @@ func (m *Manager) Dispatchers() []DispatcherConfig {
 				URL:      v.URL,
 				Template: v.TemplateText,
 				Headers:  v.Headers,
+			})
+		case *dispatcher.NtfyDispatcher:
+			result = append(result, DispatcherConfig{
+				ID:       id,
+				Name:     v.Name,
+				Type:     "ntfy",
+				URL:      v.ServerURL,
+				Topic:    v.DefaultTopic,
+				Priority: v.DefaultPriority,
+				Token:    v.Token,
 			})
 		}
 		return true

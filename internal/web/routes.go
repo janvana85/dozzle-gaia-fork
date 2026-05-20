@@ -111,6 +111,8 @@ type HostService interface {
 	SetCloudConfig(cc *notification.CloudConfig)
 	SetCloudStreamLogs(enabled bool)
 	RemoveCloudConfig()
+	GetQuietHours() notification.QuietHoursConfig
+	SetQuietHours(cfg notification.QuietHoursConfig)
 }
 
 type handler struct {
@@ -203,6 +205,10 @@ func createRouter(h *handler) *chi.Mux {
 
 					r.Post("/preview", h.previewExpression)
 					r.Post("/test-webhook", h.testWebhook)
+					r.Post("/test-ntfy", h.testNtfy)
+
+					r.Get("/quiet-hours", h.getQuietHours)
+					r.Put("/quiet-hours", h.setQuietHours)
 				})
 
 				// Releases API

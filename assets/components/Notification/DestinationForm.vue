@@ -43,6 +43,20 @@
         </label>
         <label
           class="card card-border cursor-pointer transition-colors"
+          :class="type === 'ntfy' ? 'border-primary bg-primary/10' : ''"
+        >
+          <div class="card-body flex-row items-center gap-3 p-4">
+            <input type="radio" v-model="type" value="ntfy" class="radio radio-primary" />
+            <div>
+              <div class="font-semibold">{{ $t("notifications.destination-form.ntfy-title") }}</div>
+              <div class="text-base-content/60 text-sm">
+                {{ $t("notifications.destination-form.ntfy-description") }}
+              </div>
+            </div>
+          </div>
+        </label>
+        <label
+          class="card card-border cursor-pointer transition-colors"
           :class="[
             type === 'cloud' ? 'border-primary bg-primary/10' : '',
             isCloudLinked ? 'cursor-not-allowed opacity-50' : '',
@@ -73,6 +87,13 @@
       :on-created="onCreated"
       :is-editing="isEditing"
     />
+    <NtfyDestinationForm
+      v-else-if="type === 'ntfy'"
+      :destination="destination"
+      :close="close"
+      :on-created="onCreated"
+      :is-editing="isEditing"
+    />
     <CloudDestinationForm v-else :destination="destination" :close="close" />
   </div>
 </template>
@@ -80,6 +101,7 @@
 <script lang="ts" setup>
 import type { Dispatcher } from "@/types/notifications";
 import WebhookDestinationForm from "./WebhookDestinationForm.vue";
+import NtfyDestinationForm from "./NtfyDestinationForm.vue";
 import CloudDestinationForm from "./CloudDestinationForm.vue";
 
 const { close, onCreated, destination } = defineProps<{
@@ -89,7 +111,7 @@ const { close, onCreated, destination } = defineProps<{
 }>();
 
 const isEditing = !!destination;
-const type = ref<"webhook" | "cloud">((destination?.type as "webhook" | "cloud") ?? "webhook");
+const type = ref<"webhook" | "ntfy" | "cloud">((destination?.type as "webhook" | "ntfy" | "cloud") ?? "webhook");
 
 const { cloudConfig, fetchCloudConfig } = useCloudConfig();
 const isCloudLinked = computed(() => !!cloudConfig.value?.linked);

@@ -154,6 +154,7 @@ func (a *AgentCmd) Run(args Args, embeddedCerts embed.FS) error {
 		notification.NewContainerLogListener(ctx, clients),
 		notification.NewContainerStatsListener(ctx, clients),
 		notification.NewContainerEventListener(ctx, clients),
+		"./data/notifications.db",
 	)
 
 	// Start first so matcher is available for LoadConfig

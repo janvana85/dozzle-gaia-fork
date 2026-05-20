@@ -27,6 +27,7 @@ func (m *Manager) WriteConfig(w io.Writer) error {
 	config := Config{
 		Subscriptions: m.Subscriptions(),
 		Dispatchers:   dispatchers,
+		QuietHours:    m.GetQuietHours(),
 	}
 
 	encoder := yaml.NewEncoder(w)
@@ -70,8 +71,14 @@ func (m *Manager) LoadConfig(r io.Reader) error {
 			URL:      d.URL,
 			Template: d.Template,
 			Headers:  d.Headers,
+			Topic:    d.Topic,
+			Priority: d.Priority,
+			Tags:     d.Tags,
+			Token:    d.Token,
 		}
 	}
+
+	m.SetQuietHours(config.QuietHours)
 
 	return m.HandleNotificationConfig(subscriptions, dispatchers)
 }
@@ -128,6 +135,16 @@ func (m *Manager) HandleNotificationConfig(subscriptions []types.SubscriptionCon
 			EventExpression:     sub.EventExpression,
 			Cooldown:            sub.Cooldown,
 			SampleWindow:        sub.SampleWindow,
+			NtfyTopic:           sub.NtfyTopic,
+			NtfyPriority:        sub.NtfyPriority,
+			NtfyTags:            sub.NtfyTags,
+			BypassQuietHours:    sub.BypassQuietHours,
+			QuietPriority:       sub.QuietPriority,
+			HoldDuringQuiet:     sub.HoldDuringQuiet,
+			HoldClearWindow:     sub.HoldClearWindow,
+			BurstCount:          sub.BurstCount,
+			BurstWindow:         sub.BurstWindow,
+			BurstPriority:       sub.BurstPriority,
 		}
 
 		if old, ok := existing[sub.ID]; ok {
@@ -180,6 +197,10 @@ func (m *Manager) HandleNotificationConfig(subscriptions []types.SubscriptionCon
 			URL:      dc.URL,
 			Template: dc.Template,
 			Headers:  dc.Headers,
+			Topic:    dc.Topic,
+			Priority: dc.Priority,
+			Tags:     dc.Tags,
+			Token:    dc.Token,
 		})
 		if err != nil {
 			log.Warn().Err(err).Str("name", dc.Name).Str("type", dc.Type).Msg("Skipping unknown dispatcher type")
@@ -201,6 +222,8 @@ func createDispatcher(config DispatcherConfig) (dispatcher.Dispatcher, error) {
 	switch config.Type {
 	case "webhook":
 		return dispatcher.NewWebhookDispatcher(config.Name, config.URL, config.Template, config.Headers)
+	case "ntfy":
+		return dispatcher.NewNtfyDispatcher(config.Name, config.URL, config.Topic, config.Priority, config.Token)
 	default:
 		return nil, fmt.Errorf("unknown dispatcher type: %s", config.Type)
 	}
@@ -220,6 +243,12 @@ func (m *Manager) loadSubscription(sub *Subscription) error {
 	}
 	if sub.EventCooldowns == nil {
 		sub.EventCooldowns = xsync.NewMap[string, time.Time]()
+	}
+	if sub.LogCooldowns == nil {
+		sub.LogCooldowns = xsync.NewMap[string, time.Time]()
+	}
+	if sub.BurstTrackers == nil {
+		sub.BurstTrackers = xsync.NewMap[string, []time.Time]()
 	}
 
 	m.subscriptions.Store(sub.ID, sub)
