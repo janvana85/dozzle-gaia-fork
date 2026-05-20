@@ -227,6 +227,8 @@ func (m *Manager) flushQueue() {
 	}
 
 	m.queue.Cleanup(7 * 24 * time.Hour)
+	m.queue.CleanupAlertState(25 * time.Hour)
+	m.queue.CleanupCooldowns()
 }
 
 // AddSubscription adds a new subscription with compiled expressions
