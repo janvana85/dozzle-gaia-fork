@@ -49,20 +49,27 @@ func (m *Manager) LoadConfig(r io.Reader) error {
 	subscriptions := make([]types.SubscriptionConfig, len(config.Subscriptions))
 	for i, sub := range config.Subscriptions {
 		subscriptions[i] = types.SubscriptionConfig{
-			ID:                  sub.ID,
-			Name:                sub.Name,
-			Enabled:             sub.Enabled,
-			DispatcherID:        sub.DispatcherID,
-			LogExpression:       sub.LogExpression,
-			ContainerExpression: sub.ContainerExpression,
-			MetricExpression:    sub.MetricExpression,
-			EventExpression:     sub.EventExpression,
-			Cooldown:            sub.Cooldown,
-			SampleWindow:        sub.SampleWindow,
-			WatchdogPattern:     sub.WatchdogPattern,
-			WatchdogWindow:      sub.WatchdogWindow,
-			QuietStackThreshold: sub.QuietStackThreshold,
-			QuietStackWindow:    sub.QuietStackWindow,
+			ID:                     sub.ID,
+			Name:                   sub.Name,
+			Enabled:                sub.Enabled,
+			DispatcherID:           sub.DispatcherID,
+			LogExpression:          sub.LogExpression,
+			ContainerExpression:    sub.ContainerExpression,
+			MetricExpression:       sub.MetricExpression,
+			EventExpression:        sub.EventExpression,
+			Cooldown:               sub.Cooldown,
+			SampleWindow:           sub.SampleWindow,
+			WatchdogPattern:        sub.WatchdogPattern,
+			WatchdogWindow:         sub.WatchdogWindow,
+			WatchdogCooldown:       sub.WatchdogCooldown,
+			WatchdogTriggerMessage: sub.WatchdogTriggerMessage,
+			WatchdogClearMessage:   sub.WatchdogClearMessage,
+			QuietStackThreshold:    sub.QuietStackThreshold,
+			QuietStackWindow:       sub.QuietStackWindow,
+			AlertQuietEnabled:      sub.AlertQuietEnabled,
+			AlertQuietStart:        sub.AlertQuietStart,
+			AlertQuietEnd:          sub.AlertQuietEnd,
+			AlertQuietTimezone:     sub.AlertQuietTimezone,
 		}
 	}
 
@@ -129,30 +136,37 @@ func (m *Manager) HandleNotificationConfig(subscriptions []types.SubscriptionCon
 	// Load subscriptions, preserving runtime stats from existing ones
 	for _, sub := range subscriptions {
 		s := &Subscription{
-			ID:                  sub.ID,
-			Name:                sub.Name,
-			Enabled:             sub.Enabled,
-			DispatcherID:        sub.DispatcherID,
-			LogExpression:       sub.LogExpression,
-			ContainerExpression: sub.ContainerExpression,
-			MetricExpression:    sub.MetricExpression,
-			EventExpression:     sub.EventExpression,
-			Cooldown:            sub.Cooldown,
-			SampleWindow:        sub.SampleWindow,
-			NtfyTopic:           sub.NtfyTopic,
-			NtfyPriority:        sub.NtfyPriority,
-			NtfyTags:            sub.NtfyTags,
-			BypassQuietHours:    sub.BypassQuietHours,
-			QuietPriority:       sub.QuietPriority,
-			HoldDuringQuiet:     sub.HoldDuringQuiet,
-			HoldClearWindow:     sub.HoldClearWindow,
-			BurstCount:          sub.BurstCount,
-			BurstWindow:         sub.BurstWindow,
-			BurstPriority:       sub.BurstPriority,
-			WatchdogPattern:     sub.WatchdogPattern,
-			WatchdogWindow:      sub.WatchdogWindow,
-			QuietStackThreshold: sub.QuietStackThreshold,
-			QuietStackWindow:    sub.QuietStackWindow,
+			ID:                     sub.ID,
+			Name:                   sub.Name,
+			Enabled:                sub.Enabled,
+			DispatcherID:           sub.DispatcherID,
+			LogExpression:          sub.LogExpression,
+			ContainerExpression:    sub.ContainerExpression,
+			MetricExpression:       sub.MetricExpression,
+			EventExpression:        sub.EventExpression,
+			Cooldown:               sub.Cooldown,
+			SampleWindow:           sub.SampleWindow,
+			NtfyTopic:              sub.NtfyTopic,
+			NtfyPriority:           sub.NtfyPriority,
+			NtfyTags:               sub.NtfyTags,
+			BypassQuietHours:       sub.BypassQuietHours,
+			QuietPriority:          sub.QuietPriority,
+			HoldDuringQuiet:        sub.HoldDuringQuiet,
+			HoldClearWindow:        sub.HoldClearWindow,
+			BurstCount:             sub.BurstCount,
+			BurstWindow:            sub.BurstWindow,
+			BurstPriority:          sub.BurstPriority,
+			WatchdogPattern:        sub.WatchdogPattern,
+			WatchdogWindow:         sub.WatchdogWindow,
+			WatchdogCooldown:       sub.WatchdogCooldown,
+			WatchdogTriggerMessage: sub.WatchdogTriggerMessage,
+			WatchdogClearMessage:   sub.WatchdogClearMessage,
+			QuietStackThreshold:    sub.QuietStackThreshold,
+			QuietStackWindow:       sub.QuietStackWindow,
+			AlertQuietEnabled:      sub.AlertQuietEnabled,
+			AlertQuietStart:        sub.AlertQuietStart,
+			AlertQuietEnd:          sub.AlertQuietEnd,
+			AlertQuietTimezone:     sub.AlertQuietTimezone,
 		}
 
 		if old, ok := existing[sub.ID]; ok {
@@ -260,6 +274,9 @@ func (m *Manager) loadSubscription(sub *Subscription) error {
 	}
 	if sub.WatchdogTimers == nil {
 		sub.WatchdogTimers = xsync.NewMap[string, *time.Timer]()
+	}
+	if sub.WatchdogCooldowns == nil {
+		sub.WatchdogCooldowns = xsync.NewMap[string, time.Time]()
 	}
 
 	m.subscriptions.Store(sub.ID, sub)

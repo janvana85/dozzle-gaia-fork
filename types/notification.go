@@ -103,10 +103,17 @@ type SubscriptionConfig struct {
 	BurstCount          int      `json:"burstCount,omitempty"`
 	BurstWindow         int      `json:"burstWindow,omitempty"`
 	BurstPriority       int      `json:"burstPriority,omitempty"`
-	WatchdogPattern     string   `json:"watchdogPattern,omitempty"`
-	WatchdogWindow      int      `json:"watchdogWindow,omitempty"` // seconds
-	QuietStackThreshold int      `json:"quietStackThreshold,omitempty"`
-	QuietStackWindow    int      `json:"quietStackWindow,omitempty"`
+	WatchdogPattern        string `json:"watchdogPattern,omitempty"`
+	WatchdogWindow         int    `json:"watchdogWindow,omitempty"` // seconds
+	WatchdogCooldown       int    `json:"watchdogCooldown,omitempty"`
+	WatchdogTriggerMessage string `json:"watchdogTriggerMessage,omitempty"`
+	WatchdogClearMessage   string `json:"watchdogClearMessage,omitempty"`
+	QuietStackThreshold    int    `json:"quietStackThreshold,omitempty"`
+	QuietStackWindow       int    `json:"quietStackWindow,omitempty"`
+	AlertQuietEnabled      bool   `json:"alertQuietEnabled,omitempty"`
+	AlertQuietStart        string `json:"alertQuietStart,omitempty"`
+	AlertQuietEnd          string `json:"alertQuietEnd,omitempty"`
+	AlertQuietTimezone     string `json:"alertQuietTimezone,omitempty"`
 }
 
 // SubscriptionStats represents runtime stats for a notification subscription

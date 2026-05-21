@@ -26,6 +26,14 @@ export interface NotificationRule {
   // watchdog / coupled messages
   watchdogPattern?: string;
   watchdogWindow?: number; // seconds
+  watchdogCooldown?: number;
+  watchdogTriggerMessage?: string;
+  watchdogClearMessage?: string;
+  // per-alert quiet hours override
+  alertQuietEnabled?: boolean;
+  alertQuietStart?: string;
+  alertQuietEnd?: string;
+  alertQuietTimezone?: string;
 }
 
 export interface Dispatcher {

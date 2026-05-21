@@ -20,6 +20,8 @@
     </div>
   </fieldset>
 
+  <CooldownField v-model="cooldown" />
+
   <!-- Log Preview -->
   <div v-if="logMessages.length" class="mt-4">
     <div class="mb-2 text-lg">{{ $t("notifications.alert-form.preview") }}</div>
@@ -49,9 +51,10 @@ const logError = ref<string | null>(null);
 const logTotalCount = ref(0);
 const logMessages = shallowRef<LogEntry<LogMessage>[]>([]);
 const messageKeys = ref<string[]>([]);
+const cooldown = ref(props.alert?.cooldown ?? 0);
 
 const canSave = computed(() => !logError.value);
-const typeFields = computed(() => ({ logExpression: logExpression.value, metricExpression: "", cooldown: 0 }));
+const typeFields = computed(() => ({ logExpression: logExpression.value, metricExpression: "", cooldown: cooldown.value }));
 
 defineExpose({ canSave, typeFields });
 

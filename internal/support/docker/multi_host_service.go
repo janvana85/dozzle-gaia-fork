@@ -285,16 +285,25 @@ func (m *MultiHostService) broadcastNotificationConfig() {
 	subscriptions := make([]types.SubscriptionConfig, len(notifSubs))
 	for i, sub := range notifSubs {
 		subscriptions[i] = types.SubscriptionConfig{
-			ID:                  sub.ID,
-			Name:                sub.Name,
-			Enabled:             sub.Enabled,
-			DispatcherID:        sub.DispatcherID,
-			LogExpression:       sub.LogExpression,
-			ContainerExpression: sub.ContainerExpression,
-			MetricExpression:    sub.MetricExpression,
-			EventExpression:     sub.EventExpression,
-			Cooldown:            sub.Cooldown,
-			SampleWindow:        sub.SampleWindow,
+			ID:                     sub.ID,
+			Name:                   sub.Name,
+			Enabled:                sub.Enabled,
+			DispatcherID:           sub.DispatcherID,
+			LogExpression:          sub.LogExpression,
+			ContainerExpression:    sub.ContainerExpression,
+			MetricExpression:       sub.MetricExpression,
+			EventExpression:        sub.EventExpression,
+			Cooldown:               sub.Cooldown,
+			SampleWindow:           sub.SampleWindow,
+			WatchdogPattern:        sub.WatchdogPattern,
+			WatchdogWindow:         sub.WatchdogWindow,
+			WatchdogCooldown:       sub.WatchdogCooldown,
+			WatchdogTriggerMessage: sub.WatchdogTriggerMessage,
+			WatchdogClearMessage:   sub.WatchdogClearMessage,
+			AlertQuietEnabled:      sub.AlertQuietEnabled,
+			AlertQuietStart:        sub.AlertQuietStart,
+			AlertQuietEnd:          sub.AlertQuietEnd,
+			AlertQuietTimezone:     sub.AlertQuietTimezone,
 		}
 	}
 

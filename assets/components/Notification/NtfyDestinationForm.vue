@@ -136,15 +136,21 @@ async function testDestination() {
   isTesting.value = true;
   testResult.value = null;
   try {
+    const body: Record<string, unknown> = {
+      url: serverUrl.value.trim(),
+      topic: topic.value.trim(),
+      priority: priority.value,
+    };
+    if (token.value.trim()) {
+      body.token = token.value.trim();
+    } else if (isEditing && destination?.id) {
+      // pass dispatcher ID so backend can use stored token
+      body.dispatcherId = destination.id;
+    }
     const res = await fetch(withBase("/api/notifications/test-ntfy"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url: serverUrl.value.trim(),
-        topic: topic.value.trim(),
-        priority: priority.value,
-        token: token.value.trim() || undefined,
-      }),
+      body: JSON.stringify(body),
     });
     const data: TestWebhookResult = await res.json();
     testResult.value = data;

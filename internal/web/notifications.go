@@ -22,21 +22,28 @@ import (
 
 // Response types for JSON serialization
 type NotificationRuleResponse struct {
-	ID                  int                 `json:"id"`
-	Name                string              `json:"name"`
-	Enabled             bool                `json:"enabled"`
-	ContainerExpression string              `json:"containerExpression"`
-	LogExpression       string              `json:"logExpression"`
-	MetricExpression    string              `json:"metricExpression,omitempty"`
-	EventExpression     string              `json:"eventExpression,omitempty"`
-	Cooldown            int                 `json:"cooldown,omitempty"`
-	SampleWindow        int                 `json:"sampleWindow,omitempty"`
-	TriggerCount        int64               `json:"triggerCount"`
-	TriggeredContainers int                 `json:"triggeredContainers"`
-	LastTriggeredAt     *time.Time          `json:"lastTriggeredAt"`
-	Dispatcher          *DispatcherResponse `json:"dispatcher"`
-	WatchdogPattern     string              `json:"watchdogPattern,omitempty"`
-	WatchdogWindow      int                 `json:"watchdogWindow,omitempty"`
+	ID                     int                 `json:"id"`
+	Name                   string              `json:"name"`
+	Enabled                bool                `json:"enabled"`
+	ContainerExpression    string              `json:"containerExpression"`
+	LogExpression          string              `json:"logExpression"`
+	MetricExpression       string              `json:"metricExpression,omitempty"`
+	EventExpression        string              `json:"eventExpression,omitempty"`
+	Cooldown               int                 `json:"cooldown,omitempty"`
+	SampleWindow           int                 `json:"sampleWindow,omitempty"`
+	TriggerCount           int64               `json:"triggerCount"`
+	TriggeredContainers    int                 `json:"triggeredContainers"`
+	LastTriggeredAt        *time.Time          `json:"lastTriggeredAt"`
+	Dispatcher             *DispatcherResponse `json:"dispatcher"`
+	WatchdogPattern        string              `json:"watchdogPattern,omitempty"`
+	WatchdogWindow         int                 `json:"watchdogWindow,omitempty"`
+	WatchdogCooldown       int                 `json:"watchdogCooldown,omitempty"`
+	WatchdogTriggerMessage string              `json:"watchdogTriggerMessage,omitempty"`
+	WatchdogClearMessage   string              `json:"watchdogClearMessage,omitempty"`
+	AlertQuietEnabled      bool                `json:"alertQuietEnabled,omitempty"`
+	AlertQuietStart        string              `json:"alertQuietStart,omitempty"`
+	AlertQuietEnd          string              `json:"alertQuietEnd,omitempty"`
+	AlertQuietTimezone     string              `json:"alertQuietTimezone,omitempty"`
 }
 
 type DispatcherResponse struct {
@@ -74,8 +81,15 @@ type NotificationRuleInput struct {
 	BurstCount          int      `json:"burstCount,omitempty"`
 	BurstWindow         int      `json:"burstWindow,omitempty"`
 	BurstPriority       int      `json:"burstPriority,omitempty"`
-	WatchdogPattern     string   `json:"watchdogPattern,omitempty"`
-	WatchdogWindow      int      `json:"watchdogWindow,omitempty"`
+	WatchdogPattern        string `json:"watchdogPattern,omitempty"`
+	WatchdogWindow         int    `json:"watchdogWindow,omitempty"`
+	WatchdogCooldown       int    `json:"watchdogCooldown,omitempty"`
+	WatchdogTriggerMessage string `json:"watchdogTriggerMessage,omitempty"`
+	WatchdogClearMessage   string `json:"watchdogClearMessage,omitempty"`
+	AlertQuietEnabled      bool   `json:"alertQuietEnabled,omitempty"`
+	AlertQuietStart        string `json:"alertQuietStart,omitempty"`
+	AlertQuietEnd          string `json:"alertQuietEnd,omitempty"`
+	AlertQuietTimezone     string `json:"alertQuietTimezone,omitempty"`
 }
 
 type NotificationRuleUpdateInput struct {
@@ -127,10 +141,11 @@ type TestWebhookInput struct {
 }
 
 type TestNtfyInput struct {
-	URL      string `json:"url"`
-	Topic    string `json:"topic"`
-	Priority int    `json:"priority,omitempty"`
-	Token    string `json:"token,omitempty"`
+	URL          string `json:"url"`
+	Topic        string `json:"topic"`
+	Priority     int    `json:"priority,omitempty"`
+	Token        string `json:"token,omitempty"`
+	DispatcherID *int   `json:"dispatcherId,omitempty"` // when set and token empty, backend uses stored token
 }
 
 type TestWebhookResult struct {
@@ -181,21 +196,28 @@ func subscriptionToResponse(sub *notification.Subscription, dispatchers []notifi
 	}
 
 	return &NotificationRuleResponse{
-		ID:                  sub.ID,
-		Name:                sub.Name,
-		Enabled:             sub.Enabled,
-		Dispatcher:          disp,
-		LogExpression:       sub.LogExpression,
-		ContainerExpression: sub.ContainerExpression,
-		MetricExpression:    sub.MetricExpression,
-		EventExpression:     sub.EventExpression,
-		Cooldown:            sub.Cooldown,
-		SampleWindow:        sub.SampleWindow,
-		TriggerCount:        triggerCount,
-		LastTriggeredAt:     lastTriggeredAt,
-		TriggeredContainers: triggeredContainers,
-		WatchdogPattern:     sub.WatchdogPattern,
-		WatchdogWindow:      sub.WatchdogWindow,
+		ID:                     sub.ID,
+		Name:                   sub.Name,
+		Enabled:                sub.Enabled,
+		Dispatcher:             disp,
+		LogExpression:          sub.LogExpression,
+		ContainerExpression:    sub.ContainerExpression,
+		MetricExpression:       sub.MetricExpression,
+		EventExpression:        sub.EventExpression,
+		Cooldown:               sub.Cooldown,
+		SampleWindow:           sub.SampleWindow,
+		TriggerCount:           triggerCount,
+		LastTriggeredAt:        lastTriggeredAt,
+		TriggeredContainers:    triggeredContainers,
+		WatchdogPattern:        sub.WatchdogPattern,
+		WatchdogWindow:         sub.WatchdogWindow,
+		WatchdogCooldown:       sub.WatchdogCooldown,
+		WatchdogTriggerMessage: sub.WatchdogTriggerMessage,
+		WatchdogClearMessage:   sub.WatchdogClearMessage,
+		AlertQuietEnabled:      sub.AlertQuietEnabled,
+		AlertQuietStart:        sub.AlertQuietStart,
+		AlertQuietEnd:          sub.AlertQuietEnd,
+		AlertQuietTimezone:     sub.AlertQuietTimezone,
 	}
 }
 
@@ -292,27 +314,34 @@ func (h *handler) createNotificationRule(w http.ResponseWriter, r *http.Request)
 	}
 
 	sub := &notification.Subscription{
-		Name:                input.Name,
-		Enabled:             input.Enabled,
-		DispatcherID:        input.DispatcherID,
-		LogExpression:       input.LogExpression,
-		ContainerExpression: input.ContainerExpression,
-		MetricExpression:    input.MetricExpression,
-		EventExpression:     input.EventExpression,
-		Cooldown:            input.Cooldown,
-		SampleWindow:        input.SampleWindow,
-		NtfyTopic:           input.NtfyTopic,
-		NtfyPriority:        input.NtfyPriority,
-		NtfyTags:            input.NtfyTags,
-		BypassQuietHours:    input.BypassQuietHours,
-		QuietPriority:       input.QuietPriority,
-		HoldDuringQuiet:     input.HoldDuringQuiet,
-		HoldClearWindow:     input.HoldClearWindow,
-		BurstCount:          input.BurstCount,
-		BurstWindow:         input.BurstWindow,
-		BurstPriority:       input.BurstPriority,
-		WatchdogPattern:     input.WatchdogPattern,
-		WatchdogWindow:      input.WatchdogWindow,
+		Name:                   input.Name,
+		Enabled:                input.Enabled,
+		DispatcherID:           input.DispatcherID,
+		LogExpression:          input.LogExpression,
+		ContainerExpression:    input.ContainerExpression,
+		MetricExpression:       input.MetricExpression,
+		EventExpression:        input.EventExpression,
+		Cooldown:               input.Cooldown,
+		SampleWindow:           input.SampleWindow,
+		NtfyTopic:              input.NtfyTopic,
+		NtfyPriority:           input.NtfyPriority,
+		NtfyTags:               input.NtfyTags,
+		BypassQuietHours:       input.BypassQuietHours,
+		QuietPriority:          input.QuietPriority,
+		HoldDuringQuiet:        input.HoldDuringQuiet,
+		HoldClearWindow:        input.HoldClearWindow,
+		BurstCount:             input.BurstCount,
+		BurstWindow:            input.BurstWindow,
+		BurstPriority:          input.BurstPriority,
+		WatchdogPattern:        input.WatchdogPattern,
+		WatchdogWindow:         input.WatchdogWindow,
+		WatchdogCooldown:       input.WatchdogCooldown,
+		WatchdogTriggerMessage: input.WatchdogTriggerMessage,
+		WatchdogClearMessage:   input.WatchdogClearMessage,
+		AlertQuietEnabled:      input.AlertQuietEnabled,
+		AlertQuietStart:        input.AlertQuietStart,
+		AlertQuietEnd:          input.AlertQuietEnd,
+		AlertQuietTimezone:     input.AlertQuietTimezone,
 	}
 
 	if err := h.hostService.AddSubscription(sub); err != nil {
@@ -337,28 +366,35 @@ func (h *handler) replaceNotificationRule(w http.ResponseWriter, r *http.Request
 	}
 
 	sub := &notification.Subscription{
-		ID:                  id,
-		Name:                input.Name,
-		Enabled:             input.Enabled,
-		DispatcherID:        input.DispatcherID,
-		LogExpression:       input.LogExpression,
-		ContainerExpression: input.ContainerExpression,
-		MetricExpression:    input.MetricExpression,
-		EventExpression:     input.EventExpression,
-		Cooldown:            input.Cooldown,
-		SampleWindow:        input.SampleWindow,
-		NtfyTopic:           input.NtfyTopic,
-		NtfyPriority:        input.NtfyPriority,
-		NtfyTags:            input.NtfyTags,
-		BypassQuietHours:    input.BypassQuietHours,
-		QuietPriority:       input.QuietPriority,
-		HoldDuringQuiet:     input.HoldDuringQuiet,
-		HoldClearWindow:     input.HoldClearWindow,
-		BurstCount:          input.BurstCount,
-		BurstWindow:         input.BurstWindow,
-		BurstPriority:       input.BurstPriority,
-		WatchdogPattern:     input.WatchdogPattern,
-		WatchdogWindow:      input.WatchdogWindow,
+		ID:                     id,
+		Name:                   input.Name,
+		Enabled:                input.Enabled,
+		DispatcherID:           input.DispatcherID,
+		LogExpression:          input.LogExpression,
+		ContainerExpression:    input.ContainerExpression,
+		MetricExpression:       input.MetricExpression,
+		EventExpression:        input.EventExpression,
+		Cooldown:               input.Cooldown,
+		SampleWindow:           input.SampleWindow,
+		NtfyTopic:              input.NtfyTopic,
+		NtfyPriority:           input.NtfyPriority,
+		NtfyTags:               input.NtfyTags,
+		BypassQuietHours:       input.BypassQuietHours,
+		QuietPriority:          input.QuietPriority,
+		HoldDuringQuiet:        input.HoldDuringQuiet,
+		HoldClearWindow:        input.HoldClearWindow,
+		BurstCount:             input.BurstCount,
+		BurstWindow:            input.BurstWindow,
+		BurstPriority:          input.BurstPriority,
+		WatchdogPattern:        input.WatchdogPattern,
+		WatchdogWindow:         input.WatchdogWindow,
+		WatchdogCooldown:       input.WatchdogCooldown,
+		WatchdogTriggerMessage: input.WatchdogTriggerMessage,
+		WatchdogClearMessage:   input.WatchdogClearMessage,
+		AlertQuietEnabled:      input.AlertQuietEnabled,
+		AlertQuietStart:        input.AlertQuietStart,
+		AlertQuietEnd:          input.AlertQuietEnd,
+		AlertQuietTimezone:     input.AlertQuietTimezone,
 	}
 
 	if err := h.hostService.ReplaceSubscription(sub); err != nil {
@@ -851,7 +887,18 @@ func (h *handler) testNtfy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ntfy, err := dispatcher.NewNtfyDispatcher("test", input.URL, input.Topic, input.Priority, input.Token)
+	// If no token provided but a dispatcher ID is given, use the stored token
+	token := input.Token
+	if token == "" && input.DispatcherID != nil {
+		for _, d := range h.hostService.Dispatchers() {
+			if d.ID == *input.DispatcherID && d.Type == "ntfy" {
+				token = d.Token
+				break
+			}
+		}
+	}
+
+	ntfy, err := dispatcher.NewNtfyDispatcher("test", input.URL, input.Topic, input.Priority, token)
 	if err != nil {
 		errStr := err.Error()
 		writeJSON(w, http.StatusOK, &TestWebhookResult{Success: false, Error: &errStr})

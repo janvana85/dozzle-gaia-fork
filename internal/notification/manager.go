@@ -133,6 +133,39 @@ func (m *Manager) isQuietHours() bool {
 	return !now.Before(start) || now.Before(end)
 }
 
+// isAlertQuietHours returns true if the current time falls within the per-alert quiet window.
+// Returns (inQuiet bool, effective bool) — effective is false when no per-alert override is set.
+func (m *Manager) isAlertQuietHours(sub *Subscription) (inQuiet bool, effective bool) {
+	if !sub.AlertQuietEnabled || sub.AlertQuietStart == "" || sub.AlertQuietEnd == "" {
+		return false, false
+	}
+	loc := m.resolveLocation(sub.AlertQuietTimezone)
+	now := time.Now().In(loc)
+	startH, startM := parseHHMM(sub.AlertQuietStart)
+	endH, endM := parseHHMM(sub.AlertQuietEnd)
+	start := time.Date(now.Year(), now.Month(), now.Day(), startH, startM, 0, 0, loc)
+	end := time.Date(now.Year(), now.Month(), now.Day(), endH, endM, 0, 0, loc)
+	var in bool
+	if start.Before(end) {
+		in = !now.Before(start) && now.Before(end)
+	} else {
+		in = !now.Before(start) || now.Before(end)
+	}
+	return in, true
+}
+
+// nextAlertQuietEnd returns when the per-alert quiet window ends.
+func (m *Manager) nextAlertQuietEnd(sub *Subscription) time.Time {
+	loc := m.resolveLocation(sub.AlertQuietTimezone)
+	endH, endM := parseHHMM(sub.AlertQuietEnd)
+	now := time.Now().In(loc)
+	candidate := time.Date(now.Year(), now.Month(), now.Day(), endH, endM, 0, 0, loc)
+	if candidate.Before(now) {
+		candidate = candidate.Add(24 * time.Hour)
+	}
+	return candidate
+}
+
 // resolveLocation returns the time.Location for the given timezone string.
 // Falls back to time.Local if the string is empty or invalid.
 func (m *Manager) resolveLocation(tz string) *time.Location {

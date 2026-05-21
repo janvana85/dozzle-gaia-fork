@@ -55,17 +55,49 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 
 		// Watchdog mode: trigger starts/resets a timer; resolve pattern cancels it
 		if sub.WatchdogWindow > 0 {
-			// Resolve: cancel the watchdog timer if the resolve pattern matches
+			// Resolve: cancel the watchdog timer if the resolve pattern matches, optionally send clear message
 			if sub.WatchdogProgram != nil && sub.MatchesWatchdog(notificationLog) {
-				sub.CancelWatchdogTimer(logEvent.ContainerID)
+				wasActive := sub.CancelWatchdogTimer(logEvent.ContainerID)
+				if wasActive && sub.WatchdogClearMessage != "" {
+					if d, ok := m.getDispatcher(sub.DispatcherID); ok {
+						clearNotif := types.Notification{
+							ID:           fmt.Sprintf("%s-watchdog-clear-%d", c.ID, time.Now().UnixNano()),
+							Type:         types.LogNotification,
+							Detail:       sub.WatchdogClearMessage,
+							Container:    notificationContainer,
+							Log:          &notificationLog,
+							NtfyTopic:    sub.NtfyTopic,
+							NtfyPriority: sub.NtfyPriority,
+							NtfyTags:     sub.NtfyTags,
+							Subscription: types.SubscriptionConfig{
+								ID:                  sub.ID,
+								Name:                sub.Name,
+								Enabled:             sub.Enabled,
+								DispatcherID:        sub.DispatcherID,
+								LogExpression:       sub.LogExpression,
+								ContainerExpression: sub.ContainerExpression,
+								NtfyTopic:           sub.NtfyTopic,
+								NtfyPriority:        sub.NtfyPriority,
+								NtfyTags:            sub.NtfyTags,
+								BypassQuietHours:    sub.BypassQuietHours,
+							},
+							Timestamp: time.Now(),
+						}
+						go m.sendWithRetry(d, clearNotif, sub.DispatcherID)
+					}
+				}
 			}
 			// Trigger: reset the watchdog timer if the trigger pattern matches
 			if sub.MatchesLog(notificationLog) {
 				if d, ok := m.getDispatcher(sub.DispatcherID); ok {
 					priority := sub.DetectBurst(logEvent.ContainerID, sub.NtfyPriority)
-					detail := fmt.Sprintf("Watchdog: no follow-up received within %d seconds", sub.WatchdogWindow)
-					if sub.WatchdogPattern == "" {
-						detail = fmt.Sprintf("Watchdog: no heartbeat seen for %d seconds", sub.WatchdogWindow)
+					detail := sub.WatchdogTriggerMessage
+					if detail == "" {
+						if sub.WatchdogPattern != "" {
+							detail = fmt.Sprintf("Watchdog: no follow-up received within %d seconds", sub.WatchdogWindow)
+						} else {
+							detail = fmt.Sprintf("Watchdog: no heartbeat seen for %d seconds", sub.WatchdogWindow)
+						}
 					}
 					notif := types.Notification{
 						ID:           fmt.Sprintf("%s-watchdog-%d", c.ID, time.Now().UnixNano()),
@@ -91,6 +123,10 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 						Timestamp: time.Now(),
 					}
 					sub.ResetWatchdogTimer(logEvent.ContainerID, func() {
+						if sub.IsWatchdogCooldownActive(logEvent.ContainerID) {
+							return
+						}
+						sub.SetWatchdogCooldown(logEvent.ContainerID)
 						sub.TriggerCount.Add(1)
 						now := time.Now()
 						sub.LastTriggeredAt.Store(&now)
@@ -383,6 +419,18 @@ func formatLogMessage(message any) string {
 	}
 }
 
+// effectiveQuietHours returns whether we're currently in quiet hours for this subscription,
+// and the time when quiet hours end. Per-alert config takes precedence over global.
+func (m *Manager) effectiveQuietHours(sub *Subscription) (inQuiet bool, quietEnd time.Time) {
+	if sub.BypassQuietHours {
+		return false, time.Time{}
+	}
+	if inQ, effective := m.isAlertQuietHours(sub); effective {
+		return inQ, m.nextAlertQuietEnd(sub)
+	}
+	return m.isQuietHours(), m.nextQuietEnd()
+}
+
 // sendOrQueue decides whether to send immediately, apply quiet-hours stacking, queue for hold-window, or suppress.
 func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notification, sub *Subscription) {
 	// Hold/clear window: delay delivery via queue
@@ -394,12 +442,12 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 		return
 	}
 
-	// Quiet hours handling
-	if m.isQuietHours() && !sub.BypassQuietHours {
+	inQuiet, quietEnd := m.effectiveQuietHours(sub)
+
+	if inQuiet {
 		// Legacy: hold entire notification until quiet ends
 		if sub.HoldDuringQuiet && m.queue != nil {
-			deliverAt := m.nextQuietEnd()
-			if err := m.queue.Enqueue(notification, deliverAt); err != nil {
+			if err := m.queue.Enqueue(notification, quietEnd); err != nil {
 				log.Warn().Err(err).Msg("Failed to enqueue quiet-hours notification")
 			}
 			return
@@ -450,13 +498,11 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 			windowExpired := now.After(state.WindowStart.Add(time.Duration(stackWindowSec) * time.Second))
 
 			if !state.QuietFirstSent || windowExpired {
-				// Reset window if expired
 				if windowExpired {
 					state.Count = 0
 					state.StackedSent = false
 					state.WindowStart = now
 				}
-				// Send first quiet notification
 				quietNotif := notification
 				if sub.QuietPriority > 0 {
 					quietNotif.NtfyPriority = sub.QuietPriority
@@ -473,13 +519,11 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 				return
 			}
 
-			// Increment counter
 			state.Count++
 			if err := m.queue.UpsertAlertState(state); err != nil {
 				log.Debug().Err(err).Msg("Failed to upsert alert_state")
 			}
 
-			// Escalate if threshold reached
 			if state.Count >= threshold && !state.StackedSent {
 				windowMins := stackWindowSec / 60
 				stackedNotif := notification
@@ -490,7 +534,7 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 					state.Count, windowMins, state.Count,
 				)
 				if !qh.StackedUsesQuietTopic {
-					stackedNotif.NtfyTopic = "" // use default dispatcher topic
+					stackedNotif.NtfyTopic = ""
 				} else if qh.QuietTopic != "" {
 					stackedNotif.NtfyTopic = qh.QuietTopic
 				}
@@ -502,7 +546,6 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 				return
 			}
 
-			// Suppress: within window, below threshold, first already sent
 			log.Debug().
 				Str("fingerprint", fp).
 				Int("count", state.Count).
@@ -512,7 +555,7 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 			return
 		}
 
-		// Fallback: no queue available, just downgrade priority
+		// Fallback: no queue, downgrade priority
 		if sub.QuietPriority > 0 {
 			notification.NtfyPriority = sub.QuietPriority
 		}

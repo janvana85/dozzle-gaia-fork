@@ -149,8 +149,17 @@ type Subscription struct {
 	BurstPriority int `json:"burstPriority,omitempty" yaml:"burstPriority,omitempty"`
 
 	// Watchdog / coupled-messages: fires if resolve pattern doesn't arrive within WatchdogWindow seconds
-	WatchdogPattern string `json:"watchdogPattern,omitempty" yaml:"watchdogPattern,omitempty"`
-	WatchdogWindow  int    `json:"watchdogWindow,omitempty" yaml:"watchdogWindow,omitempty"` // seconds; 0 = disabled
+	WatchdogPattern        string `json:"watchdogPattern,omitempty" yaml:"watchdogPattern,omitempty"`
+	WatchdogWindow         int    `json:"watchdogWindow,omitempty" yaml:"watchdogWindow,omitempty"`         // seconds; 0 = disabled
+	WatchdogCooldown       int    `json:"watchdogCooldown,omitempty" yaml:"watchdogCooldown,omitempty"`    // seconds between watchdog alerts; 0 = no cooldown
+	WatchdogTriggerMessage string `json:"watchdogTriggerMessage,omitempty" yaml:"watchdogTriggerMessage,omitempty"` // custom alert message
+	WatchdogClearMessage   string `json:"watchdogClearMessage,omitempty" yaml:"watchdogClearMessage,omitempty"`    // sent when watchdog resolves
+
+	// Per-alert quiet hours override: if AlertQuietEnabled, these replace global quiet hours for this alert
+	AlertQuietEnabled  bool   `json:"alertQuietEnabled,omitempty" yaml:"alertQuietEnabled,omitempty"`
+	AlertQuietStart    string `json:"alertQuietStart,omitempty" yaml:"alertQuietStart,omitempty"`    // "22:00"
+	AlertQuietEnd      string `json:"alertQuietEnd,omitempty" yaml:"alertQuietEnd,omitempty"`        // "07:00"
+	AlertQuietTimezone string `json:"alertQuietTimezone,omitempty" yaml:"alertQuietTimezone,omitempty"` // "Europe/Prague"
 
 	// Compiled filter expressions
 	LogProgram       *vm.Program `json:"-" yaml:"-"`
@@ -177,6 +186,9 @@ type Subscription struct {
 
 	// Per-container watchdog timers
 	WatchdogTimers *xsync.Map[string, *time.Timer] `json:"-" yaml:"-"`
+
+	// Per-container watchdog cooldown (last fired time)
+	WatchdogCooldowns *xsync.Map[string, time.Time] `json:"-" yaml:"-"`
 
 	// Per-subscription quiet hours overrides (0 = use global)
 	QuietStackThreshold int `json:"quietStackThreshold,omitempty" yaml:"quietStackThreshold,omitempty"`
@@ -302,11 +314,13 @@ func (s *Subscription) ResetWatchdogTimer(containerID string, fire func(), windo
 }
 
 // CancelWatchdogTimer stops and removes the watchdog timer for a container.
-func (s *Subscription) CancelWatchdogTimer(containerID string) {
-	if t, ok := s.WatchdogTimers.Load(containerID); ok {
+// Returns true if a timer was active (useful for deciding whether to send a clear message).
+func (s *Subscription) CancelWatchdogTimer(containerID string) bool {
+	t, ok := s.WatchdogTimers.LoadAndDelete(containerID)
+	if ok {
 		t.Stop()
-		s.WatchdogTimers.Delete(containerID)
 	}
+	return ok
 }
 
 // Config represents the persisted notification configuration
@@ -535,6 +549,25 @@ func (s *Subscription) DetectBurst(containerID string, basePriority int) int {
 		return s.BurstPriority
 	}
 	return basePriority
+}
+
+// IsWatchdogCooldownActive returns true if the watchdog alert is on cooldown for a container.
+func (s *Subscription) IsWatchdogCooldownActive(containerID string) bool {
+	if s.WatchdogCooldown == 0 || s.WatchdogCooldowns == nil {
+		return false
+	}
+	lastFired, ok := s.WatchdogCooldowns.Load(containerID)
+	if !ok {
+		return false
+	}
+	return time.Now().Before(lastFired.Add(time.Duration(s.WatchdogCooldown) * time.Second))
+}
+
+// SetWatchdogCooldown records the current time as the last watchdog-fired time for a container.
+func (s *Subscription) SetWatchdogCooldown(containerID string) {
+	if s.WatchdogCooldowns != nil {
+		s.WatchdogCooldowns.Store(containerID, time.Now())
+	}
 }
 
 // Config represents the persisted notification configuration

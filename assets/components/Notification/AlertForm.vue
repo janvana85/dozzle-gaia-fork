@@ -313,9 +313,82 @@
             />
             <p class="text-base-content/50 mt-1 text-xs">{{ $t("notifications.alert-form.watchdog-pattern-hint") }}</p>
           </div>
+          <div v-if="watchdogWindowMins > 0">
+            <label class="label text-sm">Cooldown between alerts (min)</label>
+            <input
+              v-model.number="watchdogCooldownMins"
+              type="number"
+              min="0"
+              class="input focus:input-primary w-32"
+              placeholder="0"
+            />
+            <p class="text-base-content/50 mt-1 text-xs">Minimum minutes between repeated watchdog alerts. 0 = no cooldown.</p>
+          </div>
+          <div v-if="watchdogWindowMins > 0">
+            <label class="label text-sm">Trigger message (optional)</label>
+            <input
+              v-model="watchdogTriggerMessage"
+              type="text"
+              class="input focus:input-primary w-full text-base"
+              placeholder="Service is down"
+            />
+            <p class="text-base-content/50 mt-1 text-xs">Custom notification text when watchdog fires. Leave blank for default.</p>
+          </div>
+          <div v-if="watchdogWindowMins > 0 && watchdogPattern">
+            <label class="label text-sm">Clear message (optional)</label>
+            <input
+              v-model="watchdogClearMessage"
+              type="text"
+              class="input focus:input-primary w-full text-base"
+              placeholder="Service recovered"
+            />
+            <p class="text-base-content/50 mt-1 text-xs">Sent when the resolve pattern matches. Leave blank for no clear notification.</p>
+          </div>
         </div>
       </fieldset>
     </template>
+
+    <!-- Per-alert quiet hours override -->
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend text-lg">Per-alert quiet hours</legend>
+      <div class="space-y-3">
+        <label class="flex cursor-pointer items-center gap-2">
+          <input type="checkbox" v-model="alertQuietEnabled" class="checkbox checkbox-primary" />
+          <span class="text-sm">Override global quiet hours for this alert</span>
+        </label>
+        <template v-if="alertQuietEnabled">
+          <div class="flex items-center gap-3">
+            <div>
+              <label class="label text-sm">Quiet from</label>
+              <input
+                type="time"
+                v-model="alertQuietStart"
+                class="input input-sm focus:input-primary"
+              />
+            </div>
+            <span class="text-base-content/40 mt-5">→</span>
+            <div>
+              <label class="label text-sm">Until</label>
+              <input
+                type="time"
+                v-model="alertQuietEnd"
+                class="input input-sm focus:input-primary"
+              />
+            </div>
+          </div>
+          <div>
+            <label class="label text-sm">Timezone</label>
+            <input
+              type="text"
+              v-model="alertQuietTimezone"
+              class="input input-sm focus:input-primary w-full"
+              placeholder="Europe/Prague (blank = server local)"
+            />
+          </div>
+          <p class="text-base-content/50 text-xs">When set, these quiet hours apply only to this alert instead of the global setting. Stacking rules still use global config.</p>
+        </template>
+      </div>
+    </fieldset>
 
     <!-- Error -->
     <div v-if="saveError" class="alert alert-error">
@@ -400,6 +473,15 @@ const burstPriority = ref(props.alert?.burstPriority ?? 0);
 // watchdog / coupled messages
 const watchdogPattern = ref(props.alert?.watchdogPattern ?? "");
 const watchdogWindowMins = ref(props.alert?.watchdogWindow ? Math.round(props.alert.watchdogWindow / 60) : 0);
+const watchdogCooldownMins = ref(props.alert?.watchdogCooldown ? Math.round(props.alert.watchdogCooldown / 60) : 0);
+const watchdogTriggerMessage = ref(props.alert?.watchdogTriggerMessage ?? "");
+const watchdogClearMessage = ref(props.alert?.watchdogClearMessage ?? "");
+
+// per-alert quiet hours override
+const alertQuietEnabled = ref(props.alert?.alertQuietEnabled ?? false);
+const alertQuietStart = ref(props.alert?.alertQuietStart ?? "22:00");
+const alertQuietEnd = ref(props.alert?.alertQuietEnd ?? "07:00");
+const alertQuietTimezone = ref(props.alert?.alertQuietTimezone ?? "");
 
 const ntfyFields = computed(() => ({
   ntfyTopic: ntfyTopic.value.trim() || undefined,
@@ -429,9 +511,20 @@ async function save() {
       ? {
           watchdogPattern: watchdogPattern.value.trim() || undefined,
           watchdogWindow: watchdogWindowMins.value * 60,
+          watchdogCooldown: watchdogCooldownMins.value > 0 ? watchdogCooldownMins.value * 60 : undefined,
+          watchdogTriggerMessage: watchdogTriggerMessage.value.trim() || undefined,
+          watchdogClearMessage: watchdogClearMessage.value.trim() || undefined,
         }
       : {};
-  await saveAlert({ ...fieldsRef.value.typeFields, ...extra, ...watchdog });
+  const alertQuiet = alertQuietEnabled.value
+    ? {
+        alertQuietEnabled: true,
+        alertQuietStart: alertQuietStart.value,
+        alertQuietEnd: alertQuietEnd.value,
+        alertQuietTimezone: alertQuietTimezone.value.trim() || undefined,
+      }
+    : { alertQuietEnabled: false };
+  await saveAlert({ ...fieldsRef.value.typeFields, ...extra, ...watchdog, ...alertQuiet });
 }
 
 // Container editor
