@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/amir20/dozzle/internal/container"
+	"github.com/amir20/dozzle/internal/log_storage"
 	"github.com/amir20/dozzle/internal/migration"
 	"github.com/amir20/dozzle/internal/notification"
 	"github.com/amir20/dozzle/internal/notification/dispatcher"
@@ -42,6 +43,7 @@ type MultiHostService struct {
 	notificationManager *notification.Manager
 	persister           *notification.Persister
 	cloudNotifyFn       atomic.Pointer[func()]
+	logStore            *log_storage.Store
 }
 
 func NewMultiHostService(manager ClientManager, timeout time.Duration) *MultiHostService {
@@ -204,6 +206,12 @@ func (m *MultiHostService) StartNotificationManager(ctx context.Context) error {
 		NotificationPath: notification.DefaultNotificationConfigPath,
 		CloudPath:        notification.DefaultCloudConfigPath,
 	}
+
+	// Set up log persistence store
+	storeCh := make(chan *container.LogEvent, 1000)
+	m.logStore = log_storage.NewStore("./data/logs")
+	m.logStore.Start(ctx, storeCh)
+	m.notificationManager.SetLogStore(storeCh)
 
 	// Migrate old config format before loading (splits cloud into cloud.yml)
 	migration.MigrateCloudConfig(m.persister.NotificationPath, m.persister.CloudPath)
@@ -506,6 +514,11 @@ func (m *MultiHostService) GetQuietHours() notification.QuietHoursConfig {
 func (m *MultiHostService) SetQuietHours(cfg notification.QuietHoursConfig) {
 	m.notificationManager.SetQuietHours(cfg)
 	m.persister.SaveNotifications()
+}
+
+// LogStore returns the local log persistence store.
+func (m *MultiHostService) LogStore() *log_storage.Store {
+	return m.logStore
 }
 
 // NotificationStatsProvider is an interface for clients that can report notification stats

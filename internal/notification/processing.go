@@ -23,6 +23,12 @@ func (m *Manager) processLogEvents() {
 				return
 			}
 			m.processLogEvent(logEvent)
+			if m.logStoreCh != nil {
+				select {
+				case m.logStoreCh <- logEvent:
+				default:
+				}
+			}
 		}
 	}
 }

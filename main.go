@@ -291,6 +291,10 @@ func createServer(args cli.Args, hostService web.HostService, cloudHooks web.Clo
 		Cloud:            cloudHooks,
 	}
 
+	if mhs, ok := hostService.(*docker_support.MultiHostService); ok {
+		config.LogStore = mhs.LogStore()
+	}
+
 	assets, err := fs.Sub(content, "dist")
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not get sub filesystem")

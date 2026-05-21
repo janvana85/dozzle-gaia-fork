@@ -78,14 +78,16 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	containerService, err := h.hostService.FindContainer(hostKey(r), id, h.resolveLabels(r))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+	containerService, findErr := h.hostService.FindContainer(hostKey(r), id, h.resolveLabels(r))
+	usingStore := findErr != nil && h.logStore != nil && h.logStore.HasLogs(id)
+	if findErr != nil && !usingStore {
+		http.Error(w, findErr.Error(), http.StatusNotFound)
 		return
 	}
 
 	delta := max(to.Sub(from), time.Second*3)
 
+	var err error
 	var regex *regexp.Regexp
 	if r.URL.Query().Has("filter") {
 		regex, err = support_web.ParseRegex(r.URL.Query().Get("filter"))
@@ -167,6 +169,49 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 		writer = gzWriter
 	}
 	encoder := json.NewEncoder(writer)
+
+	// Serve from local log store when the agent is offline
+	if usingStore {
+		queryFrom := from
+		if everything {
+			queryFrom = time.Now().AddDate(0, 0, -4)
+		}
+		events, err := h.logStore.LogsBetweenDates(r.Context(), id, queryFrom, to)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		for event := range events {
+			if everything {
+				if _, ok := event.Message.(string); onlyComplex && ok {
+					continue
+				}
+				if regex != nil && inverse == support_web.Search(regex, event) {
+					continue
+				}
+				if len(levels) > 0 {
+					if _, ok := levels[event.Level]; !ok {
+						continue
+					}
+				}
+				if plainText {
+					fmt.Fprintf(writer, "%s\n", event.RawMessage)
+				} else if err := encoder.Encode(event); err != nil {
+					log.Error().Err(err).Msg("error encoding stored log event")
+				}
+				continue
+			}
+			if !matchesFilter(event, regex, levels, inverse) {
+				continue
+			}
+			support_web.EscapeHTMLValues(event)
+			if err := encoder.Encode(event); err != nil {
+				log.Error().Err(err).Msg("error encoding stored log event")
+				return
+			}
+		}
+		return
+	}
 
 	startIdFound := startId == 0
 	for {

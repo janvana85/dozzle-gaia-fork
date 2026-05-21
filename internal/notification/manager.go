@@ -36,6 +36,7 @@ type Manager struct {
 	sendSem             *semaphore.Weighted
 	queue               *queue.Queue
 	quietHours          QuietHoursConfig
+	logStoreCh          chan<- *container.LogEvent
 	quietHoursMu        sync.RWMutex
 }
 
@@ -75,6 +76,11 @@ func NewManager(listener *ContainerLogListener, statsListener *ContainerStatsLis
 // Start initializes the manager and starts the log listener
 func (m *Manager) Start() error {
 	return m.listener.Start(m)
+}
+
+// SetLogStore registers a channel to receive a copy of every log event.
+func (m *Manager) SetLogStore(ch chan<- *container.LogEvent) {
+	m.logStoreCh = ch
 }
 
 // ShouldListenToContainer implements ContainerMatcher interface
