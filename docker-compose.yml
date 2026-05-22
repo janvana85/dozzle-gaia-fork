@@ -16,7 +16,6 @@ services:
     container_name: simple-auth
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./e2e/data:/data
     environment:
       - DOZZLE_AUTH_PROVIDER=simple
       - DOZZLE_NO_ANALYTICS=1
@@ -75,7 +74,6 @@ services:
       start_interval: 5s
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./e2e/data/notifications.yml:/data/notifications.yml:ro
     build:
       context: .
   proxy:
@@ -93,18 +91,3 @@ services:
       start_interval: 5s
     ports:
       - 2375:2375
-
-  playwright:
-    container_name: playwright
-    image: mcr.microsoft.com/playwright:v1.60.0-jammy
-    working_dir: /app
-    volumes:
-      - .:/app
-    command: npx --yes playwright test
-    environment:
-      - PWTEST_SKIP_TEST_OUTPUT=1
-      - CI=1
-    depends_on:
-      - dozzle
-      - custom_base
-      - remote

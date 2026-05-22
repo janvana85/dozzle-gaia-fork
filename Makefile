@@ -37,10 +37,6 @@ generate: shared_key.pem shared_cert.pem
 dev: generate fake_assets
 	pnpm dev
 
-.PHONY: int
-int:
-	docker compose up --build --force-recreate --exit-code-from playwright
-
 shared_key.pem:
 	@openssl genpkey -algorithm Ed25519 -out shared_key.pem
 
