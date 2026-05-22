@@ -734,13 +734,16 @@ func (h *handler) previewExpression(w http.ResponseWriter, r *http.Request) {
 
 	// Find matching running containers
 	if sub.ContainerProgram != nil {
+		hostMap := make(map[string]container.Host)
+		for _, h := range h.hostService.Hosts() {
+			hostMap[h.ID] = h
+		}
 		containers, _ := h.hostService.ListAllContainers(container.ContainerLabels{})
 		for _, c := range containers {
 			if c.State != "running" {
 				continue
 			}
-			// Pass empty host for matching - host fields aren't used in container expressions
-			nc := notification.FromContainerModel(c, container.Host{})
+			nc := notification.FromContainerModel(c, hostMap[c.Host])
 			if sub.MatchesContainer(nc) {
 				result.MatchedContainers = append(result.MatchedContainers, c)
 			}

@@ -45,9 +45,11 @@ export function useAlertForm(options: AlertFormOptions) {
     ...new Set(containers.value.filter((c) => c.state === "running").map((c) => c.name)),
   ]);
   const imageNames = computed(() => [...new Set(containers.value.map((c) => c.image))]);
-  const hostNames = computed(() => [...new Set(containers.value.map((c) => c.host))]);
 
   const { hosts } = useHosts();
+  const hostNames = computed(() =>
+    [...new Set(containers.value.map((c) => hosts.value[c.host]?.name).filter((n): n is string => !!n))],
+  );
   const hostGroups = computed(() => [
     ...new Set(
       Object.values(hosts.value)

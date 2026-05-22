@@ -64,7 +64,7 @@ services:
     container_name: agent
     command: agent
     environment:
-      - DOZZLE_FILTER=name=dozzle
+      - DOZZLE_HOSTNAME=production-agent
       - DOZZLE_NO_ANALYTICS=1
     healthcheck:
       test: ["CMD", "/dozzle", "healthcheck"]

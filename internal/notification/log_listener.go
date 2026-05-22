@@ -15,7 +15,7 @@ import (
 
 // ContainerMatcher is an interface for checking if a container should be listened to
 type ContainerMatcher interface {
-	ShouldListenToContainer(c container.Container) bool
+	ShouldListenToContainer(c container.Container, host container.Host) bool
 }
 
 // streamEntry tracks an active log stream with its context for identity comparison
@@ -56,6 +56,11 @@ func (l *ContainerLogListener) Start(matcher ContainerMatcher) error {
 
 	// Get all current containers from all clients
 	for _, client := range l.clients {
+		host, err := client.Host(l.ctx)
+		if err != nil {
+			log.Warn().Err(err).Msg("Failed to get host info from client")
+		}
+
 		containers, err := client.ListContainers(l.ctx, nil)
 		if err != nil {
 			log.Warn().Err(err).Msg("Failed to list containers from client")
@@ -64,7 +69,7 @@ func (l *ContainerLogListener) Start(matcher ContainerMatcher) error {
 
 		// Start listening to containers that match
 		for _, c := range containers {
-			if l.matcher.ShouldListenToContainer(c) {
+			if l.matcher.ShouldListenToContainer(c, host) {
 				l.startListening(c, client, time.Now())
 			}
 		}
@@ -82,9 +87,7 @@ func (l *ContainerLogListener) Start(matcher ContainerMatcher) error {
 				if !ok {
 					return
 				}
-				if l.matcher.ShouldListenToContainer(c) {
-					l.startListeningByID(c)
-				}
+				l.startListeningByIDWithMatcher(c)
 			}
 		}
 	}()
@@ -96,6 +99,11 @@ func (l *ContainerLogListener) Start(matcher ContainerMatcher) error {
 func (l *ContainerLogListener) UpdateStreams() {
 	// Get all current containers from all clients
 	for _, client := range l.clients {
+		host, err := client.Host(l.ctx)
+		if err != nil {
+			log.Warn().Err(err).Msg("Failed to get host info from client")
+		}
+
 		containers, err := client.ListContainers(l.ctx, nil)
 		if err != nil {
 			log.Warn().Err(err).Msg("Failed to list containers from client")
@@ -104,7 +112,7 @@ func (l *ContainerLogListener) UpdateStreams() {
 
 		// Check each container against matcher
 		for _, c := range containers {
-			shouldListen := l.matcher.ShouldListenToContainer(c)
+			shouldListen := l.matcher.ShouldListenToContainer(c, host)
 			isListening := l.isListening(c.ID)
 
 			if shouldListen && !isListening {
@@ -152,13 +160,22 @@ func (l *ContainerLogListener) cleanupStream(containerID string, streamCtx conte
 	})
 }
 
-// startListeningByID finds the client for a container and starts listening
-func (l *ContainerLogListener) startListeningByID(c container.Container) {
+// startListeningByIDWithMatcher finds the client and host for a new container,
+// checks the matcher with proper host context, and starts listening if it matches.
+func (l *ContainerLogListener) startListeningByIDWithMatcher(c container.Container) {
 	for _, client := range l.clients {
-		if found, err := client.FindContainer(l.ctx, c.ID, nil); err == nil {
-			l.startListening(found, client, c.StartedAt)
-			return
+		found, err := client.FindContainer(l.ctx, c.ID, nil)
+		if err != nil {
+			continue
 		}
+		host, err := client.Host(l.ctx)
+		if err != nil {
+			log.Warn().Err(err).Str("containerID", c.ID).Msg("Could not get host for new container")
+		}
+		if l.matcher.ShouldListenToContainer(found, host) {
+			l.startListening(found, client, c.StartedAt)
+		}
+		return
 	}
 	log.Warn().Str("containerID", c.ID).Msg("Could not find client for container")
 }
