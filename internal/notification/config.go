@@ -111,7 +111,9 @@ func (m *Manager) HandleNotificationConfig(subscriptions []types.SubscriptionCon
 	}
 	for id := range existing {
 		if _, ok := incomingIDs[id]; !ok {
-			m.subscriptions.Delete(id)
+			if sub, removed := m.subscriptions.LoadAndDelete(id); removed {
+				sub.StopRuntime()
+			}
 		}
 	}
 
@@ -170,6 +172,8 @@ func (m *Manager) HandleNotificationConfig(subscriptions []types.SubscriptionCon
 		}
 
 		if old, ok := existing[sub.ID]; ok {
+			old.StopRuntime()
+
 			s.TriggerCount.Store(old.TriggerCount.Load())
 			s.LastTriggeredAt.Store(old.LastTriggeredAt.Load())
 

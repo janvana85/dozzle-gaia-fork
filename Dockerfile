@@ -1,3 +1,26 @@
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS test
+
+RUN apk add --no-cache build-base ca-certificates openssl
+
+WORKDIR /dozzle
+
+COPY go.* ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+
+COPY internal ./internal
+COPY proto ./proto
+COPY types ./types
+COPY main.go ./
+COPY protos ./protos
+RUN openssl genpkey -algorithm Ed25519 -out shared_key.pem && \
+    openssl req -new -key shared_key.pem -out shared_request.csr -subj "/C=US/ST=California/L=San Francisco/O=Dozzle" && \
+    openssl x509 -req -in shared_request.csr -signkey shared_key.pem -out shared_cert.pem -days 1825 && \
+    rm shared_request.csr && \
+    mkdir -p dist && touch dist/.keep
+
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+  go test -cover -race -count 1 -timeout 40s ./...
+
 # Build assets
 FROM --platform=$BUILDPLATFORM node:25.9.0-alpine AS node
 

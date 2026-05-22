@@ -323,6 +323,21 @@ func (s *Subscription) CancelWatchdogTimer(containerID string) bool {
 	return ok
 }
 
+// StopRuntime cancels runtime-only work owned by this subscription.
+func (s *Subscription) StopRuntime() {
+	if s.WatchdogTimers == nil {
+		return
+	}
+	var containerIDs []string
+	s.WatchdogTimers.Range(func(containerID string, _ *time.Timer) bool {
+		containerIDs = append(containerIDs, containerID)
+		return true
+	})
+	for _, containerID := range containerIDs {
+		s.CancelWatchdogTimer(containerID)
+	}
+}
+
 // Config represents the persisted notification configuration
 type Config struct {
 	Subscriptions []*Subscription    `json:"subscriptions" yaml:"subscriptions"`

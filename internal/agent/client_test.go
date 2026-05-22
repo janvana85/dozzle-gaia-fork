@@ -140,6 +140,7 @@ func init() {
 		ID:       "localhost",
 		Endpoint: "local",
 		Name:     "local",
+		Group:    "Development",
 	}, nil)
 
 	mockService.On("SubscribeEvents", mock.Anything, mock.AnythingOfType("chan<- container.ContainerEvent")).Return().Run(func(args mock.Arguments) {
@@ -198,6 +199,18 @@ func TestHostWithAgentMetadata(t *testing.T) {
 	assert.Equal(t, "passthrough://bufnet", host.Endpoint)
 	assert.Equal(t, "Web-1", host.Name)
 	assert.Equal(t, "Production", host.Group)
+}
+
+func TestHostUsesAdvertisedAgentGroup(t *testing.T) {
+	rpc, err := NewClient("passthrough://bufnet", certs, grpc.WithContextDialer(bufDialer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	host, err := rpc.Host(context.Background())
+
+	assert.NoError(t, err)
+	assert.Equal(t, "Development", host.Group)
 }
 
 func TestHostWithAgentGroupAndDefaultName(t *testing.T) {

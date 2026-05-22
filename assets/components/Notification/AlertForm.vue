@@ -282,11 +282,16 @@
       </fieldset>
     </template>
 
-    <!-- Watchdog / Coupled Messages (log alerts only) -->
+    <!-- Pair Alert (log alerts only) -->
     <template v-if="alertType === 'log'">
       <fieldset class="fieldset">
         <legend class="fieldset-legend text-lg">{{ $t("notifications.alert-form.watchdog-title") }}</legend>
-        <div class="space-y-3">
+        <label class="flex cursor-pointer items-center gap-2">
+          <input type="checkbox" v-model="pairAlertEnabled" class="checkbox checkbox-primary" />
+          <span class="text-sm">{{ $t("notifications.alert-form.pair-alert-enabled") }}</span>
+        </label>
+        <p class="text-base-content/50 mt-1 text-xs">{{ $t("notifications.alert-form.pair-alert-hint") }}</p>
+        <div v-if="pairAlertEnabled" class="mt-3 space-y-3">
           <div>
             <label class="label text-sm">{{ $t("notifications.alert-form.watchdog-window") }}</label>
             <div class="flex items-center gap-2">
@@ -322,7 +327,7 @@
               class="input focus:input-primary w-32"
               placeholder="0"
             />
-            <p class="text-base-content/50 mt-1 text-xs">Minimum minutes between repeated watchdog alerts. 0 = no cooldown.</p>
+            <p class="text-base-content/50 mt-1 text-xs">Minimum minutes between repeated pair alerts. 0 = no cooldown.</p>
           </div>
           <div v-if="watchdogWindowMins > 0">
             <label class="label text-sm">Trigger message (optional)</label>
@@ -332,7 +337,7 @@
               class="input focus:input-primary w-full text-base"
               placeholder="Service is down"
             />
-            <p class="text-base-content/50 mt-1 text-xs">Custom notification text when watchdog fires. Leave blank for default.</p>
+            <p class="text-base-content/50 mt-1 text-xs">Custom notification text when the trigger side times out. Leave blank for default.</p>
           </div>
           <div v-if="watchdogWindowMins > 0 && watchdogPattern">
             <label class="label text-sm">Clear message (optional)</label>
@@ -342,7 +347,7 @@
               class="input focus:input-primary w-full text-base"
               placeholder="Service recovered"
             />
-            <p class="text-base-content/50 mt-1 text-xs">Sent when the resolve pattern matches. Leave blank for no clear notification.</p>
+            <p class="text-base-content/50 mt-1 text-xs">Sent when the clear filter matches before the max delay expires. Leave blank for no clear notification.</p>
           </div>
         </div>
       </fieldset>
@@ -350,16 +355,17 @@
 
     <!-- Per-alert quiet hours override -->
     <fieldset class="fieldset">
-      <legend class="fieldset-legend text-lg">Per-alert quiet hours</legend>
+      <legend class="fieldset-legend text-lg">{{ $t("notifications.alert-form.alert-quiet-title") }}</legend>
       <div class="space-y-3">
         <label class="flex cursor-pointer items-center gap-2">
           <input type="checkbox" v-model="alertQuietEnabled" class="checkbox checkbox-primary" />
-          <span class="text-sm">Override global quiet hours for this alert</span>
+          <span class="text-sm">{{ $t("notifications.alert-form.alert-quiet-enabled") }}</span>
         </label>
+        <p class="text-base-content/50 mt-1 text-xs">{{ $t("notifications.alert-form.alert-quiet-hint") }}</p>
         <template v-if="alertQuietEnabled">
           <div class="flex items-center gap-3">
             <div>
-              <label class="label text-sm">Quiet from</label>
+              <label class="label text-sm">{{ $t("notifications.alert-form.alert-quiet-start") }}</label>
               <input
                 type="time"
                 v-model="alertQuietStart"
@@ -368,7 +374,7 @@
             </div>
             <span class="text-base-content/40 mt-5">→</span>
             <div>
-              <label class="label text-sm">Until</label>
+              <label class="label text-sm">{{ $t("notifications.alert-form.alert-quiet-end") }}</label>
               <input
                 type="time"
                 v-model="alertQuietEnd"
@@ -377,15 +383,15 @@
             </div>
           </div>
           <div>
-            <label class="label text-sm">Timezone</label>
+            <label class="label text-sm">{{ $t("notifications.alert-form.alert-quiet-timezone") }}</label>
             <input
               type="text"
               v-model="alertQuietTimezone"
               class="input input-sm focus:input-primary w-full"
-              placeholder="Europe/Prague (blank = server local)"
+              :placeholder="$t('notifications.alert-form.alert-quiet-timezone-placeholder')"
             />
           </div>
-          <p class="text-base-content/50 text-xs">When set, these quiet hours apply only to this alert instead of the global setting. Stacking rules still use global config.</p>
+          <p class="text-base-content/50 text-xs">{{ $t("notifications.alert-form.alert-quiet-help") }}</p>
         </template>
       </div>
     </fieldset>
@@ -471,6 +477,14 @@ const burstWindow = ref(props.alert?.burstWindow ?? 0);
 const burstPriority = ref(props.alert?.burstPriority ?? 0);
 
 // watchdog / coupled messages
+const pairAlertEnabled = ref(
+  !!(
+    (props.alert?.watchdogWindow && props.alert.watchdogWindow > 0) ||
+    props.alert?.watchdogPattern ||
+    props.alert?.watchdogTriggerMessage ||
+    props.alert?.watchdogClearMessage
+  ),
+);
 const watchdogPattern = ref(props.alert?.watchdogPattern ?? "");
 const watchdogWindowMins = ref(props.alert?.watchdogWindow ? Math.round(props.alert.watchdogWindow / 60) : 0);
 const watchdogCooldownMins = ref(props.alert?.watchdogCooldown ? Math.round(props.alert.watchdogCooldown / 60) : 0);
@@ -501,13 +515,18 @@ const ntfyFields = computed(() => ({
   burstPriority: burstPriority.value || undefined,
 }));
 
-const canSave = computed(() => baseCanSave.value && (fieldsRef.value?.canSave ?? false));
+const hasValidPairAlert = computed(() => {
+  if (alertType.value !== "log" || !pairAlertEnabled.value || watchdogWindowMins.value <= 0) return true;
+  const triggerExpression = fieldsRef.value?.typeFields.logExpression;
+  return Boolean(triggerExpression?.trim() && watchdogPattern.value.trim());
+});
+const canSave = computed(() => baseCanSave.value && (fieldsRef.value?.canSave ?? false) && hasValidPairAlert.value);
 
 async function save() {
   if (!canSave.value || !fieldsRef.value) return;
   const extra = selectedDestination.value?.type === "ntfy" ? ntfyFields.value : {};
   const watchdog =
-    alertType.value === "log" && watchdogWindowMins.value > 0
+    alertType.value === "log" && pairAlertEnabled.value && watchdogWindowMins.value > 0
       ? {
           watchdogPattern: watchdogPattern.value.trim() || undefined,
           watchdogWindow: watchdogWindowMins.value * 60,

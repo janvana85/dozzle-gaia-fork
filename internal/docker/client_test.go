@@ -24,6 +24,16 @@ type mockedProxy struct {
 	DockerCLI
 }
 
+func (m *mockedProxy) Info(ctx context.Context, options client.InfoOptions) (client.SystemInfoResult, error) {
+	args := m.Called(ctx, options)
+	return client.SystemInfoResult{Info: args.Get(0).(system.Info)}, args.Error(1)
+}
+
+func (m *mockedProxy) ServerVersion(ctx context.Context, options client.ServerVersionOptions) (client.ServerVersionResult, error) {
+	args := m.Called(ctx, options)
+	return args.Get(0).(client.ServerVersionResult), args.Error(1)
+}
+
 func (m *mockedProxy) ContainerList(context.Context, client.ContainerListOptions) (client.ContainerListResult, error) {
 	args := m.Called()
 	containers, ok := args.Get(0).([]docker.Summary)
@@ -31,6 +41,16 @@ func (m *mockedProxy) ContainerList(context.Context, client.ContainerListOptions
 		panic("containers is not of type []docker.Summary")
 	}
 	return client.ContainerListResult{Items: containers}, args.Error(1)
+}
+
+func Test_NewClientPreservesHostGroup(t *testing.T) {
+	proxy := new(mockedProxy)
+	proxy.On("Info", mock.Anything, mock.Anything).Return(system.Info{ID: "docker-id"}, nil)
+	proxy.On("ServerVersion", mock.Anything, mock.Anything).Return(client.ServerVersionResult{}, nil)
+
+	client := NewClient(proxy, container.Host{Name: "local", Group: "Production"})
+
+	assert.Equal(t, "Production", client.Host().Group)
 }
 
 func (m *mockedProxy) ContainerLogs(ctx context.Context, id string, options client.ContainerLogsOptions) (client.ContainerLogsResult, error) {

@@ -185,6 +185,33 @@ services:
 
 This will change the agent's name to `my-special-name` and will be reflected on the UI when connecting to the agent.
 
+### Changing Agent's Host Group
+
+Agents can advertise their host group with `DOZZLE_HOST_GROUP` or `--host-group`. This is useful when agents belong to environments such as `Development`, `Stage`, or `Production`.
+
+::: code-group
+
+```sh
+docker run -v /var/run/docker.sock:/var/run/docker.sock -p 7007:7007 amir20/dozzle:latest agent --host-group Production
+```
+
+```yaml [docker-compose.yml]
+services:
+  dozzle-agent:
+    image: amir20/dozzle:latest
+    command: agent
+    environment:
+      - DOZZLE_HOST_GROUP=Production
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - 7007:7007
+```
+
+:::
+
+If the main Dozzle server also sets a group in `DOZZLE_REMOTE_AGENT` using `endpoint|name|group`, that server-side group overrides the group advertised by the agent.
+
 ### Setting Up Filters
 
 You can set up filters for the agent to limit the containers it can access. These filters are passed directly to Docker, restricting what Dozzle can view.

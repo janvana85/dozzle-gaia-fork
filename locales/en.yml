@@ -276,7 +276,7 @@ notifications:
     container-filter: Container Filter
     containers-match: "{count} containers match: {names}"
     no-containers-match: No containers match this filter
-    log-filter: Log Filter
+    log-filter: Trigger Filter
     logs-match: "{count} logs match"
     no-logs-match: No logs match this filter
     destination: Destination
@@ -316,13 +316,23 @@ notifications:
     hold-during-quiet: Hold until quiet hours end
     hold-clear-window: Hold/Clear Window (seconds)
     hold-clear-hint: Delay firing; if container recovers within window the alert is dropped
-    watchdog-title: Watchdog
-    watchdog-window: Window
+    watchdog-title: Pair Alert
+    pair-alert-enabled: Enable paired trigger/clear alert
+    pair-alert-hint: The log filter above is the trigger. Enable this to add a clear filter and a max delay between the two messages.
+    watchdog-window: Max delay between trigger and clear
     watchdog-window-unit: minutes (0 = disabled)
-    watchdog-window-hint: Fire an alert if the trigger pattern isn't seen again within this time
-    watchdog-pattern: Resolve Pattern (optional)
+    watchdog-window-hint: When the trigger filter matches, wait this long for the clear filter. If clear arrives in time, the trigger notification is dropped.
+    watchdog-pattern: Clear Filter
     watchdog-pattern-placeholder: e.g. message contains "backup completed"
-    watchdog-pattern-hint: If this matches, the watchdog timer is reset. Leave blank for heartbeat mode.
+    watchdog-pattern-hint: This expression must match the paired clear log message before the max delay expires.
+    alert-quiet-title: Per-alert quiet hours override
+    alert-quiet-enabled: Override global quiet hours for this alert
+    alert-quiet-hint: Leave this off to use the global quiet hours setting for the destination.
+    alert-quiet-start: Quiet from
+    alert-quiet-end: Until
+    alert-quiet-timezone: Timezone
+    alert-quiet-timezone-placeholder: Europe/Prague (blank = server local)
+    alert-quiet-help: When enabled, these quiet hours apply only to this alert. Stacking rules still use the global config.
   settings:
     title: Settings
     quiet-hours-enabled: Enable Quiet Hours

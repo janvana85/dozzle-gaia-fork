@@ -938,6 +938,7 @@ type Host struct {
 	AgentVersion    string                 `protobuf:"bytes,11,opt,name=agentVersion,proto3" json:"agentVersion,omitempty"`
 	DockerVersion   string                 `protobuf:"bytes,12,opt,name=dockerVersion,proto3" json:"dockerVersion,omitempty"`
 	Runtime         string                 `protobuf:"bytes,13,opt,name=runtime,proto3" json:"runtime,omitempty"`
+	Group           string                 `protobuf:"bytes,14,opt,name=group,proto3" json:"group,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1059,6 +1060,13 @@ func (x *Host) GetDockerVersion() string {
 func (x *Host) GetRuntime() string {
 	if x != nil {
 		return x.Runtime
+	}
+	return ""
+}
+
+func (x *Host) GetGroup() string {
+	if x != nil {
+		return x.Group
 	}
 	return ""
 }
@@ -1479,7 +1487,7 @@ const file_types_proto_rawDesc = "" +
 	"\tcontainer\x18\x06 \x01(\v2\x13.protobuf.ContainerR\tcontainer\x1aB\n" +
 	"\x14ActorAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc9\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xdf\x03\n" +
 	"\x04Host\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1494,7 +1502,8 @@ const file_types_proto_rawDesc = "" +
 	" \x01(\x04R\x06memory\x12\"\n" +
 	"\fagentVersion\x18\v \x01(\tR\fagentVersion\x12$\n" +
 	"\rdockerVersion\x18\f \x01(\tR\rdockerVersion\x12\x18\n" +
-	"\aruntime\x18\r \x01(\tR\aruntime\x1a9\n" +
+	"\aruntime\x18\r \x01(\tR\aruntime\x12\x14\n" +
+	"\x05group\x18\x0e \x01(\tR\x05group\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xea\x02\n" +

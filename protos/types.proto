@@ -116,6 +116,7 @@ message Host {
   string agentVersion = 11;
   string dockerVersion = 12;
   string runtime = 13;
+  string group = 14;
 }
 
 enum ContainerAction {

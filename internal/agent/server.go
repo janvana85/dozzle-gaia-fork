@@ -272,6 +272,7 @@ func (s *server) HostInfo(ctx context.Context, in *pb.HostInfoRequest) (*pb.Host
 			DockerVersion: host.DockerVersion,
 			Runtime:       host.Runtime,
 			AgentVersion:  s.version,
+			Group:         host.Group,
 		},
 	}, nil
 }

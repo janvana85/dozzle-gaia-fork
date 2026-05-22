@@ -25,7 +25,7 @@ func (dc *DeployCmd) Run(args Args, _ embed.FS) error {
 
 	log.Info().Str("project", dc.Project).Str("file", dc.File).Msg("Deploying compose file")
 
-	localClient, err := docker.NewLocalClient("")
+	localClient, err := docker.NewLocalClient("", "")
 	if err != nil {
 		return fmt.Errorf("creating docker client: %w", err)
 	}

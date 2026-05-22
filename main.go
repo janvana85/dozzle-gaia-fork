@@ -79,7 +79,7 @@ func main() {
 		hostService = multiHostService
 		notificationService = multiHostService
 	} else if args.Mode == "swarm" {
-		localClient, err := docker.NewLocalClient("")
+		localClient, err := docker.NewLocalClient(args.Hostname, args.HostGroup)
 		if err != nil {
 			log.Fatal().Err(err).Msg("Could not create docker client")
 		}

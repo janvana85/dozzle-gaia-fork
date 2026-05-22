@@ -390,10 +390,13 @@ func (c *Client) Host(ctx context.Context) (container.Host, error) {
 		DockerVersion: info.Host.DockerVersion,
 		Runtime:       info.Host.Runtime,
 		AgentVersion:  info.Host.AgentVersion,
-		Group:         c.group,
+		Group:         info.Host.Group,
 	}
 	if c.nameOverride != "" {
 		host.Name = c.nameOverride
+	}
+	if c.group != "" {
+		host.Group = c.group
 	}
 
 	return host, nil

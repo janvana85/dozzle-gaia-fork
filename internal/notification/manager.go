@@ -247,6 +247,13 @@ func (m *Manager) flushQueue() {
 		dispID := item.DispatcherID
 		notification := item.Notification
 		attempts := item.Attempts
+		if !m.isSubscriptionActive(notification.Subscription.ID) {
+			log.Debug().Int64("queue_id", id).Int("subscription", notification.Subscription.ID).Msg("Dropping queued notification for inactive subscription")
+			if qErr := m.queue.MarkSent(id); qErr != nil {
+				log.Warn().Err(qErr).Msg("Failed to mark inactive queued notification sent")
+			}
+			continue
+		}
 		go func() {
 			sendCtx, sendCancel := context.WithTimeout(m.ctx, 30*time.Second)
 			defer sendCancel()
@@ -279,6 +286,8 @@ func (m *Manager) AddSubscription(sub *Subscription) error {
 	sub.EventCooldowns = xsync.NewMap[string, time.Time]()
 	sub.LogCooldowns = xsync.NewMap[string, time.Time]()
 	sub.BurstTrackers = xsync.NewMap[string, []time.Time]()
+	sub.WatchdogTimers = xsync.NewMap[string, *time.Timer]()
+	sub.WatchdogCooldowns = xsync.NewMap[string, time.Time]()
 
 	if err := sub.CompileExpressions(); err != nil {
 		return err
@@ -295,6 +304,7 @@ func (m *Manager) AddSubscription(sub *Subscription) error {
 // RemoveSubscription removes a subscription by ID
 func (m *Manager) RemoveSubscription(id int) {
 	if sub, ok := m.subscriptions.LoadAndDelete(id); ok {
+		sub.StopRuntime()
 		log.Debug().Int("id", id).Str("name", sub.Name).Msg("Removed subscription")
 
 		m.updateListeners()
@@ -316,6 +326,7 @@ func (m *Manager) ReplaceSubscription(sub *Subscription) error {
 	// Preserve enabled state from existing subscription if it exists
 	if existing, ok := m.subscriptions.Load(sub.ID); ok {
 		sub.Enabled = existing.Enabled
+		existing.StopRuntime()
 	} else {
 		sub.Enabled = true
 	}
@@ -362,6 +373,7 @@ func (m *Manager) UpdateSubscription(id int, updates map[string]any) error {
 		// Preserve runtime stats (atomics can't be copied in struct literal)
 		updated.TriggerCount.Store(sub.TriggerCount.Load())
 		updated.LastTriggeredAt.Store(sub.LastTriggeredAt.Load())
+		sub.StopRuntime()
 
 		// Apply updates to the clone
 		for key, value := range updates {
@@ -539,6 +551,14 @@ func (m *Manager) getDispatcher(id int) (dispatcher.Dispatcher, bool) {
 		return nil, false
 	}
 	return m.dispatchers.Load(id)
+}
+
+func (m *Manager) isSubscriptionActive(id int) bool {
+	if id == 0 {
+		return true
+	}
+	sub, ok := m.subscriptions.Load(id)
+	return ok && sub.Enabled
 }
 
 // Subscriptions returns all subscriptions sorted by ID

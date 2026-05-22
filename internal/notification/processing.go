@@ -572,6 +572,11 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 
 // sendWithRetry sends a notification with up to 3 attempts and quadratic backoff (30s, 120s).
 func (m *Manager) sendWithRetry(d dispatcher.Dispatcher, notification types.Notification, dispatcherID int) {
+	if !m.isSubscriptionActive(notification.Subscription.ID) {
+		log.Debug().Int("subscription", notification.Subscription.ID).Msg("Notification dropped: subscription inactive")
+		return
+	}
+
 	acquireCtx, acquireCancel := context.WithTimeout(m.ctx, time.Minute)
 	defer acquireCancel()
 	if err := m.sendSem.Acquire(acquireCtx, 1); err != nil {
@@ -581,6 +586,10 @@ func (m *Manager) sendWithRetry(d dispatcher.Dispatcher, notification types.Noti
 	defer m.sendSem.Release(1)
 
 	for attempt := 1; attempt <= 3; attempt++ {
+		if !m.isSubscriptionActive(notification.Subscription.ID) {
+			log.Debug().Int("subscription", notification.Subscription.ID).Msg("Notification retry stopped: subscription inactive")
+			return
+		}
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		err := d.Send(ctx, notification)
 		cancel()
