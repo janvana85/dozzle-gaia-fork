@@ -241,30 +241,10 @@
             <input type="checkbox" v-model="bypassQuietHours" class="checkbox checkbox-primary" />
             <span class="text-sm">{{ $t("notifications.alert-form.bypass-quiet-hours") }}</span>
           </label>
-          <label class="flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              v-model="holdDuringQuiet"
-              :disabled="bypassQuietHours"
-              class="checkbox checkbox-primary"
-            />
-            <span class="text-sm" :class="bypassQuietHours ? 'opacity-40' : ''">{{
-              $t("notifications.alert-form.hold-during-quiet")
-            }}</span>
-          </label>
-          <div v-if="!bypassQuietHours && !holdDuringQuiet">
-            <label class="label text-sm">{{ $t("notifications.alert-form.quiet-priority") }}</label>
-            <select v-model.number="quietPriority" class="select focus:select-primary w-full text-base">
-              <option :value="0">{{ $t("notifications.alert-form.ntfy-priority-default") }}</option>
-              <option :value="1">{{ $t("notifications.destination-form.ntfy-priority-1") }}</option>
-              <option :value="2">{{ $t("notifications.destination-form.ntfy-priority-2") }}</option>
-              <option :value="3">{{ $t("notifications.destination-form.ntfy-priority-3") }}</option>
-            </select>
-          </div>
         </div>
       </fieldset>
 
-      <!-- Hold/Clear Window -->
+      <!-- Hold Window -->
       <fieldset class="fieldset">
         <legend class="fieldset-legend text-lg">
           {{ $t("notifications.alert-form.hold-clear-window") }}
@@ -291,7 +271,7 @@
           <span class="text-sm">{{ $t("notifications.alert-form.pair-alert-enabled") }}</span>
         </label>
         <p class="text-base-content/50 mt-1 text-xs">{{ $t("notifications.alert-form.pair-alert-hint") }}</p>
-        <div v-if="pairAlertEnabled" class="mt-3 space-y-3">
+        <div v-show="pairAlertEnabled" class="mt-3 space-y-3">
           <div>
             <label class="label text-sm">{{ $t("notifications.alert-form.watchdog-window") }}</label>
             <div class="flex items-center gap-2">
@@ -308,18 +288,15 @@
             </div>
             <p class="text-base-content/50 mt-1 text-xs">{{ $t("notifications.alert-form.watchdog-window-hint") }}</p>
           </div>
-          <div v-if="watchdogWindowMins > 0">
+          <div v-show="watchdogWindowMins > 0">
             <label class="label text-sm">{{ $t("notifications.alert-form.watchdog-pattern") }}</label>
-            <input
-              v-model="watchdogPattern"
-              type="text"
-              class="input focus:input-primary w-full text-base"
-              :placeholder="$t('notifications.alert-form.watchdog-pattern-placeholder')"
-            />
+            <div class="input focus-within:input-primary h-auto w-full focus-within:z-50">
+              <div ref="watchdogEditorRef" class="w-full"></div>
+            </div>
             <p class="text-base-content/50 mt-1 text-xs">{{ $t("notifications.alert-form.watchdog-pattern-hint") }}</p>
           </div>
-          <div v-if="watchdogWindowMins > 0">
-            <label class="label text-sm">Cooldown between alerts (min)</label>
+          <div v-show="watchdogWindowMins > 0">
+            <label class="label text-sm">{{ $t("notifications.alert-form.watchdog-cooldown") }}</label>
             <input
               v-model.number="watchdogCooldownMins"
               type="number"
@@ -327,27 +304,31 @@
               class="input focus:input-primary w-32"
               placeholder="0"
             />
-            <p class="text-base-content/50 mt-1 text-xs">Minimum minutes between repeated pair alerts. 0 = no cooldown.</p>
+            <p class="text-base-content/50 mt-1 text-xs">{{ $t("notifications.alert-form.watchdog-cooldown-hint") }}</p>
           </div>
-          <div v-if="watchdogWindowMins > 0">
-            <label class="label text-sm">Trigger message (optional)</label>
+          <div v-show="watchdogWindowMins > 0">
+            <label class="label text-sm">{{ $t("notifications.alert-form.watchdog-trigger-message") }}</label>
             <input
               v-model="watchdogTriggerMessage"
               type="text"
               class="input focus:input-primary w-full text-base"
               placeholder="Service is down"
             />
-            <p class="text-base-content/50 mt-1 text-xs">Custom notification text when the trigger side times out. Leave blank for default.</p>
+            <p class="text-base-content/50 mt-1 text-xs">
+              {{ $t("notifications.alert-form.watchdog-trigger-message-hint") }}
+            </p>
           </div>
-          <div v-if="watchdogWindowMins > 0 && watchdogPattern">
-            <label class="label text-sm">Clear message (optional)</label>
+          <div v-show="watchdogWindowMins > 0 && watchdogPattern">
+            <label class="label text-sm">{{ $t("notifications.alert-form.watchdog-clear-message") }}</label>
             <input
               v-model="watchdogClearMessage"
               type="text"
               class="input focus:input-primary w-full text-base"
               placeholder="Service recovered"
             />
-            <p class="text-base-content/50 mt-1 text-xs">Sent when the clear filter matches before the max delay expires. Leave blank for no clear notification.</p>
+            <p class="text-base-content/50 mt-1 text-xs">
+              {{ $t("notifications.alert-form.watchdog-clear-message-hint") }}
+            </p>
           </div>
         </div>
       </fieldset>
@@ -366,20 +347,12 @@
           <div class="flex items-center gap-3">
             <div>
               <label class="label text-sm">{{ $t("notifications.alert-form.alert-quiet-start") }}</label>
-              <input
-                type="time"
-                v-model="alertQuietStart"
-                class="input input-sm focus:input-primary"
-              />
+              <input type="time" v-model="alertQuietStart" class="input input-sm focus:input-primary" />
             </div>
             <span class="text-base-content/40 mt-5">→</span>
             <div>
               <label class="label text-sm">{{ $t("notifications.alert-form.alert-quiet-end") }}</label>
-              <input
-                type="time"
-                v-model="alertQuietEnd"
-                class="input input-sm focus:input-primary"
-              />
+              <input type="time" v-model="alertQuietEnd" class="input input-sm focus:input-primary" />
             </div>
           </div>
           <div>
@@ -414,6 +387,7 @@
 
 <script lang="ts" setup>
 import { useAlertForm } from "@/composable/alertForm";
+import { createLogHints } from "@/composable/exprEditor";
 import LogAlertFields from "./LogAlertFields.vue";
 import MetricAlertFields from "./MetricAlertFields.vue";
 import EventAlertFields from "./EventAlertFields.vue";
@@ -453,6 +427,7 @@ const {
 // Template refs
 const alertNameInput = ref<HTMLInputElement>();
 const containerEditorRef = ref<HTMLElement>();
+const watchdogEditorRef = ref<HTMLElement>();
 const destinationDropdown = ref<HTMLDetailsElement>();
 const fieldsRef = ref<
   InstanceType<typeof LogAlertFields> | InstanceType<typeof MetricAlertFields> | InstanceType<typeof EventAlertFields>
@@ -548,4 +523,10 @@ async function save() {
 
 // Container editor
 setupContainerEditor(containerEditorRef);
+useExprEditorField(watchdogEditorRef, {
+  placeholder: 'message contains "backup completed"',
+  initialValue: props.alert?.watchdogPattern ?? "",
+  getHints: () => createLogHints(),
+  onChange: (v) => (watchdogPattern.value = v),
+});
 </script>

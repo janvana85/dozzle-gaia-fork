@@ -1,0 +1,319 @@
+toolbar:
+  clear: Vyčistit
+  download: Stáhnout
+  download-filtered: Stáhnout filtrované logy
+  search: Hledat
+  inverse-on: Vyloučit shody
+  inverse-off: Zahrnout shody
+  show: Zobrazit {std}
+  show-all: Zobrazit vše
+  stop: Zastavit
+  start: Spustit
+  restart: Restartovat
+  update: Aktualizovat
+  show-hostname: Zobrazit hostitele
+  show-container-name: Zobrazit název kontejneru
+  shell: Shell
+  attach: Připojit
+  copy-permalink: Kopírovat trvalý odkaz
+  copy-logs: Kopírovat logy
+  copy-filtered-logs: Kopírovat filtrované logy
+  copying-logs: Kopíruji logy...
+action:
+  copy-log: Kopírovat log
+  copy-link: Kopírovat trvalý odkaz
+  see-in-context: Zobrazit v kontextu
+  show-details: Zobrazit detaily
+  create-alert: Vytvořit alert
+label:
+  containers: Kontejnery
+  container: Žádné kontejnery | 1 kontejner | {count} kontejnerů
+  host-count: Žádní hostitelé | 1 hostitel | {count} hostitelů
+  service: Žádné služby | 1 služba | {count} služeb
+  services: Služby
+  running-containers: Běžící kontejnery
+  all-containers: Všechny kontejnery
+  all-namespaces: Vše
+  namespaces: Namespaces
+  host: Hostitel
+  hosts: Hostitelé
+  password: Heslo
+  username: Uživatelské jméno
+  container-name: Název kontejneru
+  status: Stav
+  created: Vytvořeno
+  avg-cpu: Prům. CPU (%)
+  avg-mem: Prům. paměť (%)
+  pinned: Připnuto
+  per-page: Řádků na stránku
+  no-logs: Kontejner zatím nemá žádné logy
+  show-all-containers: Zobrazit všechny kontejnery
+  collapse-all: Sbalit vše
+  expand-all: Rozbalit vše
+error:
+  page-not-found: Tato stránka neexistuje
+  invalid-auth: Uživatelské jméno nebo heslo není platné
+  copy-not-supported: Kopírování do schránky není v prohlížeči podporované
+  logs-skipped: Zobrazit {total} skrytých záznamů
+  container-not-found: Kontejner nebyl nalezen
+  action-failed: Akce selhala
+  update-failed: Aktualizace selhala
+  unable-to-complete-action: Akci se nepodařilo dokončit
+  invalid-action: Neplatná akce
+  unable-to-update: Kontejner se nepodařilo aktualizovat
+  something-went-wrong: Něco se pokazilo
+  unknown-error: Neznámá chyba
+title:
+  page-not-found: Stránka nenalezena
+  login: Vyžadováno přihlášení
+  dashboard: 1 kontejner | {count} kontejnerů
+  settings: Nastavení
+  notifications: Notifikace
+button:
+  logout: Odhlásit
+  login: Přihlásit
+  settings: Nastavení
+  cancel: Zrušit
+  redirect: Přesměrovat
+  retry: Zkusit znovu
+placeholder:
+  search-containers: Hledat kontejnery (⌘ + k, ⌃k)
+  search: Hledat
+settings:
+  help-support: >
+    Podpořte prosím Dozzle darem nebo sponzorstvím na GitHubu. Pomáhá to udržovat a zlepšovat projekt.
+  about-desc: Informace o instalaci Dozzle a možnostech podpory projektu.
+  display-desc: Přizpůsobení vzhledu logů a aplikace. Náhled se mění živě.
+  options-desc: Jazyk, navigace a seskupování.
+  cloud-desc: Posílat logy do Dozzle Cloud pro AI vyšetřování a hledání napříč instancemi.
+  support-title: Podpořit Dozzle
+  support-help: Dary pomáhají udržovat Dozzle zdarma a aktivně spravované.
+  display: Zobrazení
+  locale: Přepsat jazyk
+  small-scrollbars: Používat menší scrollbary
+  show-timestamps: Zobrazit časové značky
+  soft-wrap: Zalomení dlouhých řádků
+  datetime-format: Přepsat formát data a času
+  font-size: Velikost písma pro logy
+  color-scheme: Barevné schéma
+  options: Možnosti
+  show-stopped-containers: Zobrazit zastavené kontejnery
+  group-containers: Seskupovat kontejnery podle namespace
+  about: O aplikaci
+  search: Povolit hledání v Dozzle pomocí
+  using-version: Používáte <a href="https://dozzle.dev/" target="_blank" rel="noreferrer noopener">Dozzle</a> {version}.
+  update-available: >-
+    Je dostupná nová verze! Aktualizujte na <a href="{href}" target="_blank"
+    rel="noreferrer noopener">{nextVersion}</a>.
+  show-std: Zobrazit štítky stdout a stderr
+  automatic-redirect: Automaticky přesměrovat na nové kontejnery se stejným názvem
+  compact: Zapnout kompaktní režim logů
+  size:
+    small: Malé
+    medium: Střední
+    large: Velké
+  theme:
+    auto: Automaticky
+    dark: Tmavý
+    light: Světlý
+  redirect:
+    instant: Okamžitě
+    delayed: Se zpožděním
+    none: Nikdy
+  grouping:
+    always: Vždy
+    at-least-2: Alespoň 2
+    never: Nikdy
+  hour:
+    auto: Automaticky
+    12: "12"
+    24: "24"
+notifications:
+  title: Notifikace
+  description: Nastavte, kam a kdy se mají posílat alerty
+  destinations: Cíle
+  add-destination: Přidat cíl
+  alerts: Alerty
+  add: Přidat
+  add-alert: Přidat alert
+  prefill-name: Error alerty
+  prefill-expression: level == "error"
+  default-alert-created: "Vytvořili jsme výchozí alert. Dostanete zprávu, když kontejner skončí chybou. Kdykoliv ho můžete upravit nebo pozastavit."
+  default-alert-failed: "Alert se nepodařilo vytvořit automaticky, otevírám formulář."
+  filter:
+    all: Vše ({count})
+    enabled: Zapnuté ({count})
+    paused: Pozastavené ({count})
+  no-alerts: Zatím nejsou nastavené žádné alerty. Začněte vytvořením prvního.
+  alert:
+    paused: Pozastaveno
+    containers: Kontejnery
+    log-filter: Log filtr
+    metric-filter: Metrika
+    event-filter: Událost
+    cooldown: Cooldown
+    sample-window: Vzorkovací okno
+    destination: Cíl
+    dispatcher-deleted: Cíl byl smazán
+    containers-count: "{count} kontejnerů"
+    triggered-count: "{count} spuštění"
+    last-triggered: "Naposledy: {time}"
+  destination:
+    http-webhook: HTTP webhook
+    ntfy: ntfy push notifikace
+    dozzle-cloud: Dozzle Cloud
+    edit: Upravit
+    duplicate: Duplikovat
+    delete: Smazat
+  alert-form:
+    create-title: Vytvořit alert
+    edit-title: Upravit alert
+    description: Odebírat události v logu podle zadaných pravidel
+    alert-name: Název alertu
+    alert-name-placeholder: např. Chyby test API
+    container-filter: Filtr kontejnerů
+    containers-match: "{count} kontejnerů odpovídá: {names}"
+    no-containers-match: Tomuto filtru neodpovídá žádný kontejner
+    log-filter: Trigger filtr
+    logs-match: "{count} logů odpovídá"
+    no-logs-match: Tomuto filtru neodpovídají žádné logy
+    destination: Cíl
+    select-destination: Vyberte cíl
+    no-destinations: Není nastavený žádný cíl. Nejdřív jeden přidejte.
+    preview: Náhled
+    cancel: Zrušit
+    save: Uložit
+    create: Vytvořit alert
+    metric-filter: Výraz pro metriku
+    expression-valid: Výraz je platný
+    metric-fields-hint: "Dostupná pole: {fields}"
+    sample-window-label: Vzorkovací okno
+    sample-window-hint: "Alert se spustí, když podmínka platí po dobu {duration}"
+    cooldown-label: Cooldown
+    cooldown-hint: "{duration} mezi alerty pro jeden kontejner"
+    no-cooldown: Bez cooldownu
+    alert-type: Typ alertu
+    log-alert: Log alert
+    metric-alert: Metrický alert
+    event-alert: Event alert
+    event-filter: Výraz pro událost
+    event-fields-hint: "Dostupná pole: {fields}"
+    ntfy-options: ntfy směrování
+    ntfy-topic-override: Přepsat topic
+    ntfy-priority-override: Přepsat prioritu
+    ntfy-priority-default: Použít výchozí prioritu cíle
+    ntfy-tags: Tagy
+    ntfy-tags-hint: oddělené čárkou, např. warning,container
+    burst-detection: Burst eskalace
+    burst-count: Počet triggerů
+    burst-window: Okno (sekundy)
+    burst-priority: Eskalovaná priorita
+    quiet-hours: Quiet Hours
+    bypass-quiet-hours: Vždy poslat, ignorovat Quiet Hours
+    quiet-priority: Priorita během Quiet Hours
+    hold-during-quiet: Podržet do konce Quiet Hours
+    hold-clear-window: Hold Window (sekundy)
+    hold-clear-hint: Zpozdí doručení o zadaný počet sekund. Pro trigger/clear logiku použijte Pair Alert.
+    watchdog-title: Pair Alert
+    pair-alert-enabled: Zapnout párový trigger/clear alert
+    pair-alert-hint: Log filtr výše je trigger. Tady přidáte clear filtr a maximální čas mezi oběma zprávami.
+    watchdog-window: Maximální zpoždění mezi trigger a clear
+    watchdog-window-unit: minut (0 = vypnuto)
+    watchdog-window-hint: Když trigger filtr odpovídá, čeká se na clear filtr. Pokud clear dorazí včas, trigger notifikace se zahodí.
+    watchdog-pattern: Clear filtr
+    watchdog-pattern-placeholder: např. message contains "backup completed"
+    watchdog-pattern-hint: Tento výraz musí odpovídat clear logu před vypršením limitu.
+    watchdog-cooldown: Cooldown mezi alerty (min)
+    watchdog-cooldown-hint: Minimální počet minut mezi opakovanými Pair Alerty. 0 = bez cooldownu.
+    watchdog-trigger-message: Trigger zpráva (volitelné)
+    watchdog-trigger-message-hint: Vlastní text notifikace, když trigger vyprší bez clear logu. Prázdné = výchozí text.
+    watchdog-clear-message: Clear zpráva (volitelné)
+    watchdog-clear-message-hint: Pošle se, když clear filtr odpovídá před vypršením limitu. Prázdné = bez clear notifikace.
+    alert-quiet-title: Quiet Hours jen pro tento alert
+    alert-quiet-enabled: Přepsat globální Quiet Hours pro tento alert
+    alert-quiet-hint: Když je vypnuto, použije se globální nastavení Quiet Hours.
+    alert-quiet-start: Ticho od
+    alert-quiet-end: Do
+    alert-quiet-timezone: Časová zóna
+    alert-quiet-timezone-placeholder: Europe/Prague (prázdné = lokální čas serveru)
+    alert-quiet-help: Když je zapnuto, tyto Quiet Hours platí jen pro tento alert. Pravidla pro burst průraz pořád používají globální konfiguraci.
+  settings:
+    title: Nastavení
+    quiet-hours-enabled: Zapnout Quiet Hours
+    quiet-start: Začátek
+    quiet-end: Konec
+    quiet-hours-hint: Během Quiet Hours se alerty defaultně podrží a označí tagem. Opakované alerty můžou při dosažení limitu projít hned s nastavenou prioritou.
+    stacking: Burst průraz
+    stack-threshold: Burst limit
+    stack-window: Burst okno (min)
+    stacked-priority: Priorita průrazu
+    topic-routing: Směrování topicu
+    quiet-topic: Quiet topic (volitelné)
+    stacked-uses-quiet-topic: Posílat průrazové alerty do quiet topicu
+    timezone-section: Časová zóna
+    timezone: Časová zóna
+  destination-form:
+    create-title: Přidat cíl
+    edit-title: Upravit cíl
+    description: Kam se mají notifikace posílat?
+    name: Název
+    name-placeholder: např. Produkční Slack
+    type: Typ
+    webhook-title: HTTP webhook
+    webhook-description: Slack, Discord, vlastní endpoint
+    ntfy-title: ntfy
+    ntfy-description: Push notifikace přes ntfy.sh nebo vlastní server
+    ntfy-server-url: URL serveru
+    ntfy-server-url-placeholder: https://ntfy.sh
+    ntfy-topic: Výchozí topic
+    ntfy-topic-placeholder: dozzle-alerts
+    ntfy-priority: Výchozí priorita
+    ntfy-token: Auth token (volitelný)
+    ntfy-token-set: "••••••••"
+    ntfy-token-keep: Token už je nastavený. Nechte prázdné pro zachování, nebo zadejte nový.
+    ntfy-priority-1: "1 - minimum (tiché)"
+    ntfy-priority-2: "2 - nízká"
+    ntfy-priority-3: "3 - výchozí"
+    ntfy-priority-4: "4 - vysoká"
+    ntfy-priority-5: "5 - maximum (obejde DND)"
+    cloud-title: Dozzle Cloud
+    cloud-description: Push notifikace, e-mailové alerty a AI souhrny
+    webhook-url: Webhook URL
+    webhook-url-placeholder: https://hooks.foo.com/services/...
+    api-key: API klíč
+    payload-format: Formát payloadu
+    format-slack: Slack
+    format-discord: Discord
+    format-ntfy: ntfy
+    format-custom: Vlastní
+    template: Šablona
+    template-hint: Go template syntaxe
+    headers: Vlastní hlavičky
+    headers-hint: Volitelné HTTP hlavičky, např. Authorization
+    header-name: Název hlavičky
+    header-value: Hodnota hlavičky
+    add-header: Přidat hlavičku
+    test: Test
+    test-success: Test proběhl úspěšně
+    cancel: Zrušit
+    close: Zavřít
+    save: Uložit
+    add: Přidat cíl
+    cloud-exists: Dozzle Cloud už je propojený
+    link-cloud: Propojit účet
+    link-cloud-button: Propojit Dozzle Cloud
+    cloud-settings-hint: Spravované kanály nastavíte v
+    cloud-settings-link: Nastavení Dozzle Cloud
+    cloud-checking: Kontroluji stav cloudu...
+    cloud-relink: API klíč je neplatný nebo vypršel. Smažte propojení a propojte účet znovu.
+    cloud-unavailable: Dozzle Cloud je dočasně nedostupný. Zkuste to prosím později.
+    cloud-plan: Plán
+    cloud-usage: Události v tomto období
+  empty-state:
+    title: Začněte s notifikacemi
+    description: Vyberte, jak chcete dostávat alerty, když kontejnery potřebují pozornost.
+    cloud-subtitle: AI souhrny, vzdálené ovládání a další
+    webhook-subtitle: Posílat alerty na libovolný endpoint
+  cloud-link-success:
+    title: Dozzle Cloud propojen
+    message: Instance byla úspěšně propojena. Propojení můžete zrušit v nastavení.

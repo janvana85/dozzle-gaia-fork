@@ -74,12 +74,25 @@ export interface NotificationRuleInput {
   burstPriority?: number;
   watchdogPattern?: string;
   watchdogWindow?: number;
+  watchdogCooldown?: number;
+  watchdogTriggerMessage?: string;
+  watchdogClearMessage?: string;
+  alertQuietEnabled?: boolean;
+  alertQuietStart?: string;
+  alertQuietEnd?: string;
+  alertQuietTimezone?: string;
 }
 
 export interface QuietHoursConfig {
   enabled: boolean;
   start: string;
   end: string;
+  timezone?: string;
+  stackThreshold?: number;
+  stackWindow?: number;
+  stackedPriority?: number;
+  quietTopic?: string;
+  stackedUsesQuietTopic?: boolean;
 }
 
 export interface PreviewResult {

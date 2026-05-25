@@ -131,16 +131,16 @@ type Subscription struct {
 	SampleWindow        int    `json:"sampleWindow,omitempty" yaml:"sampleWindow,omitempty"`
 
 	// ntfy per-rule routing overrides
-	NtfyTopic      string   `json:"ntfyTopic,omitempty" yaml:"ntfyTopic,omitempty"`
-	NtfyPriority   int      `json:"ntfyPriority,omitempty" yaml:"ntfyPriority,omitempty"` // 1-5; 0 = use dispatcher default
-	NtfyTags       []string `json:"ntfyTags,omitempty" yaml:"ntfyTags,omitempty"`
+	NtfyTopic    string   `json:"ntfyTopic,omitempty" yaml:"ntfyTopic,omitempty"`
+	NtfyPriority int      `json:"ntfyPriority,omitempty" yaml:"ntfyPriority,omitempty"` // 1-5; 0 = use dispatcher default
+	NtfyTags     []string `json:"ntfyTags,omitempty" yaml:"ntfyTags,omitempty"`
 
 	// Quiet hours behaviour for this rule
 	BypassQuietHours bool `json:"bypassQuietHours,omitempty" yaml:"bypassQuietHours,omitempty"`
 	QuietPriority    int  `json:"quietPriority,omitempty" yaml:"quietPriority,omitempty"` // priority used during quiet hours; 0 = hold
 	HoldDuringQuiet  bool `json:"holdDuringQuiet,omitempty" yaml:"holdDuringQuiet,omitempty"`
 
-	// Hold/clear window: queue notification, deliver after N seconds
+	// Hold window: queue notification, deliver after N seconds
 	HoldClearWindow int `json:"holdClearWindow,omitempty" yaml:"holdClearWindow,omitempty"`
 
 	// Burst detection: escalate priority after N triggers in BurstWindow seconds
@@ -150,15 +150,15 @@ type Subscription struct {
 
 	// Watchdog / coupled-messages: fires if resolve pattern doesn't arrive within WatchdogWindow seconds
 	WatchdogPattern        string `json:"watchdogPattern,omitempty" yaml:"watchdogPattern,omitempty"`
-	WatchdogWindow         int    `json:"watchdogWindow,omitempty" yaml:"watchdogWindow,omitempty"`         // seconds; 0 = disabled
-	WatchdogCooldown       int    `json:"watchdogCooldown,omitempty" yaml:"watchdogCooldown,omitempty"`    // seconds between watchdog alerts; 0 = no cooldown
+	WatchdogWindow         int    `json:"watchdogWindow,omitempty" yaml:"watchdogWindow,omitempty"`                 // seconds; 0 = disabled
+	WatchdogCooldown       int    `json:"watchdogCooldown,omitempty" yaml:"watchdogCooldown,omitempty"`             // seconds between watchdog alerts; 0 = no cooldown
 	WatchdogTriggerMessage string `json:"watchdogTriggerMessage,omitempty" yaml:"watchdogTriggerMessage,omitempty"` // custom alert message
-	WatchdogClearMessage   string `json:"watchdogClearMessage,omitempty" yaml:"watchdogClearMessage,omitempty"`    // sent when watchdog resolves
+	WatchdogClearMessage   string `json:"watchdogClearMessage,omitempty" yaml:"watchdogClearMessage,omitempty"`     // sent when watchdog resolves
 
 	// Per-alert quiet hours override: if AlertQuietEnabled, these replace global quiet hours for this alert
 	AlertQuietEnabled  bool   `json:"alertQuietEnabled,omitempty" yaml:"alertQuietEnabled,omitempty"`
-	AlertQuietStart    string `json:"alertQuietStart,omitempty" yaml:"alertQuietStart,omitempty"`    // "22:00"
-	AlertQuietEnd      string `json:"alertQuietEnd,omitempty" yaml:"alertQuietEnd,omitempty"`        // "07:00"
+	AlertQuietStart    string `json:"alertQuietStart,omitempty" yaml:"alertQuietStart,omitempty"`       // "22:00"
+	AlertQuietEnd      string `json:"alertQuietEnd,omitempty" yaml:"alertQuietEnd,omitempty"`           // "07:00"
 	AlertQuietTimezone string `json:"alertQuietTimezone,omitempty" yaml:"alertQuietTimezone,omitempty"` // "Europe/Prague"
 
 	// Compiled filter expressions
@@ -535,11 +535,11 @@ func (s *Subscription) SetLogCooldown(containerID string) {
 	}
 }
 
-// DetectBurst records the trigger and returns the escalated priority if the burst threshold
-// has been reached within BurstWindow seconds; otherwise returns basePriority.
-func (s *Subscription) DetectBurst(containerID string, basePriority int) int {
+// DetectBurst records the trigger and returns the notification priority and
+// whether the burst threshold has been reached within BurstWindow seconds.
+func (s *Subscription) DetectBurst(containerID string, basePriority int) (int, bool) {
 	if s.BurstCount <= 0 || s.BurstWindow <= 0 || s.BurstTrackers == nil {
-		return basePriority
+		return basePriority, false
 	}
 
 	now := time.Now()
@@ -561,9 +561,9 @@ func (s *Subscription) DetectBurst(containerID string, basePriority int) int {
 	s.BurstTrackers.Store(containerID, pruned)
 
 	if len(pruned) >= s.BurstCount && s.BurstPriority > 0 {
-		return s.BurstPriority
+		return s.BurstPriority, true
 	}
-	return basePriority
+	return basePriority, false
 }
 
 // IsWatchdogCooldownActive returns true if the watchdog alert is on cooldown for a container.

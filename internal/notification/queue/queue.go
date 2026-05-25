@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS cooldown_state (
 
 // QueuedNotification is a row from the notification_queue table.
 type QueuedNotification struct {
-	ID           int64
+	ID             int64
 	SubscriptionID int
 	DispatcherID   int
 	Notification   types.Notification
@@ -116,6 +116,16 @@ func (q *Queue) Enqueue(notification types.Notification, deliverAt time.Time) er
 		deliverAt.UTC(),
 	)
 	return err
+}
+
+// PendingCountForSubscription returns how many queued notifications are still pending for a subscription.
+func (q *Queue) PendingCountForSubscription(subscriptionID int) (int, error) {
+	var count int
+	err := q.db.QueryRow(
+		`SELECT COUNT(*) FROM notification_queue WHERE status = 'pending' AND subscription_id = ?`,
+		subscriptionID,
+	).Scan(&count)
+	return count, err
 }
 
 // DrainReady returns all pending notifications whose deliver_at time has passed.

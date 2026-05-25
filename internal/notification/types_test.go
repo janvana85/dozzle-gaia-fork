@@ -157,6 +157,43 @@ func TestSubscription_MatchesLog(t *testing.T) {
 	}
 }
 
+func TestSubscription_DetectBurstEscalatesAtThresholdPerContainer(t *testing.T) {
+	sub := &Subscription{
+		BurstCount:    3,
+		BurstWindow:   60,
+		BurstPriority: 5,
+		BurstTrackers: xsync.NewMap[string, []time.Time](),
+	}
+
+	priority, escalated := sub.DetectBurst("container-1", 2)
+	assert.Equal(t, 2, priority)
+	assert.False(t, escalated)
+	priority, escalated = sub.DetectBurst("container-1", 2)
+	assert.Equal(t, 2, priority)
+	assert.False(t, escalated)
+	priority, escalated = sub.DetectBurst("container-1", 2)
+	assert.Equal(t, 5, priority)
+	assert.True(t, escalated)
+	priority, escalated = sub.DetectBurst("container-2", 2)
+	assert.Equal(t, 2, priority)
+	assert.False(t, escalated)
+}
+
+func TestSubscription_DetectBurstIgnoresTriggersOutsideWindow(t *testing.T) {
+	sub := &Subscription{
+		BurstCount:    2,
+		BurstWindow:   60,
+		BurstPriority: 5,
+		BurstTrackers: xsync.NewMap[string, []time.Time](),
+	}
+	sub.BurstTrackers.Store("container-1", []time.Time{time.Now().Add(-2 * time.Minute)})
+
+	priority, escalated := sub.DetectBurst("container-1", 2)
+	assert.Equal(t, 2, priority)
+	assert.False(t, escalated)
+	assert.Equal(t, 1, sub.BurstTrackers.Size())
+}
+
 func TestSubscription_MatchesLog_NilProgram(t *testing.T) {
 	sub := &Subscription{
 		LogProgram: nil,

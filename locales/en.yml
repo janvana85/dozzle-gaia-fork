@@ -314,8 +314,8 @@ notifications:
     bypass-quiet-hours: Always send (bypass quiet hours)
     quiet-priority: Quiet Hours Priority
     hold-during-quiet: Hold until quiet hours end
-    hold-clear-window: Hold/Clear Window (seconds)
-    hold-clear-hint: Delay firing; if container recovers within window the alert is dropped
+    hold-clear-window: Hold Window (seconds)
+    hold-clear-hint: Delay delivery by this many seconds. Use Pair Alert when you need trigger/clear matching.
     watchdog-title: Pair Alert
     pair-alert-enabled: Enable paired trigger/clear alert
     pair-alert-hint: The log filter above is the trigger. Enable this to add a clear filter and a max delay between the two messages.
@@ -325,6 +325,12 @@ notifications:
     watchdog-pattern: Clear Filter
     watchdog-pattern-placeholder: e.g. message contains "backup completed"
     watchdog-pattern-hint: This expression must match the paired clear log message before the max delay expires.
+    watchdog-cooldown: Cooldown between alerts (min)
+    watchdog-cooldown-hint: Minimum minutes between repeated pair alerts. 0 = no cooldown.
+    watchdog-trigger-message: Trigger message (optional)
+    watchdog-trigger-message-hint: Custom notification text when the trigger side times out. Leave blank for default.
+    watchdog-clear-message: Clear message (optional)
+    watchdog-clear-message-hint: Sent when the clear filter matches before the max delay expires. Leave blank for no clear notification.
     alert-quiet-title: Per-alert quiet hours override
     alert-quiet-enabled: Override global quiet hours for this alert
     alert-quiet-hint: Leave this off to use the global quiet hours setting for the destination.
@@ -332,13 +338,22 @@ notifications:
     alert-quiet-end: Until
     alert-quiet-timezone: Timezone
     alert-quiet-timezone-placeholder: Europe/Prague (blank = server local)
-    alert-quiet-help: When enabled, these quiet hours apply only to this alert. Stacking rules still use the global config.
+    alert-quiet-help: When enabled, these quiet hours apply only to this alert. Burst breakthrough rules still use the global config.
   settings:
     title: Settings
     quiet-hours-enabled: Enable Quiet Hours
     quiet-start: Start
     quiet-end: End
-    quiet-hours-hint: During quiet hours, alerts are held or sent at reduced priority depending on each alert's settings
+    quiet-hours-hint: During quiet hours, alerts are held by default and tagged. Repeated alerts can break through immediately at the configured priority.
+    stacking: Burst breakthrough
+    stack-threshold: Burst threshold
+    stack-window: Burst window (min)
+    stacked-priority: Breakthrough priority
+    topic-routing: Topic routing
+    quiet-topic: Quiet topic (optional)
+    stacked-uses-quiet-topic: Send breakthrough alerts to quiet topic
+    timezone-section: Timezone
+    timezone: Timezone
   destination-form:
     create-title: Add Destination
     edit-title: Edit Destination

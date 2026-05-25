@@ -35,6 +35,16 @@ type NotificationRuleResponse struct {
 	TriggeredContainers    int                 `json:"triggeredContainers"`
 	LastTriggeredAt        *time.Time          `json:"lastTriggeredAt"`
 	Dispatcher             *DispatcherResponse `json:"dispatcher"`
+	NtfyTopic              string              `json:"ntfyTopic,omitempty"`
+	NtfyPriority           int                 `json:"ntfyPriority,omitempty"`
+	NtfyTags               []string            `json:"ntfyTags,omitempty"`
+	BypassQuietHours       bool                `json:"bypassQuietHours,omitempty"`
+	QuietPriority          int                 `json:"quietPriority,omitempty"`
+	HoldDuringQuiet        bool                `json:"holdDuringQuiet,omitempty"`
+	HoldClearWindow        int                 `json:"holdClearWindow,omitempty"`
+	BurstCount             int                 `json:"burstCount,omitempty"`
+	BurstWindow            int                 `json:"burstWindow,omitempty"`
+	BurstPriority          int                 `json:"burstPriority,omitempty"`
 	WatchdogPattern        string              `json:"watchdogPattern,omitempty"`
 	WatchdogWindow         int                 `json:"watchdogWindow,omitempty"`
 	WatchdogCooldown       int                 `json:"watchdogCooldown,omitempty"`
@@ -62,34 +72,34 @@ type DispatcherResponse struct {
 }
 
 type NotificationRuleInput struct {
-	Name                string   `json:"name"`
-	Enabled             bool     `json:"enabled"`
-	DispatcherID        int      `json:"dispatcherId"`
-	LogExpression       string   `json:"logExpression"`
-	ContainerExpression string   `json:"containerExpression"`
-	MetricExpression    string   `json:"metricExpression,omitempty"`
-	EventExpression     string   `json:"eventExpression,omitempty"`
-	Cooldown            int      `json:"cooldown,omitempty"`
-	SampleWindow        int      `json:"sampleWindow,omitempty"`
-	NtfyTopic           string   `json:"ntfyTopic,omitempty"`
-	NtfyPriority        int      `json:"ntfyPriority,omitempty"`
-	NtfyTags            []string `json:"ntfyTags,omitempty"`
-	BypassQuietHours    bool     `json:"bypassQuietHours,omitempty"`
-	QuietPriority       int      `json:"quietPriority,omitempty"`
-	HoldDuringQuiet     bool     `json:"holdDuringQuiet,omitempty"`
-	HoldClearWindow     int      `json:"holdClearWindow,omitempty"`
-	BurstCount          int      `json:"burstCount,omitempty"`
-	BurstWindow         int      `json:"burstWindow,omitempty"`
-	BurstPriority       int      `json:"burstPriority,omitempty"`
-	WatchdogPattern        string `json:"watchdogPattern,omitempty"`
-	WatchdogWindow         int    `json:"watchdogWindow,omitempty"`
-	WatchdogCooldown       int    `json:"watchdogCooldown,omitempty"`
-	WatchdogTriggerMessage string `json:"watchdogTriggerMessage,omitempty"`
-	WatchdogClearMessage   string `json:"watchdogClearMessage,omitempty"`
-	AlertQuietEnabled      bool   `json:"alertQuietEnabled,omitempty"`
-	AlertQuietStart        string `json:"alertQuietStart,omitempty"`
-	AlertQuietEnd          string `json:"alertQuietEnd,omitempty"`
-	AlertQuietTimezone     string `json:"alertQuietTimezone,omitempty"`
+	Name                   string   `json:"name"`
+	Enabled                bool     `json:"enabled"`
+	DispatcherID           int      `json:"dispatcherId"`
+	LogExpression          string   `json:"logExpression"`
+	ContainerExpression    string   `json:"containerExpression"`
+	MetricExpression       string   `json:"metricExpression,omitempty"`
+	EventExpression        string   `json:"eventExpression,omitempty"`
+	Cooldown               int      `json:"cooldown,omitempty"`
+	SampleWindow           int      `json:"sampleWindow,omitempty"`
+	NtfyTopic              string   `json:"ntfyTopic,omitempty"`
+	NtfyPriority           int      `json:"ntfyPriority,omitempty"`
+	NtfyTags               []string `json:"ntfyTags,omitempty"`
+	BypassQuietHours       bool     `json:"bypassQuietHours,omitempty"`
+	QuietPriority          int      `json:"quietPriority,omitempty"`
+	HoldDuringQuiet        bool     `json:"holdDuringQuiet,omitempty"`
+	HoldClearWindow        int      `json:"holdClearWindow,omitempty"`
+	BurstCount             int      `json:"burstCount,omitempty"`
+	BurstWindow            int      `json:"burstWindow,omitempty"`
+	BurstPriority          int      `json:"burstPriority,omitempty"`
+	WatchdogPattern        string   `json:"watchdogPattern,omitempty"`
+	WatchdogWindow         int      `json:"watchdogWindow,omitempty"`
+	WatchdogCooldown       int      `json:"watchdogCooldown,omitempty"`
+	WatchdogTriggerMessage string   `json:"watchdogTriggerMessage,omitempty"`
+	WatchdogClearMessage   string   `json:"watchdogClearMessage,omitempty"`
+	AlertQuietEnabled      bool     `json:"alertQuietEnabled,omitempty"`
+	AlertQuietStart        string   `json:"alertQuietStart,omitempty"`
+	AlertQuietEnd          string   `json:"alertQuietEnd,omitempty"`
+	AlertQuietTimezone     string   `json:"alertQuietTimezone,omitempty"`
 }
 
 type NotificationRuleUpdateInput struct {
@@ -209,6 +219,16 @@ func subscriptionToResponse(sub *notification.Subscription, dispatchers []notifi
 		TriggerCount:           triggerCount,
 		LastTriggeredAt:        lastTriggeredAt,
 		TriggeredContainers:    triggeredContainers,
+		NtfyTopic:              sub.NtfyTopic,
+		NtfyPriority:           sub.NtfyPriority,
+		NtfyTags:               sub.NtfyTags,
+		BypassQuietHours:       sub.BypassQuietHours,
+		QuietPriority:          sub.QuietPriority,
+		HoldDuringQuiet:        sub.HoldDuringQuiet,
+		HoldClearWindow:        sub.HoldClearWindow,
+		BurstCount:             sub.BurstCount,
+		BurstWindow:            sub.BurstWindow,
+		BurstPriority:          sub.BurstPriority,
 		WatchdogPattern:        sub.WatchdogPattern,
 		WatchdogWindow:         sub.WatchdogWindow,
 		WatchdogCooldown:       sub.WatchdogCooldown,

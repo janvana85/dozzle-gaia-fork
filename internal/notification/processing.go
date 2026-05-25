@@ -89,14 +89,14 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 							},
 							Timestamp: time.Now(),
 						}
-						go m.sendWithRetry(d, clearNotif, sub.DispatcherID)
+						m.sendOrQueue(d, clearNotif, sub)
 					}
 				}
 			}
 			// Trigger: reset the watchdog timer if the trigger pattern matches
 			if sub.MatchesLog(notificationLog) {
 				if d, ok := m.getDispatcher(sub.DispatcherID); ok {
-					priority := sub.DetectBurst(logEvent.ContainerID, sub.NtfyPriority)
+					priority, burstEscalated := sub.DetectBurst(logEvent.ContainerID, sub.NtfyPriority)
 					detail := sub.WatchdogTriggerMessage
 					if detail == "" {
 						if sub.WatchdogPattern != "" {
@@ -137,7 +137,7 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 						now := time.Now()
 						sub.LastTriggeredAt.Store(&now)
 						sub.AddTriggeredContainer(notificationContainer.ID)
-						m.sendOrQueue(d, notif, sub)
+						m.sendOrQueue(d, notif, sub, burstEscalated)
 					}, sub.WatchdogWindow)
 				}
 			}
@@ -172,7 +172,7 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 		log.Debug().Str("containerID", notificationContainer.ID).Interface("log", notificationLog.Message).Msg("Matched subscription")
 
 		priority := sub.NtfyPriority
-		priority = sub.DetectBurst(logEvent.ContainerID, priority)
+		priority, burstEscalated := sub.DetectBurst(logEvent.ContainerID, priority)
 
 		notification := types.Notification{
 			ID:           fmt.Sprintf("%s-%d", c.ID, time.Now().UnixNano()),
@@ -199,7 +199,7 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 		}
 
 		if d, ok := m.getDispatcher(sub.DispatcherID); ok {
-			m.sendOrQueue(d, notification, sub)
+			m.sendOrQueue(d, notification, sub, burstEscalated)
 		}
 		return true
 	})
@@ -274,7 +274,7 @@ func (m *Manager) processStatEvent(event *ContainerStatEvent) {
 			Str("subscription", sub.Name).
 			Msg("Metric alert triggered")
 
-		priority := sub.DetectBurst(event.Stat.ID, sub.NtfyPriority)
+		priority, burstEscalated := sub.DetectBurst(event.Stat.ID, sub.NtfyPriority)
 
 		notification := types.Notification{
 			ID:           fmt.Sprintf("%s-metric-%d", event.Stat.ID, time.Now().UnixNano()),
@@ -303,7 +303,7 @@ func (m *Manager) processStatEvent(event *ContainerStatEvent) {
 		}
 
 		if d, ok := m.getDispatcher(sub.DispatcherID); ok {
-			m.sendOrQueue(d, notification, sub)
+			m.sendOrQueue(d, notification, sub, burstEscalated)
 		}
 		return true
 	})
@@ -378,7 +378,7 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 			detail = fmt.Sprintf("Container event: %s (exit code %s)", event.Event.Name, exitCode)
 		}
 
-		priority := sub.DetectBurst(event.Event.ActorID, sub.NtfyPriority)
+		priority, burstEscalated := sub.DetectBurst(event.Event.ActorID, sub.NtfyPriority)
 
 		notification := types.Notification{
 			ID:           fmt.Sprintf("%s-event-%d", event.Event.ActorID, time.Now().UnixNano()),
@@ -406,7 +406,7 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 		}
 
 		if d, ok := m.getDispatcher(sub.DispatcherID); ok {
-			m.sendOrQueue(d, notification, sub)
+			m.sendOrQueue(d, notification, sub, burstEscalated)
 		}
 		return true
 	})
@@ -425,6 +425,15 @@ func formatLogMessage(message any) string {
 	}
 }
 
+func appendUniqueTag(tags []string, tag string) []string {
+	for _, existing := range tags {
+		if existing == tag {
+			return tags
+		}
+	}
+	return append(append([]string(nil), tags...), tag)
+}
+
 // effectiveQuietHours returns whether we're currently in quiet hours for this subscription,
 // and the time when quiet hours end. Per-alert config takes precedence over global.
 func (m *Manager) effectiveQuietHours(sub *Subscription) (inQuiet bool, quietEnd time.Time) {
@@ -437,127 +446,31 @@ func (m *Manager) effectiveQuietHours(sub *Subscription) (inQuiet bool, quietEnd
 	return m.isQuietHours(), m.nextQuietEnd()
 }
 
-// sendOrQueue decides whether to send immediately, apply quiet-hours stacking, queue for hold-window, or suppress.
-func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notification, sub *Subscription) {
-	// Hold/clear window: delay delivery via queue
-	if sub.HoldClearWindow > 0 && m.queue != nil {
-		deliverAt := time.Now().Add(time.Duration(sub.HoldClearWindow) * time.Second)
-		if err := m.queue.Enqueue(notification, deliverAt); err != nil {
-			log.Warn().Err(err).Msg("Failed to enqueue hold/clear notification")
-		}
-		return
-	}
-
+// sendOrQueue decides whether to send immediately, queue for quiet-hours/hold-window, or suppress.
+func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notification, sub *Subscription, burstEscalated ...bool) {
 	inQuiet, quietEnd := m.effectiveQuietHours(sub)
+	breaksQuietHours := len(burstEscalated) > 0 && burstEscalated[0]
 
 	if inQuiet {
-		// Legacy: hold entire notification until quiet ends
-		if sub.HoldDuringQuiet && m.queue != nil {
-			if err := m.queue.Enqueue(notification, quietEnd); err != nil {
-				log.Warn().Err(err).Msg("Failed to enqueue quiet-hours notification")
-			}
+		notification.NtfyTags = appendUniqueTag(notification.NtfyTags, "quiet-hours")
+		if breaksQuietHours {
+			go m.sendWithRetry(d, notification, sub.DispatcherID)
 			return
 		}
 
-		// Stacking logic (requires queue/DB)
 		if m.queue != nil {
-			qh := m.GetQuietHours()
-
-			threshold := qh.StackThreshold
-			if threshold <= 0 {
-				threshold = 3
+			if err := m.sendQuietHoursBurstSummary(d, notification, sub); err != nil {
+				log.Warn().Err(err).Msg("Failed to evaluate quiet-hours burst")
 			}
-			if sub.QuietStackThreshold > 0 {
-				threshold = sub.QuietStackThreshold
-			}
-
-			stackWindowSec := qh.StackWindow
-			if stackWindowSec <= 0 {
-				stackWindowSec = 900
-			}
-			if sub.QuietStackWindow > 0 {
-				stackWindowSec = sub.QuietStackWindow
-			}
-
-			stackedPriority := qh.StackedPriority
-			if stackedPriority <= 0 {
-				stackedPriority = 4
-			}
-
-			fp := alertFingerprint(
-				sub.Name,
-				notification.Container.HostName,
-				notification.Container.Name,
-				string(notification.Type),
-				notification.Detail,
-			)
-
-			state, err := m.queue.GetOrCreateAlertState(fp, sub.ID,
-				notification.Container.HostName, notification.Container.Name, string(notification.Type))
+			pendingCount, err := m.queue.PendingCountForSubscription(sub.ID)
 			if err != nil {
-				log.Warn().Err(err).Msg("Failed to get alert state; sending without stacking")
-				go m.sendWithRetry(d, notification, sub.DispatcherID)
-				return
+				log.Debug().Err(err).Msg("Failed to count pending quiet-hours notifications")
+				pendingCount = 0
 			}
-
-			now := time.Now()
-			windowExpired := now.After(state.WindowStart.Add(time.Duration(stackWindowSec) * time.Second))
-
-			if !state.QuietFirstSent || windowExpired {
-				if windowExpired {
-					state.Count = 0
-					state.StackedSent = false
-					state.WindowStart = now
-				}
-				quietNotif := notification
-				if sub.QuietPriority > 0 {
-					quietNotif.NtfyPriority = sub.QuietPriority
-				}
-				if qh.QuietTopic != "" {
-					quietNotif.NtfyTopic = qh.QuietTopic
-				}
-				state.QuietFirstSent = true
-				state.Count++
-				if err := m.queue.UpsertAlertState(state); err != nil {
-					log.Debug().Err(err).Msg("Failed to upsert alert_state")
-				}
-				go m.sendWithRetry(d, quietNotif, sub.DispatcherID)
-				return
+			deliverAt := quietEnd.Add(time.Duration(pendingCount) * 2 * time.Second)
+			if err := m.queue.Enqueue(notification, deliverAt); err != nil {
+				log.Warn().Err(err).Msg("Failed to enqueue quiet-hours notification")
 			}
-
-			state.Count++
-			if err := m.queue.UpsertAlertState(state); err != nil {
-				log.Debug().Err(err).Msg("Failed to upsert alert_state")
-			}
-
-			if state.Count >= threshold && !state.StackedSent {
-				windowMins := stackWindowSec / 60
-				stackedNotif := notification
-				stackedNotif.NtfyPriority = stackedPriority
-				stackedNotif.Detail = fmt.Sprintf(
-					"Repeated alert during quiet hours\n\nAlert: %s\nHost: %s\nContainer: %s\nCount: %d in %d min\n\nEscalated because it repeated %d times within the quiet window.",
-					sub.Name, notification.Container.HostName, notification.Container.Name,
-					state.Count, windowMins, state.Count,
-				)
-				if !qh.StackedUsesQuietTopic {
-					stackedNotif.NtfyTopic = ""
-				} else if qh.QuietTopic != "" {
-					stackedNotif.NtfyTopic = qh.QuietTopic
-				}
-				state.StackedSent = true
-				if err := m.queue.UpsertAlertState(state); err != nil {
-					log.Debug().Err(err).Msg("Failed to upsert alert_state after stacking")
-				}
-				go m.sendWithRetry(d, stackedNotif, sub.DispatcherID)
-				return
-			}
-
-			log.Debug().
-				Str("fingerprint", fp).
-				Int("count", state.Count).
-				Int("threshold", threshold).
-				Str("subscription", sub.Name).
-				Msg("Alert suppressed during quiet hours")
 			return
 		}
 
@@ -567,7 +480,94 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 		}
 	}
 
+	// Hold window only applies after quiet-hours policy has allowed the alert.
+	if sub.HoldClearWindow > 0 && m.queue != nil {
+		deliverAt := time.Now().Add(time.Duration(sub.HoldClearWindow) * time.Second)
+		if err := m.queue.Enqueue(notification, deliverAt); err != nil {
+			log.Warn().Err(err).Msg("Failed to enqueue hold-window notification")
+		}
+		return
+	}
+
 	go m.sendWithRetry(d, notification, sub.DispatcherID)
+}
+
+func (m *Manager) sendQuietHoursBurstSummary(d dispatcher.Dispatcher, notification types.Notification, sub *Subscription) error {
+	qh := m.GetQuietHours()
+
+	threshold := qh.StackThreshold
+	if threshold <= 0 {
+		threshold = 3
+	}
+	if sub.QuietStackThreshold > 0 {
+		threshold = sub.QuietStackThreshold
+	}
+
+	stackWindowSec := qh.StackWindow
+	if stackWindowSec <= 0 {
+		stackWindowSec = 900
+	}
+	if sub.QuietStackWindow > 0 {
+		stackWindowSec = sub.QuietStackWindow
+	}
+
+	stackedPriority := qh.StackedPriority
+	if stackedPriority <= 0 {
+		stackedPriority = 4
+	}
+
+	fp := alertFingerprint(
+		sub.Name,
+		notification.Container.HostName,
+		notification.Container.Name,
+		string(notification.Type),
+		notification.Detail,
+	)
+
+	state, err := m.queue.GetOrCreateAlertState(fp, sub.ID,
+		notification.Container.HostName, notification.Container.Name, string(notification.Type))
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	windowExpired := now.After(state.WindowStart.Add(time.Duration(stackWindowSec) * time.Second))
+	if windowExpired {
+		state.Count = 0
+		state.StackedSent = false
+		state.WindowStart = now
+	}
+
+	state.Count++
+	if state.Count >= threshold && !state.StackedSent {
+		windowMins := stackWindowSec / 60
+		stackedNotif := notification
+		stackedNotif.NtfyPriority = stackedPriority
+		stackedNotif.Detail = fmt.Sprintf(
+			"Repeated alert during quiet hours\n\nAlert: %s\nHost: %s\nContainer: %s\nCount: %d in %d min\n\nEscalated because it repeated %d times within the quiet window.",
+			sub.Name, notification.Container.HostName, notification.Container.Name,
+			state.Count, windowMins, state.Count,
+		)
+		if !qh.StackedUsesQuietTopic {
+			stackedNotif.NtfyTopic = ""
+		} else if qh.QuietTopic != "" {
+			stackedNotif.NtfyTopic = qh.QuietTopic
+		}
+		state.StackedSent = true
+		go m.sendWithRetry(d, stackedNotif, sub.DispatcherID)
+	}
+
+	if err := m.queue.UpsertAlertState(state); err != nil {
+		return err
+	}
+
+	log.Debug().
+		Str("fingerprint", fp).
+		Int("count", state.Count).
+		Int("threshold", threshold).
+		Str("subscription", sub.Name).
+		Msg("Alert held during quiet hours")
+	return nil
 }
 
 // sendWithRetry sends a notification with up to 3 attempts and quadratic backoff (30s, 120s).
