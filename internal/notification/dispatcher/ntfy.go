@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/amir20/dozzle/types"
@@ -20,14 +21,18 @@ type NtfyDispatcher struct {
 	ServerURL       string
 	DefaultTopic    string
 	DefaultPriority int // 1-5; 0 treated as 3 (default)
+	TitleTemplate   string
+	MessageTemplate string
 	Token           string
+	titleTemplate   *template.Template
+	messageTemplate *template.Template
 	client          *http.Client
 }
 
 // NewNtfyDispatcher creates a new ntfy dispatcher.
 // serverURL is the base URL (e.g. "https://ntfy.sh" or "https://ntfy.example.com").
 // priority 0 is treated as 3 (ntfy default). Valid range is 1-5.
-func NewNtfyDispatcher(name, serverURL, topic string, priority int, token string) (*NtfyDispatcher, error) {
+func NewNtfyDispatcher(name, serverURL, topic string, priority int, token, titleTemplateText, messageTemplateText string) (*NtfyDispatcher, error) {
 	parsed, err := url.Parse(serverURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid ntfy server URL: %w", err)
@@ -42,12 +47,32 @@ func NewNtfyDispatcher(name, serverURL, topic string, priority int, token string
 		return nil, fmt.Errorf("ntfy priority must be between 1 and 5 (or 0 for default)")
 	}
 
+	var titleTemplate *template.Template
+	if titleTemplateText != "" {
+		titleTemplate, err = template.New("ntfy-title").Parse(titleTemplateText)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse ntfy title template: %w", err)
+		}
+	}
+
+	var messageTemplate *template.Template
+	if messageTemplateText != "" {
+		messageTemplate, err = template.New("ntfy-message").Parse(messageTemplateText)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse ntfy message template: %w", err)
+		}
+	}
+
 	return &NtfyDispatcher{
 		Name:            name,
 		ServerURL:       strings.TrimRight(serverURL, "/"),
 		DefaultTopic:    topic,
 		DefaultPriority: priority,
+		TitleTemplate:   titleTemplateText,
+		MessageTemplate: messageTemplateText,
 		Token:           token,
+		titleTemplate:   titleTemplate,
+		messageTemplate: messageTemplate,
 		client: &http.Client{
 			Timeout: 15 * time.Second,
 			Transport: &http.Transport{
@@ -89,11 +114,29 @@ func (n *NtfyDispatcher) Send(ctx context.Context, notification types.Notificati
 	if title == "" {
 		title = "Dozzle Alert"
 	}
+	if n.titleTemplate != nil {
+		rendered, err := executeNtfyTemplate(n.titleTemplate, notification)
+		if err != nil {
+			return fmt.Errorf("failed to execute ntfy title template: %w", err)
+		}
+		if strings.TrimSpace(rendered) != "" {
+			title = rendered
+		}
+	}
+
+	message := notification.Detail
+	if n.messageTemplate != nil {
+		rendered, err := executeNtfyTemplate(n.messageTemplate, notification)
+		if err != nil {
+			return fmt.Errorf("failed to execute ntfy message template: %w", err)
+		}
+		message = rendered
+	}
 
 	payload := ntfyPayload{
 		Topic:    topic,
 		Title:    title,
-		Message:  notification.Detail,
+		Message:  message,
 		Priority: priority,
 		Tags:     tags,
 	}
@@ -129,4 +172,12 @@ func (n *NtfyDispatcher) Send(ctx context.Context, notification types.Notificati
 	}
 
 	return nil
+}
+
+func executeNtfyTemplate(tmpl *template.Template, notification types.Notification) (string, error) {
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, notification); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }

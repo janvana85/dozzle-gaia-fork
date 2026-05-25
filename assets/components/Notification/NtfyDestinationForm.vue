@@ -50,6 +50,24 @@
       </select>
     </fieldset>
 
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend text-lg">{{ $t("notifications.destination-form.ntfy-title-template") }}</legend>
+      <textarea
+        v-model="titleTemplate"
+        class="textarea focus:textarea-primary min-h-20 w-full font-mono text-sm"
+        spellcheck="false"
+      ></textarea>
+    </fieldset>
+
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend text-lg">{{ $t("notifications.destination-form.ntfy-message-template") }}</legend>
+      <textarea
+        v-model="messageTemplate"
+        class="textarea focus:textarea-primary min-h-36 w-full font-mono text-sm"
+        spellcheck="false"
+      ></textarea>
+    </fieldset>
+
     <!-- Auth Token (optional) -->
     <fieldset class="fieldset">
       <legend class="fieldset-legend text-lg">{{ $t("notifications.destination-form.ntfy-token") }}</legend>
@@ -109,6 +127,12 @@ const name = ref(destination?.name ?? "");
 const serverUrl = ref(destination?.url ?? "https://ntfy.sh");
 const topic = ref(destination?.topic ?? "");
 const priority = ref(destination?.priority ?? 3);
+const defaultTitleTemplate =
+  "[{{ .Container.HostName }}] EVENT HIGH - {{ .Subscription.Name }} - {{ .Container.Name }}";
+const defaultMessageTemplate =
+  "Alert: {{ .Subscription.Name }}\nType: EVENT\nPriority: HIGH\nContainer: {{ .Container.Name }}\n\n{{ .Detail }}";
+const titleTemplate = ref(destination?.titleTemplate ?? (isEditing ? "" : defaultTitleTemplate));
+const messageTemplate = ref(destination?.messageTemplate ?? (isEditing ? "" : defaultMessageTemplate));
 const token = ref(""); // always starts empty; backend preserves existing token if left blank
 
 const isTesting = ref(false);
@@ -140,6 +164,8 @@ async function testDestination() {
       url: serverUrl.value.trim(),
       topic: topic.value.trim(),
       priority: priority.value,
+      titleTemplate: titleTemplate.value.trim(),
+      messageTemplate: messageTemplate.value.trim(),
     };
     if (token.value.trim()) {
       body.token = token.value.trim();
@@ -172,6 +198,8 @@ async function saveDestination() {
       url: serverUrl.value.trim(),
       topic: topic.value.trim(),
       priority: priority.value,
+      titleTemplate: titleTemplate.value.trim(),
+      messageTemplate: messageTemplate.value.trim(),
     };
     // Only include token if the user typed something; backend preserves the existing token otherwise
     if (token.value.trim()) {

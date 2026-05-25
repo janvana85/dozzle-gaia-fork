@@ -20,6 +20,10 @@ _Avoid_: Notification rule when discussing the user-facing concept.
 An external target that receives alert notifications, such as a webhook, ntfy, or Dozzle Cloud.
 _Avoid_: Dispatcher when discussing the user-facing concept.
 
+**Notification Content**:
+The human-readable title and message body delivered by a **Notification Destination**.
+_Avoid_: Do not use content to mean routing fields such as topic, priority, or tags.
+
 **Quiet Hours**:
 A daily time window where alerts are held by default and only break through after repetition or an explicit bypass.
 _Avoid_: Do not use quiet hours to mean general low-traffic periods unless an alert policy is active.
@@ -45,6 +49,7 @@ _Avoid_: Do not use this to describe the trigger/clear matching of a **Pair Aler
 - A **Host Group** contains zero or more **Hosts**.
 - A **Host** belongs to zero or one **Host Group**.
 - An **Alert** sends notifications to one **Notification Destination**.
+- A **Notification Destination** may define **Notification Content** separately from routing.
 - **Quiet Hours** can apply globally or be overridden for a single **Alert**.
 - **Burst Escalation** can break through **Quiet Hours** when repeated alerts reach the configured threshold.
 - **Quiet Hours** take precedence over a **Hold Window**.

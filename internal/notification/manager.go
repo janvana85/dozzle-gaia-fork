@@ -632,13 +632,15 @@ func (m *Manager) Dispatchers() []DispatcherConfig {
 			})
 		case *dispatcher.NtfyDispatcher:
 			result = append(result, DispatcherConfig{
-				ID:       id,
-				Name:     v.Name,
-				Type:     "ntfy",
-				URL:      v.ServerURL,
-				Topic:    v.DefaultTopic,
-				Priority: v.DefaultPriority,
-				Token:    v.Token,
+				ID:              id,
+				Name:            v.Name,
+				Type:            "ntfy",
+				URL:             v.ServerURL,
+				Topic:           v.DefaultTopic,
+				Priority:        v.DefaultPriority,
+				Token:           v.Token,
+				TitleTemplate:   v.TitleTemplate,
+				MessageTemplate: v.MessageTemplate,
 			})
 		}
 		return true

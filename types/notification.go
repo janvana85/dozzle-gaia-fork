@@ -140,8 +140,10 @@ type DispatcherConfig struct {
 	Template string
 	Headers  map[string]string
 	// ntfy-specific fields
-	Topic    string
-	Priority int
-	Tags     []string
-	Token    string
+	Topic           string
+	Priority        int
+	Tags            []string
+	Token           string
+	TitleTemplate   string
+	MessageTemplate string
 }

@@ -43,6 +43,24 @@ func (m *mockNotificationHandler) GetNotificationStats() []types.SubscriptionSta
 	return nil
 }
 
+type captureNotificationHandler struct {
+	subscriptions []types.SubscriptionConfig
+	dispatchers   []types.DispatcherConfig
+}
+
+func (h *captureNotificationHandler) HandleNotificationConfig(subscriptions []types.SubscriptionConfig, dispatchers []types.DispatcherConfig) error {
+	h.subscriptions = subscriptions
+	h.dispatchers = dispatchers
+	return nil
+}
+
+func (h *captureNotificationHandler) SetCloudDispatcher(d dispatcher.Dispatcher) {}
+func (h *captureNotificationHandler) ClearCloudDispatcher()                      {}
+
+func (h *captureNotificationHandler) GetNotificationStats() []types.SubscriptionStats {
+	return nil
+}
+
 type MockedClientService struct {
 	mock.Mock
 }
@@ -211,6 +229,40 @@ func TestHostUsesAdvertisedAgentGroup(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, "Development", host.Group)
+}
+
+func TestUpdateNotificationConfigPreservesNtfyDispatcherFields(t *testing.T) {
+	listener := bufconn.Listen(bufSize)
+	handler := &captureNotificationHandler{}
+	server, err := NewServer(mockService, certs, "test", handler)
+	assert.NoError(t, err)
+	go server.Serve(listener)
+	defer server.Stop()
+
+	rpc, err := NewClient("passthrough://ntfy-config", certs, grpc.WithContextDialer(func(ctx context.Context, address string) (net.Conn, error) {
+		return listener.Dial()
+	}))
+	assert.NoError(t, err)
+
+	dispatchers := []types.DispatcherConfig{
+		{
+			ID:              7,
+			Name:            "Ops ntfy",
+			Type:            "ntfy",
+			URL:             "https://ntfy.example.com",
+			Topic:           "ops-alerts",
+			Priority:        5,
+			Tags:            []string{"rotating_light", "docker"},
+			Token:           "tk_secret",
+			TitleTemplate:   "[{{ .Container.HostName }}] {{ .Subscription.Name }}",
+			MessageTemplate: "Alert: {{ .Subscription.Name }}\n\n{{ .Detail }}",
+		},
+	}
+
+	err = rpc.UpdateNotificationConfig(context.Background(), nil, dispatchers)
+
+	assert.NoError(t, err)
+	assert.Equal(t, dispatchers, handler.dispatchers)
 }
 
 func TestHostWithAgentGroupAndDefaultName(t *testing.T) {

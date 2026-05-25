@@ -1188,15 +1188,21 @@ func (x *NotificationSubscription) GetEventExpression() string {
 }
 
 type NotificationDispatcher struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	Url           string                 `protobuf:"bytes,4,opt,name=url,proto3" json:"url,omitempty"`
-	Template      string                 `protobuf:"bytes,5,opt,name=template,proto3" json:"template,omitempty"`
-	Headers       map[string]string      `protobuf:"bytes,6,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Id              int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name            string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Type            string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	Url             string                 `protobuf:"bytes,4,opt,name=url,proto3" json:"url,omitempty"`
+	Template        string                 `protobuf:"bytes,5,opt,name=template,proto3" json:"template,omitempty"`
+	Headers         map[string]string      `protobuf:"bytes,6,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Topic           string                 `protobuf:"bytes,10,opt,name=topic,proto3" json:"topic,omitempty"`
+	Priority        int32                  `protobuf:"varint,11,opt,name=priority,proto3" json:"priority,omitempty"`
+	Tags            []string               `protobuf:"bytes,12,rep,name=tags,proto3" json:"tags,omitempty"`
+	Token           string                 `protobuf:"bytes,13,opt,name=token,proto3" json:"token,omitempty"`
+	TitleTemplate   string                 `protobuf:"bytes,14,opt,name=titleTemplate,proto3" json:"titleTemplate,omitempty"`
+	MessageTemplate string                 `protobuf:"bytes,15,opt,name=messageTemplate,proto3" json:"messageTemplate,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *NotificationDispatcher) Reset() {
@@ -1269,6 +1275,48 @@ func (x *NotificationDispatcher) GetHeaders() map[string]string {
 		return x.Headers
 	}
 	return nil
+}
+
+func (x *NotificationDispatcher) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *NotificationDispatcher) GetPriority() int32 {
+	if x != nil {
+		return x.Priority
+	}
+	return 0
+}
+
+func (x *NotificationDispatcher) GetTags() []string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
+func (x *NotificationDispatcher) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *NotificationDispatcher) GetTitleTemplate() string {
+	if x != nil {
+		return x.TitleTemplate
+	}
+	return ""
+}
+
+func (x *NotificationDispatcher) GetMessageTemplate() string {
+	if x != nil {
+		return x.MessageTemplate
+	}
+	return ""
 }
 
 type NotificationCloudConfig struct {
@@ -1518,14 +1566,21 @@ const file_types_proto_rawDesc = "" +
 	"\bcooldown\x18\b \x01(\x05R\bcooldown\x12\"\n" +
 	"\fsampleWindow\x18\t \x01(\x05R\fsampleWindow\x12(\n" +
 	"\x0feventExpression\x18\n" +
-	" \x01(\tR\x0feventExpression\"\x95\x02\n" +
+	" \x01(\tR\x0feventExpression\"\xc1\x03\n" +
 	"\x16NotificationDispatcher\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x12\x10\n" +
 	"\x03url\x18\x04 \x01(\tR\x03url\x12\x1a\n" +
 	"\btemplate\x18\x05 \x01(\tR\btemplate\x12G\n" +
-	"\aheaders\x18\x06 \x03(\v2-.protobuf.NotificationDispatcher.HeadersEntryR\aheaders\x1a:\n" +
+	"\aheaders\x18\x06 \x03(\v2-.protobuf.NotificationDispatcher.HeadersEntryR\aheaders\x12\x14\n" +
+	"\x05topic\x18\n" +
+	" \x01(\tR\x05topic\x12\x1a\n" +
+	"\bpriority\x18\v \x01(\x05R\bpriority\x12\x12\n" +
+	"\x04tags\x18\f \x03(\tR\x04tags\x12\x14\n" +
+	"\x05token\x18\r \x01(\tR\x05token\x12$\n" +
+	"\rtitleTemplate\x18\x0e \x01(\tR\rtitleTemplate\x12(\n" +
+	"\x0fmessageTemplate\x18\x0f \x01(\tR\x0fmessageTemplate\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +

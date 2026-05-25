@@ -334,16 +334,18 @@ func (m *MultiHostService) broadcastNotificationConfig() {
 			continue
 		}
 		dispatchers = append(dispatchers, types.DispatcherConfig{
-			ID:       d.ID,
-			Name:     d.Name,
-			Type:     d.Type,
-			URL:      d.URL,
-			Template: d.Template,
-			Headers:  d.Headers,
-			Topic:    d.Topic,
-			Priority: d.Priority,
-			Tags:     d.Tags,
-			Token:    d.Token,
+			ID:              d.ID,
+			Name:            d.Name,
+			Type:            d.Type,
+			URL:             d.URL,
+			Template:        d.Template,
+			Headers:         d.Headers,
+			Topic:           d.Topic,
+			Priority:        d.Priority,
+			Tags:            d.Tags,
+			Token:           d.Token,
+			TitleTemplate:   d.TitleTemplate,
+			MessageTemplate: d.MessageTemplate,
 		})
 	}
 

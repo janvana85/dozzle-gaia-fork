@@ -285,10 +285,12 @@ type DispatcherConfig struct {
 	Headers  map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
 	Prefix   string            `json:"prefix,omitempty" yaml:"-"` // Cloud only, not persisted
 	// ntfy-specific fields
-	Topic    string   `json:"topic,omitempty" yaml:"topic,omitempty"`
-	Priority int      `json:"priority,omitempty" yaml:"priority,omitempty"` // 1-5
-	Tags     []string `json:"tags,omitempty" yaml:"tags,omitempty"`
-	Token    string   `json:"token,omitempty" yaml:"token,omitempty"`
+	Topic           string   `json:"topic,omitempty" yaml:"topic,omitempty"`
+	Priority        int      `json:"priority,omitempty" yaml:"priority,omitempty"` // 1-5
+	Tags            []string `json:"tags,omitempty" yaml:"tags,omitempty"`
+	Token           string   `json:"token,omitempty" yaml:"token,omitempty"`
+	TitleTemplate   string   `json:"titleTemplate,omitempty" yaml:"titleTemplate,omitempty"`
+	MessageTemplate string   `json:"messageTemplate,omitempty" yaml:"messageTemplate,omitempty"`
 }
 
 // MatchesWatchdog checks if a log matches the watchdog resolve pattern.

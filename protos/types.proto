@@ -148,6 +148,12 @@ message NotificationDispatcher {
   map<string, string> headers = 6;
   // Fields 7-9 removed (cloud fields moved to NotificationCloudConfig)
   reserved 7, 8, 9;
+  string topic = 10;
+  int32 priority = 11;
+  repeated string tags = 12;
+  string token = 13;
+  string titleTemplate = 14;
+  string messageTemplate = 15;
 }
 
 message NotificationCloudConfig {

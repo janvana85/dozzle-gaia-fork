@@ -370,6 +370,8 @@ notifications:
     ntfy-topic: Default Topic
     ntfy-topic-placeholder: dozzle-alerts
     ntfy-priority: Default Priority
+    ntfy-title-template: Title Template
+    ntfy-message-template: Message Template
     ntfy-token: Auth Token (optional)
     ntfy-token-set: "••••••••"
     ntfy-token-keep: Token already set. Leave blank to keep it, or enter a new value to replace.

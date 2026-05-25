@@ -469,12 +469,18 @@ func (s *server) UpdateNotificationConfig(ctx context.Context, req *pb.UpdateNot
 	dispatchers := make([]types.DispatcherConfig, len(req.Dispatchers))
 	for i, d := range req.Dispatchers {
 		dispatchers[i] = types.DispatcherConfig{
-			ID:       int(d.Id),
-			Name:     d.Name,
-			Type:     d.Type,
-			URL:      d.Url,
-			Template: d.Template,
-			Headers:  d.Headers,
+			ID:              int(d.Id),
+			Name:            d.Name,
+			Type:            d.Type,
+			URL:             d.Url,
+			Template:        d.Template,
+			Headers:         d.Headers,
+			Topic:           d.Topic,
+			Priority:        int(d.Priority),
+			Tags:            d.Tags,
+			Token:           d.Token,
+			TitleTemplate:   d.TitleTemplate,
+			MessageTemplate: d.MessageTemplate,
 		}
 	}
 

@@ -65,10 +65,12 @@ type DispatcherResponse struct {
 	Headers  map[string]string `json:"headers,omitempty"`
 	Prefix   *string           `json:"prefix,omitempty"`
 	// ntfy-specific (no token returned)
-	Topic    *string  `json:"topic,omitempty"`
-	Priority *int     `json:"priority,omitempty"`
-	Tags     []string `json:"tags,omitempty"`
-	TokenSet bool     `json:"tokenSet,omitempty"` // true if an auth token is configured (token itself is never returned)
+	Topic           *string  `json:"topic,omitempty"`
+	Priority        *int     `json:"priority,omitempty"`
+	Tags            []string `json:"tags,omitempty"`
+	TokenSet        bool     `json:"tokenSet,omitempty"` // true if an auth token is configured (token itself is never returned)
+	TitleTemplate   *string  `json:"titleTemplate,omitempty"`
+	MessageTemplate *string  `json:"messageTemplate,omitempty"`
 }
 
 type NotificationRuleInput struct {
@@ -115,15 +117,17 @@ type NotificationRuleUpdateInput struct {
 }
 
 type DispatcherInput struct {
-	Name     string            `json:"name"`
-	Type     string            `json:"type"`
-	URL      *string           `json:"url,omitempty"`
-	Template *string           `json:"template,omitempty"`
-	Headers  map[string]string `json:"headers,omitempty"`
-	Topic    *string           `json:"topic,omitempty"`
-	Priority *int              `json:"priority,omitempty"`
-	Tags     []string          `json:"tags,omitempty"`
-	Token    *string           `json:"token,omitempty"`
+	Name            string            `json:"name"`
+	Type            string            `json:"type"`
+	URL             *string           `json:"url,omitempty"`
+	Template        *string           `json:"template,omitempty"`
+	Headers         map[string]string `json:"headers,omitempty"`
+	Topic           *string           `json:"topic,omitempty"`
+	Priority        *int              `json:"priority,omitempty"`
+	Tags            []string          `json:"tags,omitempty"`
+	Token           *string           `json:"token,omitempty"`
+	TitleTemplate   *string           `json:"titleTemplate,omitempty"`
+	MessageTemplate *string           `json:"messageTemplate,omitempty"`
 }
 
 type PreviewInput struct {
@@ -151,11 +155,13 @@ type TestWebhookInput struct {
 }
 
 type TestNtfyInput struct {
-	URL          string `json:"url"`
-	Topic        string `json:"topic"`
-	Priority     int    `json:"priority,omitempty"`
-	Token        string `json:"token,omitempty"`
-	DispatcherID *int   `json:"dispatcherId,omitempty"` // when set and token empty, backend uses stored token
+	URL             string `json:"url"`
+	Topic           string `json:"topic"`
+	Priority        int    `json:"priority,omitempty"`
+	Token           string `json:"token,omitempty"`
+	DispatcherID    *int   `json:"dispatcherId,omitempty"` // when set and token empty, backend uses stored token
+	TitleTemplate   string `json:"titleTemplate,omitempty"`
+	MessageTemplate string `json:"messageTemplate,omitempty"`
 }
 
 type TestWebhookResult struct {
@@ -278,6 +284,12 @@ func dispatcherConfigToResponse(d *notification.DispatcherConfig) *DispatcherRes
 	}
 	if d.Token != "" {
 		resp.TokenSet = true
+	}
+	if d.TitleTemplate != "" {
+		resp.TitleTemplate = &d.TitleTemplate
+	}
+	if d.MessageTemplate != "" {
+		resp.MessageTemplate = &d.MessageTemplate
 	}
 	return resp
 }
@@ -563,7 +575,15 @@ func (h *handler) createDispatcher(w http.ResponseWriter, r *http.Request) {
 		if input.Token != nil {
 			token = *input.Token
 		}
-		ntfy, err := dispatcher.NewNtfyDispatcher(input.Name, serverURL, topic, priority, token)
+		titleTemplate := ""
+		if input.TitleTemplate != nil {
+			titleTemplate = *input.TitleTemplate
+		}
+		messageTemplate := ""
+		if input.MessageTemplate != nil {
+			messageTemplate = *input.MessageTemplate
+		}
+		ntfy, err := dispatcher.NewNtfyDispatcher(input.Name, serverURL, topic, priority, token, titleTemplate, messageTemplate)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
@@ -577,14 +597,16 @@ func (h *handler) createDispatcher(w http.ResponseWriter, r *http.Request) {
 	id := h.hostService.AddDispatcher(d)
 
 	resp := &DispatcherResponse{
-		ID:       id,
-		Name:     input.Name,
-		Type:     input.Type,
-		URL:      input.URL,
-		Template: input.Template,
-		Topic:    input.Topic,
-		Priority: input.Priority,
-		Tags:     input.Tags,
+		ID:              id,
+		Name:            input.Name,
+		Type:            input.Type,
+		URL:             input.URL,
+		Template:        input.Template,
+		Topic:           input.Topic,
+		Priority:        input.Priority,
+		Tags:            input.Tags,
+		TitleTemplate:   input.TitleTemplate,
+		MessageTemplate: input.MessageTemplate,
 	}
 	if len(input.Headers) > 0 {
 		resp.Headers = input.Headers
@@ -647,7 +669,15 @@ func (h *handler) updateDispatcher(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		ntfy, err := dispatcher.NewNtfyDispatcher(input.Name, serverURL, topic, priority, token)
+		titleTemplate := ""
+		if input.TitleTemplate != nil {
+			titleTemplate = *input.TitleTemplate
+		}
+		messageTemplate := ""
+		if input.MessageTemplate != nil {
+			messageTemplate = *input.MessageTemplate
+		}
+		ntfy, err := dispatcher.NewNtfyDispatcher(input.Name, serverURL, topic, priority, token, titleTemplate, messageTemplate)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
@@ -661,14 +691,16 @@ func (h *handler) updateDispatcher(w http.ResponseWriter, r *http.Request) {
 	h.hostService.UpdateDispatcher(id, d)
 
 	resp := &DispatcherResponse{
-		ID:       id,
-		Name:     input.Name,
-		Type:     input.Type,
-		URL:      input.URL,
-		Template: input.Template,
-		Topic:    input.Topic,
-		Priority: input.Priority,
-		Tags:     input.Tags,
+		ID:              id,
+		Name:            input.Name,
+		Type:            input.Type,
+		URL:             input.URL,
+		Template:        input.Template,
+		Topic:           input.Topic,
+		Priority:        input.Priority,
+		Tags:            input.Tags,
+		TitleTemplate:   input.TitleTemplate,
+		MessageTemplate: input.MessageTemplate,
 	}
 	if len(input.Headers) > 0 {
 		resp.Headers = input.Headers
@@ -921,7 +953,7 @@ func (h *handler) testNtfy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	ntfy, err := dispatcher.NewNtfyDispatcher("test", input.URL, input.Topic, input.Priority, token)
+	ntfy, err := dispatcher.NewNtfyDispatcher("test", input.URL, input.Topic, input.Priority, token, input.TitleTemplate, input.MessageTemplate)
 	if err != nil {
 		errStr := err.Error()
 		writeJSON(w, http.StatusOK, &TestWebhookResult{Success: false, Error: &errStr})
@@ -935,6 +967,7 @@ func (h *handler) testNtfy(w http.ResponseWriter, r *http.Request) {
 		Timestamp:    time.Now(),
 		NtfyTopic:    input.Topic,
 		NtfyPriority: input.Priority,
+		Subscription: types.SubscriptionConfig{Name: "Test Alert"},
 		Container: types.NotificationContainer{
 			Name:     "test-container",
 			HostName: "localhost",

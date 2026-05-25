@@ -616,12 +616,18 @@ func (c *Client) UpdateNotificationConfig(ctx context.Context, subscriptions []t
 	pbDispatchers := make([]*pb.NotificationDispatcher, len(dispatchers))
 	for i, d := range dispatchers {
 		pbDispatchers[i] = &pb.NotificationDispatcher{
-			Id:       int32(d.ID),
-			Name:     d.Name,
-			Type:     d.Type,
-			Url:      d.URL,
-			Template: d.Template,
-			Headers:  d.Headers,
+			Id:              int32(d.ID),
+			Name:            d.Name,
+			Type:            d.Type,
+			Url:             d.URL,
+			Template:        d.Template,
+			Headers:         d.Headers,
+			Topic:           d.Topic,
+			Priority:        int32(d.Priority),
+			Tags:            d.Tags,
+			Token:           d.Token,
+			TitleTemplate:   d.TitleTemplate,
+			MessageTemplate: d.MessageTemplate,
 		}
 	}
 

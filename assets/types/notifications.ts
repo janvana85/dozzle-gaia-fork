@@ -50,6 +50,8 @@ export interface Dispatcher {
   priority?: number;
   tags?: string[];
   tokenSet?: boolean; // true if an auth token is configured (token value never returned)
+  titleTemplate?: string;
+  messageTemplate?: string;
 }
 
 export interface NotificationRuleInput {

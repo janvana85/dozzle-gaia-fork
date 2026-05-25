@@ -76,16 +76,18 @@ func (m *Manager) LoadConfig(r io.Reader) error {
 	dispatchers := make([]types.DispatcherConfig, len(config.Dispatchers))
 	for i, d := range config.Dispatchers {
 		dispatchers[i] = types.DispatcherConfig{
-			ID:       d.ID,
-			Name:     d.Name,
-			Type:     d.Type,
-			URL:      d.URL,
-			Template: d.Template,
-			Headers:  d.Headers,
-			Topic:    d.Topic,
-			Priority: d.Priority,
-			Tags:     d.Tags,
-			Token:    d.Token,
+			ID:              d.ID,
+			Name:            d.Name,
+			Type:            d.Type,
+			URL:             d.URL,
+			Template:        d.Template,
+			Headers:         d.Headers,
+			Topic:           d.Topic,
+			Priority:        d.Priority,
+			Tags:            d.Tags,
+			Token:           d.Token,
+			TitleTemplate:   d.TitleTemplate,
+			MessageTemplate: d.MessageTemplate,
 		}
 	}
 
@@ -217,16 +219,18 @@ func (m *Manager) HandleNotificationConfig(subscriptions []types.SubscriptionCon
 			continue
 		}
 		d, err := createDispatcher(DispatcherConfig{
-			ID:       dc.ID,
-			Name:     dc.Name,
-			Type:     dc.Type,
-			URL:      dc.URL,
-			Template: dc.Template,
-			Headers:  dc.Headers,
-			Topic:    dc.Topic,
-			Priority: dc.Priority,
-			Tags:     dc.Tags,
-			Token:    dc.Token,
+			ID:              dc.ID,
+			Name:            dc.Name,
+			Type:            dc.Type,
+			URL:             dc.URL,
+			Template:        dc.Template,
+			Headers:         dc.Headers,
+			Topic:           dc.Topic,
+			Priority:        dc.Priority,
+			Tags:            dc.Tags,
+			Token:           dc.Token,
+			TitleTemplate:   dc.TitleTemplate,
+			MessageTemplate: dc.MessageTemplate,
 		})
 		if err != nil {
 			log.Warn().Err(err).Str("name", dc.Name).Str("type", dc.Type).Msg("Skipping unknown dispatcher type")
@@ -249,7 +253,7 @@ func createDispatcher(config DispatcherConfig) (dispatcher.Dispatcher, error) {
 	case "webhook":
 		return dispatcher.NewWebhookDispatcher(config.Name, config.URL, config.Template, config.Headers)
 	case "ntfy":
-		return dispatcher.NewNtfyDispatcher(config.Name, config.URL, config.Topic, config.Priority, config.Token)
+		return dispatcher.NewNtfyDispatcher(config.Name, config.URL, config.Topic, config.Priority, config.Token, config.TitleTemplate, config.MessageTemplate)
 	default:
 		return nil, fmt.Errorf("unknown dispatcher type: %s", config.Type)
 	}
