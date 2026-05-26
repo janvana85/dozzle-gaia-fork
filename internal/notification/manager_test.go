@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -42,6 +43,127 @@ func (d *recordingDispatcher) notifications() []types.Notification {
 type notificationTestClient struct {
 	host      container.Host
 	container container.Container
+}
+
+func TestUpdateSubscriptionPreservesAdvancedFields(t *testing.T) {
+	manager, _, cancel := newNotificationTestManager(t)
+	defer cancel()
+
+	sub := &Subscription{
+		Name:                   "api errors",
+		Enabled:                true,
+		DispatcherID:           7,
+		ContainerExpression:    "name == 'app'",
+		LogExpression:          "message contains 'error'",
+		NtfyTopic:              "api-alerts",
+		NtfyPriority:           5,
+		NtfyTags:               []string{"api", "quiet"},
+		BypassQuietHours:       true,
+		QuietPriority:          1,
+		HoldDuringQuiet:        true,
+		HoldClearWindow:        30,
+		BurstCount:             4,
+		BurstWindow:            300,
+		BurstPriority:          5,
+		WatchdogPattern:        "message contains 'ok'",
+		WatchdogWindow:         60,
+		WatchdogCooldown:       600,
+		WatchdogTriggerMessage: "Service did not recover",
+		WatchdogClearMessage:   "Service recovered",
+		AlertQuietEnabled:      true,
+		AlertQuietStart:        "22:00",
+		AlertQuietEnd:          "07:00",
+		AlertQuietTimezone:     "Europe/Prague",
+		QuietStackThreshold:    3,
+		QuietStackWindow:       900,
+	}
+	require.NoError(t, manager.AddSubscription(sub))
+
+	require.NoError(t, manager.UpdateSubscription(sub.ID, map[string]any{"enabled": false}))
+
+	updated, ok := manager.subscriptions.Load(sub.ID)
+	require.True(t, ok)
+	assert.False(t, updated.Enabled)
+	assert.Equal(t, "api-alerts", updated.NtfyTopic)
+	assert.Equal(t, 5, updated.NtfyPriority)
+	assert.Equal(t, []string{"api", "quiet"}, updated.NtfyTags)
+	assert.True(t, updated.BypassQuietHours)
+	assert.Equal(t, 1, updated.QuietPriority)
+	assert.True(t, updated.HoldDuringQuiet)
+	assert.Equal(t, 30, updated.HoldClearWindow)
+	assert.Equal(t, 4, updated.BurstCount)
+	assert.Equal(t, 300, updated.BurstWindow)
+	assert.Equal(t, 5, updated.BurstPriority)
+	assert.Equal(t, "message contains 'ok'", updated.WatchdogPattern)
+	assert.Equal(t, 60, updated.WatchdogWindow)
+	assert.Equal(t, 600, updated.WatchdogCooldown)
+	assert.Equal(t, "Service did not recover", updated.WatchdogTriggerMessage)
+	assert.Equal(t, "Service recovered", updated.WatchdogClearMessage)
+	assert.True(t, updated.AlertQuietEnabled)
+	assert.Equal(t, "22:00", updated.AlertQuietStart)
+	assert.Equal(t, "07:00", updated.AlertQuietEnd)
+	assert.Equal(t, "Europe/Prague", updated.AlertQuietTimezone)
+	assert.Equal(t, 3, updated.QuietStackThreshold)
+	assert.Equal(t, 900, updated.QuietStackWindow)
+}
+
+func TestLoadConfigPreservesAdvancedSubscriptionFields(t *testing.T) {
+	manager, _, cancel := newNotificationTestManager(t)
+	defer cancel()
+
+	config := `
+subscriptions:
+  - id: 12
+    name: api errors
+    enabled: true
+    dispatcherId: 0
+    containerExpression: name == 'app'
+    logExpression: message contains 'error'
+    ntfyTopic: api-alerts
+    ntfyPriority: 5
+    ntfyTags:
+      - api
+      - quiet
+    bypassQuietHours: true
+    quietPriority: 1
+    holdDuringQuiet: true
+    holdClearWindow: 30
+    burstCount: 4
+    burstWindow: 300
+    burstPriority: 5
+    watchdogPattern: message contains 'ok'
+    watchdogWindow: 60
+    watchdogCooldown: 600
+    watchdogTriggerMessage: Service did not recover
+    watchdogClearMessage: Service recovered
+    alertQuietEnabled: true
+    alertQuietStart: "22:00"
+    alertQuietEnd: "07:00"
+    alertQuietTimezone: Europe/Prague
+`
+	require.NoError(t, manager.LoadConfig(strings.NewReader(config)))
+
+	loaded, ok := manager.subscriptions.Load(12)
+	require.True(t, ok)
+	assert.Equal(t, "api-alerts", loaded.NtfyTopic)
+	assert.Equal(t, 5, loaded.NtfyPriority)
+	assert.Equal(t, []string{"api", "quiet"}, loaded.NtfyTags)
+	assert.True(t, loaded.BypassQuietHours)
+	assert.Equal(t, 1, loaded.QuietPriority)
+	assert.True(t, loaded.HoldDuringQuiet)
+	assert.Equal(t, 30, loaded.HoldClearWindow)
+	assert.Equal(t, 4, loaded.BurstCount)
+	assert.Equal(t, 300, loaded.BurstWindow)
+	assert.Equal(t, 5, loaded.BurstPriority)
+	assert.Equal(t, "message contains 'ok'", loaded.WatchdogPattern)
+	assert.Equal(t, 60, loaded.WatchdogWindow)
+	assert.Equal(t, 600, loaded.WatchdogCooldown)
+	assert.Equal(t, "Service did not recover", loaded.WatchdogTriggerMessage)
+	assert.Equal(t, "Service recovered", loaded.WatchdogClearMessage)
+	assert.True(t, loaded.AlertQuietEnabled)
+	assert.Equal(t, "22:00", loaded.AlertQuietStart)
+	assert.Equal(t, "07:00", loaded.AlertQuietEnd)
+	assert.Equal(t, "Europe/Prague", loaded.AlertQuietTimezone)
 }
 
 func (c *notificationTestClient) FindContainer(context.Context, string, container.ContainerLabels) (container.Container, error) {

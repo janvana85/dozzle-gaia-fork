@@ -105,15 +105,34 @@ type NotificationRuleInput struct {
 }
 
 type NotificationRuleUpdateInput struct {
-	Name                *string `json:"name,omitempty"`
-	Enabled             *bool   `json:"enabled,omitempty"`
-	DispatcherID        *int    `json:"dispatcherId,omitempty"`
-	LogExpression       *string `json:"logExpression,omitempty"`
-	ContainerExpression *string `json:"containerExpression,omitempty"`
-	MetricExpression    *string `json:"metricExpression,omitempty"`
-	EventExpression     *string `json:"eventExpression,omitempty"`
-	Cooldown            *int    `json:"cooldown,omitempty"`
-	SampleWindow        *int    `json:"sampleWindow,omitempty"`
+	Name                   *string  `json:"name,omitempty"`
+	Enabled                *bool    `json:"enabled,omitempty"`
+	DispatcherID           *int     `json:"dispatcherId,omitempty"`
+	LogExpression          *string  `json:"logExpression,omitempty"`
+	ContainerExpression    *string  `json:"containerExpression,omitempty"`
+	MetricExpression       *string  `json:"metricExpression,omitempty"`
+	EventExpression        *string  `json:"eventExpression,omitempty"`
+	Cooldown               *int     `json:"cooldown,omitempty"`
+	SampleWindow           *int     `json:"sampleWindow,omitempty"`
+	NtfyTopic              *string  `json:"ntfyTopic,omitempty"`
+	NtfyPriority           *int     `json:"ntfyPriority,omitempty"`
+	NtfyTags               []string `json:"ntfyTags,omitempty"`
+	BypassQuietHours       *bool    `json:"bypassQuietHours,omitempty"`
+	QuietPriority          *int     `json:"quietPriority,omitempty"`
+	HoldDuringQuiet        *bool    `json:"holdDuringQuiet,omitempty"`
+	HoldClearWindow        *int     `json:"holdClearWindow,omitempty"`
+	BurstCount             *int     `json:"burstCount,omitempty"`
+	BurstWindow            *int     `json:"burstWindow,omitempty"`
+	BurstPriority          *int     `json:"burstPriority,omitempty"`
+	WatchdogPattern        *string  `json:"watchdogPattern,omitempty"`
+	WatchdogWindow         *int     `json:"watchdogWindow,omitempty"`
+	WatchdogCooldown       *int     `json:"watchdogCooldown,omitempty"`
+	WatchdogTriggerMessage *string  `json:"watchdogTriggerMessage,omitempty"`
+	WatchdogClearMessage   *string  `json:"watchdogClearMessage,omitempty"`
+	AlertQuietEnabled      *bool    `json:"alertQuietEnabled,omitempty"`
+	AlertQuietStart        *string  `json:"alertQuietStart,omitempty"`
+	AlertQuietEnd          *string  `json:"alertQuietEnd,omitempty"`
+	AlertQuietTimezone     *string  `json:"alertQuietTimezone,omitempty"`
 }
 
 type DispatcherInput struct {
@@ -477,6 +496,63 @@ func (h *handler) updateNotificationRule(w http.ResponseWriter, r *http.Request)
 	}
 	if input.SampleWindow != nil {
 		updates["sampleWindow"] = *input.SampleWindow
+	}
+	if input.NtfyTopic != nil {
+		updates["ntfyTopic"] = *input.NtfyTopic
+	}
+	if input.NtfyPriority != nil {
+		updates["ntfyPriority"] = *input.NtfyPriority
+	}
+	if input.NtfyTags != nil {
+		updates["ntfyTags"] = input.NtfyTags
+	}
+	if input.BypassQuietHours != nil {
+		updates["bypassQuietHours"] = *input.BypassQuietHours
+	}
+	if input.QuietPriority != nil {
+		updates["quietPriority"] = *input.QuietPriority
+	}
+	if input.HoldDuringQuiet != nil {
+		updates["holdDuringQuiet"] = *input.HoldDuringQuiet
+	}
+	if input.HoldClearWindow != nil {
+		updates["holdClearWindow"] = *input.HoldClearWindow
+	}
+	if input.BurstCount != nil {
+		updates["burstCount"] = *input.BurstCount
+	}
+	if input.BurstWindow != nil {
+		updates["burstWindow"] = *input.BurstWindow
+	}
+	if input.BurstPriority != nil {
+		updates["burstPriority"] = *input.BurstPriority
+	}
+	if input.WatchdogPattern != nil {
+		updates["watchdogPattern"] = *input.WatchdogPattern
+	}
+	if input.WatchdogWindow != nil {
+		updates["watchdogWindow"] = *input.WatchdogWindow
+	}
+	if input.WatchdogCooldown != nil {
+		updates["watchdogCooldown"] = *input.WatchdogCooldown
+	}
+	if input.WatchdogTriggerMessage != nil {
+		updates["watchdogTriggerMessage"] = *input.WatchdogTriggerMessage
+	}
+	if input.WatchdogClearMessage != nil {
+		updates["watchdogClearMessage"] = *input.WatchdogClearMessage
+	}
+	if input.AlertQuietEnabled != nil {
+		updates["alertQuietEnabled"] = *input.AlertQuietEnabled
+	}
+	if input.AlertQuietStart != nil {
+		updates["alertQuietStart"] = *input.AlertQuietStart
+	}
+	if input.AlertQuietEnd != nil {
+		updates["alertQuietEnd"] = *input.AlertQuietEnd
+	}
+	if input.AlertQuietTimezone != nil {
+		updates["alertQuietTimezone"] = *input.AlertQuietTimezone
 	}
 
 	if err := h.hostService.UpdateSubscription(id, updates); err != nil {

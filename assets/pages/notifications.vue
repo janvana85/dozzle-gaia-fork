@@ -193,6 +193,7 @@
             :key="alert.id"
             :alert="alert"
             :on-updated="fetchAlerts"
+            :on-duplicated="placeDuplicatedAlert"
             :highlight="alert.id === highlightId"
           />
           <button
@@ -222,6 +223,7 @@ const route = useRoute();
 
 // State
 const alerts = ref<NotificationRule[]>([]);
+const alertOrder = ref<number[]>([]);
 const dispatchers = ref<Dispatcher[]>([]);
 const quietHours = ref({
   enabled: false,
@@ -235,9 +237,20 @@ const quietHours = ref({
   stackedUsesQuietTopic: false,
 });
 
+function orderedAlerts(data: NotificationRule[]) {
+  const byId = new Map(data.map((alert) => [alert.id, alert]));
+  const orderedIds = alertOrder.value.filter((id) => byId.has(id));
+  const knownIds = new Set(orderedIds);
+  const newIds = data.map((alert) => alert.id).filter((id) => !knownIds.has(id));
+
+  alertOrder.value = [...orderedIds, ...newIds];
+  return alertOrder.value.map((id) => byId.get(id)).filter((alert): alert is NotificationRule => !!alert);
+}
+
 async function fetchAlerts() {
   const res = await fetch(withBase("/api/notifications/rules"));
-  alerts.value = await res.json();
+  const data: NotificationRule[] = await res.json();
+  alerts.value = orderedAlerts(data);
 }
 
 async function fetchDispatchers() {
@@ -330,6 +343,19 @@ const filteredAlerts = computed(() => {
   if (filter.value === "paused") return alerts.value.filter((a) => !a.enabled);
   return alerts.value;
 });
+
+async function placeDuplicatedAlert(sourceId: number, duplicate: NotificationRule) {
+  const currentOrder = alertOrder.value.filter((id) => id !== duplicate.id);
+  const sourceIndex = currentOrder.indexOf(sourceId);
+  if (sourceIndex === -1) {
+    currentOrder.push(duplicate.id);
+  } else {
+    currentOrder.splice(sourceIndex + 1, 0, duplicate.id);
+  }
+  alertOrder.value = currentOrder;
+  await fetchAlerts();
+  highlightId.value = duplicate.id;
+}
 
 function openCreateAlert() {
   showDrawer(AlertForm, { onCreated: fetchAlerts }, "lg");

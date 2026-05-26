@@ -94,6 +94,10 @@
           <button class="btn btn-ghost btn-square" @click="editAlert">
             <mdi:pencil-outline />
           </button>
+          <button class="btn btn-ghost btn-square" @click="duplicateAlert" :disabled="isDuplicating">
+            <span v-if="isDuplicating" class="loading loading-spinner loading-xs"></span>
+            <mdi:content-copy v-else />
+          </button>
           <button class="btn btn-ghost btn-square" @click="deleteAlert" :disabled="isDeleting">
             <span v-if="isDeleting" class="loading loading-spinner loading-xs"></span>
             <mdi:trash-can-outline v-else />
@@ -108,9 +112,10 @@
 import type { Dispatcher, NotificationRule } from "@/types/notifications";
 import AlertForm from "./AlertForm.vue";
 
-const { alert, onUpdated, highlight } = defineProps<{
+const { alert, onUpdated, onDuplicated, highlight } = defineProps<{
   alert: NotificationRule;
   onUpdated?: () => void;
+  onDuplicated?: (sourceId: number, duplicate: NotificationRule) => void;
   highlight?: boolean;
 }>();
 
@@ -124,6 +129,7 @@ watch(
 
 const showDrawer = useDrawer();
 const isDeleting = ref(false);
+const isDuplicating = ref(false);
 const dispatchers = ref<Dispatcher[]>([]);
 
 onMounted(async () => {
@@ -157,6 +163,63 @@ async function toggleEnabled() {
 
 function editAlert() {
   showDrawer(AlertForm, { alert, onCreated: onUpdated }, "lg");
+}
+
+function duplicateAlertPayload(alert: NotificationRule) {
+  return {
+    name: `Copy of ${alert.name}`,
+    enabled: alert.enabled ?? true,
+    dispatcherId: alert.dispatcher?.id ?? -1,
+    containerExpression: alert.containerExpression ?? "",
+    logExpression: alert.logExpression ?? "",
+    metricExpression: alert.metricExpression ?? "",
+    eventExpression: alert.eventExpression ?? "",
+    cooldown: alert.cooldown ?? 0,
+    sampleWindow: alert.sampleWindow ?? 0,
+    ntfyTopic: alert.ntfyTopic ?? "",
+    ntfyPriority: alert.ntfyPriority ?? 0,
+    ntfyTags: alert.ntfyTags ?? [],
+    bypassQuietHours: alert.bypassQuietHours ?? false,
+    quietPriority: alert.quietPriority ?? 0,
+    holdDuringQuiet: alert.holdDuringQuiet ?? false,
+    holdClearWindow: alert.holdClearWindow ?? 0,
+    burstCount: alert.burstCount ?? 0,
+    burstWindow: alert.burstWindow ?? 0,
+    burstPriority: alert.burstPriority ?? 0,
+    watchdogPattern: alert.watchdogPattern ?? "",
+    watchdogWindow: alert.watchdogWindow ?? 0,
+    watchdogCooldown: alert.watchdogCooldown ?? 0,
+    watchdogTriggerMessage: alert.watchdogTriggerMessage ?? "",
+    watchdogClearMessage: alert.watchdogClearMessage ?? "",
+    alertQuietEnabled: alert.alertQuietEnabled ?? false,
+    alertQuietStart: alert.alertQuietStart ?? "",
+    alertQuietEnd: alert.alertQuietEnd ?? "",
+    alertQuietTimezone: alert.alertQuietTimezone ?? "",
+  };
+}
+
+async function duplicateAlert() {
+  isDuplicating.value = true;
+  try {
+    const res = await fetch(withBase("/api/notifications/rules"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(duplicateAlertPayload(alert)),
+    });
+    if (!res.ok) return;
+
+    const duplicate: NotificationRule = await res.json();
+    if (!alert.enabled) {
+      await fetch(withBase(`/api/notifications/rules/${duplicate.id}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: false }),
+      });
+    }
+    onDuplicated?.(alert.id, duplicate);
+  } finally {
+    isDuplicating.value = false;
+  }
 }
 
 async function deleteAlert() {

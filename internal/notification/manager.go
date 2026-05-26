@@ -354,23 +354,49 @@ func (m *Manager) UpdateSubscription(id int, updates map[string]any) error {
 
 		// Clone the subscription
 		updated := &Subscription{
-			ID:                  sub.ID,
-			Name:                sub.Name,
-			Enabled:             sub.Enabled,
-			DispatcherID:        sub.DispatcherID,
-			ContainerExpression: sub.ContainerExpression,
-			ContainerProgram:    sub.ContainerProgram,
-			LogExpression:       sub.LogExpression,
-			LogProgram:          sub.LogProgram,
-			MetricExpression:    sub.MetricExpression,
-			MetricProgram:       sub.MetricProgram,
-			EventExpression:     sub.EventExpression,
-			EventProgram:        sub.EventProgram,
-			EventCooldowns:      sub.EventCooldowns,
-			Cooldown:            sub.Cooldown,
-			SampleWindow:        sub.SampleWindow,
-			MetricCooldowns:     sub.MetricCooldowns,
-			MetricSampleBuffers: sub.MetricSampleBuffers,
+			ID:                     sub.ID,
+			Name:                   sub.Name,
+			Enabled:                sub.Enabled,
+			DispatcherID:           sub.DispatcherID,
+			ContainerExpression:    sub.ContainerExpression,
+			ContainerProgram:       sub.ContainerProgram,
+			LogExpression:          sub.LogExpression,
+			LogProgram:             sub.LogProgram,
+			MetricExpression:       sub.MetricExpression,
+			MetricProgram:          sub.MetricProgram,
+			EventExpression:        sub.EventExpression,
+			EventProgram:           sub.EventProgram,
+			Cooldown:               sub.Cooldown,
+			SampleWindow:           sub.SampleWindow,
+			NtfyTopic:              sub.NtfyTopic,
+			NtfyPriority:           sub.NtfyPriority,
+			NtfyTags:               sub.NtfyTags,
+			BypassQuietHours:       sub.BypassQuietHours,
+			QuietPriority:          sub.QuietPriority,
+			HoldDuringQuiet:        sub.HoldDuringQuiet,
+			HoldClearWindow:        sub.HoldClearWindow,
+			BurstCount:             sub.BurstCount,
+			BurstWindow:            sub.BurstWindow,
+			BurstPriority:          sub.BurstPriority,
+			WatchdogPattern:        sub.WatchdogPattern,
+			WatchdogWindow:         sub.WatchdogWindow,
+			WatchdogCooldown:       sub.WatchdogCooldown,
+			WatchdogProgram:        sub.WatchdogProgram,
+			WatchdogTriggerMessage: sub.WatchdogTriggerMessage,
+			WatchdogClearMessage:   sub.WatchdogClearMessage,
+			AlertQuietEnabled:      sub.AlertQuietEnabled,
+			AlertQuietStart:        sub.AlertQuietStart,
+			AlertQuietEnd:          sub.AlertQuietEnd,
+			AlertQuietTimezone:     sub.AlertQuietTimezone,
+			QuietStackThreshold:    sub.QuietStackThreshold,
+			QuietStackWindow:       sub.QuietStackWindow,
+			EventCooldowns:         sub.EventCooldowns,
+			MetricCooldowns:        sub.MetricCooldowns,
+			MetricSampleBuffers:    sub.MetricSampleBuffers,
+			LogCooldowns:           sub.LogCooldowns,
+			BurstTrackers:          sub.BurstTrackers,
+			WatchdogTimers:         sub.WatchdogTimers,
+			WatchdogCooldowns:      sub.WatchdogCooldowns,
 			TriggeredContainerIDs: sub.TriggeredContainerIDs,
 		}
 
@@ -457,6 +483,93 @@ func (m *Manager) UpdateSubscription(id int, updates map[string]any) error {
 				if sw, ok := value.(int); ok {
 					updated.SampleWindow = sw
 					updated.MetricSampleBuffers = xsync.NewMap[string, *utils.RingBuffer[bool]]()
+				}
+			case "ntfyTopic":
+				if topic, ok := value.(string); ok {
+					updated.NtfyTopic = topic
+				}
+			case "ntfyPriority":
+				if priority, ok := value.(int); ok {
+					updated.NtfyPriority = priority
+				}
+			case "ntfyTags":
+				if tags, ok := value.([]string); ok {
+					updated.NtfyTags = tags
+				}
+			case "bypassQuietHours":
+				if bypass, ok := value.(bool); ok {
+					updated.BypassQuietHours = bypass
+				}
+			case "quietPriority":
+				if priority, ok := value.(int); ok {
+					updated.QuietPriority = priority
+				}
+			case "holdDuringQuiet":
+				if hold, ok := value.(bool); ok {
+					updated.HoldDuringQuiet = hold
+				}
+			case "holdClearWindow":
+				if window, ok := value.(int); ok {
+					updated.HoldClearWindow = window
+				}
+			case "burstCount":
+				if count, ok := value.(int); ok {
+					updated.BurstCount = count
+				}
+			case "burstWindow":
+				if window, ok := value.(int); ok {
+					updated.BurstWindow = window
+				}
+			case "burstPriority":
+				if priority, ok := value.(int); ok {
+					updated.BurstPriority = priority
+				}
+			case "watchdogPattern":
+				if exprStr, ok := value.(string); ok {
+					if exprStr != "" {
+						program, err := expr.Compile(exprStr, expr.Env(types.NotificationLog{}))
+						if err != nil {
+							updateErr = fmt.Errorf("failed to compile watchdog expression: %w", err)
+							return nil, xsync.CancelOp
+						}
+						updated.WatchdogPattern = exprStr
+						updated.WatchdogProgram = program
+					} else {
+						updated.WatchdogPattern = ""
+						updated.WatchdogProgram = nil
+					}
+				}
+			case "watchdogWindow":
+				if window, ok := value.(int); ok {
+					updated.WatchdogWindow = window
+				}
+			case "watchdogCooldown":
+				if cooldown, ok := value.(int); ok {
+					updated.WatchdogCooldown = cooldown
+				}
+			case "watchdogTriggerMessage":
+				if message, ok := value.(string); ok {
+					updated.WatchdogTriggerMessage = message
+				}
+			case "watchdogClearMessage":
+				if message, ok := value.(string); ok {
+					updated.WatchdogClearMessage = message
+				}
+			case "alertQuietEnabled":
+				if enabled, ok := value.(bool); ok {
+					updated.AlertQuietEnabled = enabled
+				}
+			case "alertQuietStart":
+				if start, ok := value.(string); ok {
+					updated.AlertQuietStart = start
+				}
+			case "alertQuietEnd":
+				if end, ok := value.(string); ok {
+					updated.AlertQuietEnd = end
+				}
+			case "alertQuietTimezone":
+				if timezone, ok := value.(string); ok {
+					updated.AlertQuietTimezone = timezone
 				}
 			}
 		}

@@ -36,7 +36,6 @@
             <li v-if="destination.type !== 'cloud'">
               <a class="text-error" @click="deleteDestination">{{ $t("notifications.destination.delete") }}</a>
             </li>
-
           </ul>
         </div>
       </div>
@@ -69,16 +68,30 @@ function editDestination() {
 }
 
 async function duplicateDestination() {
+  const body =
+    destination.type === "ntfy"
+      ? {
+          name: `Copy of ${destination.name}`,
+          type: destination.type,
+          url: destination.url ?? "https://ntfy.sh",
+          topic: destination.topic ?? "",
+          priority: destination.priority ?? 3,
+          tags: destination.tags ?? [],
+          titleTemplate: destination.titleTemplate ?? "",
+          messageTemplate: destination.messageTemplate ?? "",
+        }
+      : {
+          name: `Copy of ${destination.name}`,
+          type: destination.type,
+          url: destination.url ?? "",
+          template: destination.template ?? undefined,
+          headers: destination.headers ?? undefined,
+        };
+
   await fetch(withBase("/api/notifications/dispatchers"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: `Copy of ${destination.name}`,
-      type: destination.type,
-      url: destination.url,
-      template: destination.template,
-      headers: destination.headers,
-    }),
+    body: JSON.stringify(body),
   });
   onUpdated?.();
 }
