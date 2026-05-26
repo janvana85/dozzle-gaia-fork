@@ -52,20 +52,18 @@
 
     <fieldset class="fieldset">
       <legend class="fieldset-legend text-lg">{{ $t("notifications.destination-form.ntfy-title-template") }}</legend>
-      <textarea
-        v-model="titleTemplate"
-        class="textarea focus:textarea-primary min-h-20 w-full font-mono text-sm"
-        spellcheck="false"
-      ></textarea>
+      <div
+        ref="titleTemplateEditorRef"
+        class="border-base-content/20 focus-within:border-primary min-h-20 w-full overflow-auto rounded-lg border"
+      ></div>
     </fieldset>
 
     <fieldset class="fieldset">
       <legend class="fieldset-legend text-lg">{{ $t("notifications.destination-form.ntfy-message-template") }}</legend>
-      <textarea
-        v-model="messageTemplate"
-        class="textarea focus:textarea-primary min-h-36 w-full font-mono text-sm"
-        spellcheck="false"
-      ></textarea>
+      <div
+        ref="messageTemplateEditorRef"
+        class="border-base-content/20 focus-within:border-primary min-h-36 w-full overflow-auto rounded-lg border"
+      ></div>
     </fieldset>
 
     <!-- Auth Token (optional) -->
@@ -112,6 +110,7 @@
 
 <script lang="ts" setup>
 import type { Dispatcher, TestWebhookResult } from "@/types/notifications";
+import { createTemplateEditor } from "@/composable/templateEditor";
 
 const { close, onCreated, destination, isEditing } = defineProps<{
   close?: () => void;
@@ -121,6 +120,8 @@ const { close, onCreated, destination, isEditing } = defineProps<{
 }>();
 
 const nameInput = ref<HTMLInputElement>();
+const titleTemplateEditorRef = ref<HTMLElement>();
+const messageTemplateEditorRef = ref<HTMLElement>();
 useFocus(nameInput, { initialValue: true });
 const { locale } = useI18n();
 
@@ -137,6 +138,8 @@ const defaultMessageTemplate = locale.value.startsWith("cs")
 const titleTemplate = ref(destination?.titleTemplate ?? (isEditing ? "" : defaultTitleTemplate));
 const messageTemplate = ref(destination?.messageTemplate ?? (isEditing ? "" : defaultMessageTemplate));
 const token = ref(""); // always starts empty; backend preserves existing token if left blank
+let titleTemplateEditorView: Awaited<ReturnType<typeof createTemplateEditor>> | undefined;
+let messageTemplateEditorView: Awaited<ReturnType<typeof createTemplateEditor>> | undefined;
 
 const isTesting = ref(false);
 const isSaving = ref(false);
@@ -157,6 +160,31 @@ const canTest = computed(() => isValidUrl.value && topic.value.trim().length > 0
 const canSave = computed(
   () => !isSaving.value && name.value.trim().length > 0 && isValidUrl.value && topic.value.trim().length > 0,
 );
+
+onMounted(async () => {
+  if (titleTemplateEditorRef.value) {
+    titleTemplateEditorView = await createTemplateEditor({
+      parent: titleTemplateEditorRef.value,
+      initialValue: titleTemplate.value,
+      language: "plain",
+      onChange: (v) => (titleTemplate.value = v),
+    });
+  }
+
+  if (messageTemplateEditorRef.value) {
+    messageTemplateEditorView = await createTemplateEditor({
+      parent: messageTemplateEditorRef.value,
+      initialValue: messageTemplate.value,
+      language: "plain",
+      onChange: (v) => (messageTemplate.value = v),
+    });
+  }
+});
+
+onScopeDispose(() => {
+  titleTemplateEditorView?.destroy();
+  messageTemplateEditorView?.destroy();
+});
 
 async function testDestination() {
   if (!canTest.value) return;
