@@ -14,6 +14,10 @@ Format:
 - Include file:line references when relevant
 - Maximum ~10-15 lines per response
 
+## Testing Unreleased PRs
+
+When replying to a GitHub issue or discussion where the fix lives in an open PR, ask the reporter to test the pre-built image: `amir20/dozzle:pr-XXX` (XXX = PR number). CI builds a tagged image per PR, so reporters can verify without waiting for the next release.
+
 ## GitHub Tone (issues, PRs, comments, discussions)
 
 When posting anything to GitHub, write like a human maintainer, not an AI assistant. Avoid telltale LLM patterns:
@@ -245,7 +249,7 @@ The frontend uses file-based routing with these conventions:
   - All stat history tracked in `Container.statsHistory` (max 300 items via rolling window)
   - `chartData` is always a rolling window of max 300 items — array length stays constant
   - Uses `ref` (not `computed`) for `downsampledBars` to enable in-place mutation of the last bar, avoiding full re-renders
-  - Component instance is reused when switching containers; parent must call exposed `recalculate()` to force refresh
+  - Component instance is reused when switching containers; after init the chart only patches the last bar per tick, so on a wholesale `chartData` replacement (container switch) the parent must call the exposed `recalculate()`. `MultiContainerStat` holds refs to its `BarChart`s and calls it in the `containers` watch. (Note: `Container` carries Vue `ref`s, so VueTestUtils `setProps` cannot retrigger such a watch — tests must swap the container via a parent `ref` re-render.)
 
 ### Backend
 
