@@ -58,7 +58,8 @@
             >
               <HostIcon :type="host.type" />
               {{ host.name }}
-              <span class="badge badge-error badge-xs p-1.5" v-if="!host.available">offline</span>
+              <span class="badge badge-warning badge-xs p-1.5" v-if="hasVersionMismatch(host)">version mismatch</span>
+              <span class="badge badge-error badge-xs p-1.5" v-else-if="!host.available">offline</span>
             </a>
           </li>
         </template>
@@ -93,7 +94,10 @@
                   >
                     <HostIcon :type="host.type" />
                     {{ host.name }}
-                    <span class="badge badge-error badge-xs p-1.5" v-if="!host.available">offline</span>
+                    <span class="badge badge-warning badge-xs p-1.5" v-if="hasVersionMismatch(host)"
+                      >version mismatch</span
+                    >
+                    <span class="badge badge-error badge-xs p-1.5" v-else-if="!host.available">offline</span>
                   </a>
                 </li>
               </ul>
@@ -107,7 +111,8 @@
               >
                 <HostIcon :type="host.type" />
                 {{ host.name }}
-                <span class="badge badge-error badge-xs p-1.5" v-if="!host.available">offline</span>
+                <span class="badge badge-warning badge-xs p-1.5" v-if="hasVersionMismatch(host)">version mismatch</span>
+                <span class="badge badge-error badge-xs p-1.5" v-else-if="!host.available">offline</span>
               </a>
             </li>
           </template>
@@ -201,6 +206,8 @@ const pinnedStore = usePinnedLogsStore();
 const { hosts } = useHosts();
 
 const setHost = (host: string | null) => (sessionHost.value = host);
+const hasVersionMismatch = (host: (typeof hosts.value)[string]) =>
+  host.type === "agent" && !!host.agentVersion && host.agentVersion !== config.version;
 
 const hasHostGroups = computed(() => Object.values(hosts.value).some((h) => h.group));
 

@@ -6,7 +6,11 @@
           <HostIcon :type="host.type" class="text-base-content/80 flex-none" />
           <div class="truncate">{{ host.name }}</div>
 
-          <span class="badge badge-error badge-xs gap-1 p-2 font-normal" v-if="!host.available">
+          <span class="badge badge-warning badge-xs gap-1 p-2 font-normal" v-if="hasVersionMismatch">
+            <carbon:warning />
+            version mismatch
+          </span>
+          <span class="badge badge-error badge-xs gap-1 p-2 font-normal" v-else-if="!host.available">
             <carbon:warning />
             offline
           </span>
@@ -84,6 +88,9 @@ const hostContainers = computed(() =>
 );
 
 const runtimeLabel = computed(() => (props.host.runtime === "podman" ? "Podman" : "Docker"));
+const hasVersionMismatch = computed(
+  () => props.host.type === "agent" && !!props.host.agentVersion && props.host.agentVersion !== config.version,
+);
 
 function toContainerCores(container: Container): number {
   if (container.cpuLimit && container.cpuLimit > 0) {
