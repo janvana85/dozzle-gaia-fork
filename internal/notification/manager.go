@@ -397,7 +397,7 @@ func (m *Manager) UpdateSubscription(id int, updates map[string]any) error {
 			BurstTrackers:          sub.BurstTrackers,
 			WatchdogTimers:         sub.WatchdogTimers,
 			WatchdogCooldowns:      sub.WatchdogCooldowns,
-			TriggeredContainerIDs: sub.TriggeredContainerIDs,
+			TriggeredContainerIDs:  sub.TriggeredContainerIDs,
 		}
 
 		// Preserve runtime stats (atomics can't be copied in struct literal)
@@ -656,7 +656,6 @@ func (m *Manager) ClearCloudDispatcher() {
 	m.cloudDispatcher.Store(nil)
 	log.Debug().Msg("Cleared cloud dispatcher")
 }
-
 
 // getDispatcher resolves a dispatcher by subscription's DispatcherID.
 // DispatcherID == 0 means the cloud dispatcher; otherwise lookup in the dispatchers map.
