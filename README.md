@@ -63,7 +63,7 @@ For advanced options like [authentication](https://dozzle.dev/guide/authenticati
 
 ## Swarm Mode
 
-Dozzle works with Docker Swarm. You can run Dozzle as a global service:
+Dozzle works with Docker Swarm, You can run Dozzle as a global service:
 
     $ docker service create --name dozzle --env DOZZLE_MODE=swarm --mode global --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock -p 8080:8080 amir20/dozzle:latest
 
