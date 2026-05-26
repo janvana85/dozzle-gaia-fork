@@ -52,3 +52,61 @@ jobs:
             TAG=${{ steps.meta.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Prune old Docker Hub SHA tags
+        env:
+          DOCKERHUB_USERNAME: janvana85
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_NAMESPACE: janvana85
+          DOCKERHUB_REPOSITORY: dozzle-gaia
+          KEEP_SHA_TAGS: "10"
+        run: |
+          node <<'NODE'
+          const username = process.env.DOCKERHUB_USERNAME;
+          const password = process.env.DOCKERHUB_TOKEN;
+          const namespace = process.env.DOCKERHUB_NAMESPACE;
+          const repository = process.env.DOCKERHUB_REPOSITORY;
+          const keep = Number.parseInt(process.env.KEEP_SHA_TAGS || "10", 10);
+
+          async function request(url, options = {}) {
+            const response = await fetch(url, options);
+            if (!response.ok) {
+              const body = await response.text();
+              throw new Error(`${options.method || "GET"} ${url} failed: ${response.status} ${body}`);
+            }
+            if (response.status === 204) return null;
+            return response.json();
+          }
+
+          const login = await request("https://hub.docker.com/v2/users/login/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password }),
+          });
+
+          const headers = { Authorization: `JWT ${login.token}` };
+          let next = `https://hub.docker.com/v2/repositories/${namespace}/${repository}/tags?page_size=100`;
+          const tags = [];
+
+          while (next) {
+            const page = await request(next, { headers });
+            tags.push(...page.results);
+            next = page.next;
+          }
+
+          const shaTags = tags
+            .filter((tag) => tag.name.startsWith("sha-"))
+            .sort((a, b) => new Date(b.last_updated) - new Date(a.last_updated));
+          const staleTags = shaTags.slice(keep);
+
+          console.log(`Found ${shaTags.length} sha-* tags. Keeping ${Math.min(keep, shaTags.length)} newest.`);
+
+          for (const tag of staleTags) {
+            const tagName = encodeURIComponent(tag.name);
+            await request(`https://hub.docker.com/v2/repositories/${namespace}/${repository}/tags/${tagName}/`, {
+              method: "DELETE",
+              headers,
+            });
+            console.log(`Deleted ${tag.name}`);
+          }
+          NODE
