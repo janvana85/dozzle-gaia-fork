@@ -208,9 +208,9 @@ func parseHHMM(s string) (int, int) {
 	return h, min
 }
 
-// drainQueue processes the SQLite queue every 60 seconds and delivers ready notifications.
+// drainQueue processes the SQLite queue regularly and releases ready notifications one at a time.
 func (m *Manager) drainQueue() {
-	ticker := time.NewTicker(60 * time.Second)
+	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -236,44 +236,48 @@ func (m *Manager) flushQueue() {
 		return
 	}
 
-	for _, item := range items {
-		d, ok := m.getDispatcher(item.DispatcherID)
-		if !ok {
-			log.Warn().Int("dispatcher_id", item.DispatcherID).Msg("Dispatcher not found for queued notification; dropping")
-			_ = m.queue.MarkFailed(item.ID, 3)
-			continue
-		}
-		id := item.ID
-		dispID := item.DispatcherID
-		notification := item.Notification
-		attempts := item.Attempts
-		if !m.isSubscriptionActive(notification.Subscription.ID) {
-			log.Debug().Int64("queue_id", id).Int("subscription", notification.Subscription.ID).Msg("Dropping queued notification for inactive subscription")
-			if qErr := m.queue.MarkSent(id); qErr != nil {
-				log.Warn().Err(qErr).Msg("Failed to mark inactive queued notification sent")
-			}
-			continue
-		}
-		go func() {
-			sendCtx, sendCancel := context.WithTimeout(m.ctx, 30*time.Second)
-			defer sendCancel()
-			if err := d.Send(sendCtx, notification); err != nil {
-				log.Warn().Err(err).Int64("queue_id", id).Msg("Queued notification failed")
-				if qErr := m.queue.MarkFailed(id, attempts); qErr != nil {
-					log.Warn().Err(qErr).Msg("Failed to update queue status")
-				}
-			} else {
-				log.Debug().Int64("queue_id", id).Int("dispatcher_id", dispID).Msg("Delivered queued notification")
-				if qErr := m.queue.MarkSent(id); qErr != nil {
-					log.Warn().Err(qErr).Msg("Failed to mark notification sent")
-				}
-			}
-		}()
+	if len(items) > 0 {
+		m.deliverQueuedNotification(items[0])
 	}
 
 	m.queue.Cleanup(7 * 24 * time.Hour)
 	m.queue.CleanupAlertState(25 * time.Hour)
 	m.queue.CleanupCooldowns()
+}
+
+func (m *Manager) deliverQueuedNotification(item queue.QueuedNotification) {
+	d, ok := m.getDispatcher(item.DispatcherID)
+	if !ok {
+		log.Warn().Int("dispatcher_id", item.DispatcherID).Msg("Dispatcher not found for queued notification; dropping")
+		_ = m.queue.MarkFailed(item.ID, 3)
+		return
+	}
+
+	if !m.isSubscriptionActive(item.Notification.Subscription.ID) {
+		log.Debug().
+			Int64("queue_id", item.ID).
+			Int("subscription", item.Notification.Subscription.ID).
+			Msg("Dropping queued notification for inactive subscription")
+		if qErr := m.queue.MarkSent(item.ID); qErr != nil {
+			log.Warn().Err(qErr).Msg("Failed to mark inactive queued notification sent")
+		}
+		return
+	}
+
+	sendCtx, sendCancel := context.WithTimeout(m.ctx, 30*time.Second)
+	defer sendCancel()
+	if err := d.Send(sendCtx, item.Notification); err != nil {
+		log.Warn().Err(err).Int64("queue_id", item.ID).Msg("Queued notification failed")
+		if qErr := m.queue.MarkFailed(item.ID, item.Attempts); qErr != nil {
+			log.Warn().Err(qErr).Msg("Failed to update queue status")
+		}
+		return
+	}
+
+	log.Debug().Int64("queue_id", item.ID).Int("dispatcher_id", item.DispatcherID).Msg("Delivered queued notification")
+	if qErr := m.queue.MarkSent(item.ID); qErr != nil {
+		log.Warn().Err(qErr).Msg("Failed to mark notification sent")
+	}
 }
 
 // AddSubscription adds a new subscription with compiled expressions

@@ -338,20 +338,20 @@ notifications:
     alert-quiet-end: Until
     alert-quiet-timezone: Timezone
     alert-quiet-timezone-placeholder: Europe/Prague (blank = server local)
-    alert-quiet-help: When enabled, these quiet hours apply only to this alert. Burst breakthrough rules still use the global config.
+    alert-quiet-help: When enabled, these quiet hours apply only to this alert. Burst escalation rules still use the global config.
   settings:
     title: Settings
     quiet-hours-enabled: Enable Quiet Hours
     quiet-start: Start
     quiet-end: End
-    quiet-hours-hint: During quiet hours, alerts are held by default and tagged. Repeated alerts can break through immediately at the configured priority.
-    stacking: Burst breakthrough
+    quiet-hours-hint: During quiet hours, alerts are held by default and tagged. Repeated alerts can be escalated in the queue, but still wait until quiet hours end.
+    stacking: Burst escalation
     stack-threshold: Burst threshold
     stack-window: Burst window (min)
-    stacked-priority: Breakthrough priority
+    stacked-priority: Escalated release priority
     topic-routing: Topic routing
     quiet-topic: Quiet topic (optional)
-    stacked-uses-quiet-topic: Send breakthrough alerts to quiet topic
+    stacked-uses-quiet-topic: Send escalated queued alerts to quiet topic
     timezone-section: Timezone
     timezone: Timezone
   destination-form:
@@ -375,11 +375,11 @@ notifications:
     ntfy-token: Auth Token (optional)
     ntfy-token-set: "••••••••"
     ntfy-token-keep: Token already set. Leave blank to keep it, or enter a new value to replace.
-    ntfy-priority-1: "1 - min (silent)"
-    ntfy-priority-2: "2 - low"
-    ntfy-priority-3: "3 - default"
-    ntfy-priority-4: "4 - high"
-    ntfy-priority-5: "5 - max (breaks DND)"
+    ntfy-priority-1: "Priority 1"
+    ntfy-priority-2: "Priority 2"
+    ntfy-priority-3: "Priority 3"
+    ntfy-priority-4: "Priority 4"
+    ntfy-priority-5: "Priority 5"
     cloud-title: Dozzle Cloud
     cloud-description: Push notifications, email alerts, and AI-powered summaries
     webhook-url: Webhook URL

@@ -32,8 +32,12 @@ _Avoid_: Do not use quiet hours to mean general low-traffic periods unless an al
 A notification marker showing that an alert was captured during **Quiet Hours**.
 _Avoid_: Do not use it to mean the alert was suppressed.
 
+**Quiet-Hours Bypass**:
+An explicit alert policy that allows an alert to be delivered during **Quiet Hours**.
+_Avoid_: Do not use notification priority to mean quiet-hours bypass.
+
 **Burst Escalation**:
-A quiet-hours breakthrough caused by the same alert triggering repeatedly within a configured window.
+A priority or routing escalation caused by the same alert triggering repeatedly within a configured window.
 _Avoid_: Traffic burst when referring specifically to notification priority escalation.
 
 **Pair Alert**:
@@ -51,7 +55,9 @@ _Avoid_: Do not use this to describe the trigger/clear matching of a **Pair Aler
 - An **Alert** sends notifications to one **Notification Destination**.
 - A **Notification Destination** may define **Notification Content** separately from routing.
 - **Quiet Hours** can apply globally or be overridden for a single **Alert**.
-- **Burst Escalation** can break through **Quiet Hours** when repeated alerts reach the configured threshold.
+- **Quiet-Hours Bypass** can break through **Quiet Hours**.
+- Notification priority does not bypass **Quiet Hours** by itself.
+- **Burst Escalation** does not bypass **Quiet Hours** unless paired with an explicit **Quiet-Hours Bypass** policy.
 - **Quiet Hours** take precedence over a **Hold Window**.
 - Alerts are held by default during **Quiet Hours**, tagged with the **Quiet-Hours Tag**, and delivered gradually after the quiet window ends.
 
@@ -61,7 +67,7 @@ _Avoid_: Do not use this to describe the trigger/clear matching of a **Pair Aler
 > **Domain expert:** "No, production is a **Host Group** when it identifies the server or agent the containers come from."
 
 > **Dev:** "Should burst traffic during quiet hours page someone?"
-> **Domain expert:** "That is **Burst Escalation** during **Quiet Hours**: a repeated alert may use a higher priority or route than the first quiet-hours notification."
+> **Domain expert:** "That is **Burst Escalation** during **Quiet Hours**: a repeated alert may use a higher priority or route after it is released, but it does not bypass Quiet Hours unless an explicit Quiet-Hours Bypass policy is set."
 
 ## Flagged Ambiguities
 

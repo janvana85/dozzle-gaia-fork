@@ -29,6 +29,16 @@ build: dist generate
 docker: generate
 	@docker build --build-arg TAG=local --build-arg CLOUD_URL=$(CLOUD_URL) -t amir20/dozzle:local .
 
+.PHONY: docker-multi
+docker-multi:
+	@docker buildx build \
+		--platform linux/amd64,linux/arm64 \
+		--build-arg TAG=$${TAG:-local} \
+		--build-arg CLOUD_URL=$(CLOUD_URL) \
+		-t $${IMAGE:-amir20/dozzle:local} \
+		--push \
+		.
+
 .PHONY: generate
 generate: shared_key.pem shared_cert.pem
 	@go generate ./...

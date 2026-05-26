@@ -122,15 +122,18 @@ const { close, onCreated, destination, isEditing } = defineProps<{
 
 const nameInput = ref<HTMLInputElement>();
 useFocus(nameInput, { initialValue: true });
+const { locale } = useI18n();
 
 const name = ref(destination?.name ?? "");
 const serverUrl = ref(destination?.url ?? "https://ntfy.sh");
 const topic = ref(destination?.topic ?? "");
 const priority = ref(destination?.priority ?? 3);
-const defaultTitleTemplate =
-  "[{{ .Container.HostName }}] EVENT HIGH - {{ .Subscription.Name }} - {{ .Container.Name }}";
-const defaultMessageTemplate =
-  "Alert: {{ .Subscription.Name }}\nType: EVENT\nPriority: HIGH\nContainer: {{ .Container.Name }}\n\n{{ .Detail }}";
+const defaultTitleTemplate = locale.value.startsWith("cs")
+  ? "[{{ .Container.HostName }}] {{ .Subscription.Name }} - {{ .Container.Name }}"
+  : "[{{ .Container.HostName }}] {{ .Subscription.Name }} - {{ .Container.Name }}";
+const defaultMessageTemplate = locale.value.startsWith("cs")
+  ? "Alert: {{ .Subscription.Name }}\nTyp: {{ .Type }}\nKontejner: {{ .Container.Name }}\n\n{{ .Detail }}"
+  : "Alert: {{ .Subscription.Name }}\nType: {{ .Type }}\nContainer: {{ .Container.Name }}\n\n{{ .Detail }}";
 const titleTemplate = ref(destination?.titleTemplate ?? (isEditing ? "" : defaultTitleTemplate));
 const messageTemplate = ref(destination?.messageTemplate ?? (isEditing ? "" : defaultMessageTemplate));
 const token = ref(""); // always starts empty; backend preserves existing token if left blank

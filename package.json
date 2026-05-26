@@ -115,6 +115,6 @@
     ]
   },
   "simple-git-hooks": {
-    "pre-commit": "pnpm lint-staged --allow-empty"
+    "pre-commit": "./node_modules/.bin/lint-staged --allow-empty"
   }
 }

@@ -208,10 +208,10 @@ notifications:
     burst-count: Počet triggerů
     burst-window: Okno (sekundy)
     burst-priority: Eskalovaná priorita
-    quiet-hours: Quiet Hours
-    bypass-quiet-hours: Vždy poslat, ignorovat Quiet Hours
-    quiet-priority: Priorita během Quiet Hours
-    hold-during-quiet: Podržet do konce Quiet Hours
+    quiet-hours: Tiché hodiny
+    bypass-quiet-hours: Vždy poslat, ignorovat tiché hodiny
+    quiet-priority: Priorita během tichých hodin
+    hold-during-quiet: Podržet do konce tichých hodin
     hold-clear-window: Hold Window (sekundy)
     hold-clear-hint: Zpozdí doručení o zadaný počet sekund. Pro trigger/clear logiku použijte Pair Alert.
     watchdog-title: Pair Alert
@@ -229,27 +229,27 @@ notifications:
     watchdog-trigger-message-hint: Vlastní text notifikace, když trigger vyprší bez clear logu. Prázdné = výchozí text.
     watchdog-clear-message: Clear zpráva (volitelné)
     watchdog-clear-message-hint: Pošle se, když clear filtr odpovídá před vypršením limitu. Prázdné = bez clear notifikace.
-    alert-quiet-title: Quiet Hours jen pro tento alert
-    alert-quiet-enabled: Přepsat globální Quiet Hours pro tento alert
-    alert-quiet-hint: Když je vypnuto, použije se globální nastavení Quiet Hours.
+    alert-quiet-title: Tiché hodiny jen pro tento alert
+    alert-quiet-enabled: Přepsat globální tiché hodiny pro tento alert
+    alert-quiet-hint: Když je vypnuto, použije se globální nastavení tichých hodin.
     alert-quiet-start: Ticho od
     alert-quiet-end: Do
     alert-quiet-timezone: Časová zóna
     alert-quiet-timezone-placeholder: Europe/Prague (prázdné = lokální čas serveru)
-    alert-quiet-help: Když je zapnuto, tyto Quiet Hours platí jen pro tento alert. Pravidla pro burst průraz pořád používají globální konfiguraci.
+    alert-quiet-help: Když je zapnuto, tyto tiché hodiny platí jen pro tento alert. Pravidla pro burst eskalaci pořád používají globální konfiguraci.
   settings:
     title: Nastavení
-    quiet-hours-enabled: Zapnout Quiet Hours
+    quiet-hours-enabled: Zapnout tiché hodiny
     quiet-start: Začátek
     quiet-end: Konec
-    quiet-hours-hint: Během Quiet Hours se alerty defaultně podrží a označí tagem. Opakované alerty můžou při dosažení limitu projít hned s nastavenou prioritou.
-    stacking: Burst průraz
+    quiet-hours-hint: Během tichých hodin se alerty standardně podrží a označí tagem. Opakované alerty se můžou ve frontě eskalovat, ale pořád čekají na konec tichých hodin.
+    stacking: Burst eskalace
     stack-threshold: Burst limit
     stack-window: Burst okno (min)
-    stacked-priority: Priorita průrazu
+    stacked-priority: Eskalovaná priorita po uvolnění
     topic-routing: Směrování topicu
-    quiet-topic: Quiet topic (volitelné)
-    stacked-uses-quiet-topic: Posílat průrazové alerty do quiet topicu
+    quiet-topic: Topic pro tiché hodiny (volitelné)
+    stacked-uses-quiet-topic: Posílat eskalované alerty ve frontě do topicu pro tiché hodiny
     timezone-section: Časová zóna
     timezone: Časová zóna
   destination-form:
@@ -268,14 +268,16 @@ notifications:
     ntfy-topic: Výchozí topic
     ntfy-topic-placeholder: dozzle-alerts
     ntfy-priority: Výchozí priorita
+    ntfy-title-template: Šablona titulku
+    ntfy-message-template: Šablona zprávy
     ntfy-token: Auth token (volitelný)
     ntfy-token-set: "••••••••"
     ntfy-token-keep: Token už je nastavený. Nechte prázdné pro zachování, nebo zadejte nový.
-    ntfy-priority-1: "1 - minimum (tiché)"
-    ntfy-priority-2: "2 - nízká"
-    ntfy-priority-3: "3 - výchozí"
-    ntfy-priority-4: "4 - vysoká"
-    ntfy-priority-5: "5 - maximum (obejde DND)"
+    ntfy-priority-1: "Priorita 1"
+    ntfy-priority-2: "Priorita 2"
+    ntfy-priority-3: "Priorita 3"
+    ntfy-priority-4: "Priorita 4"
+    ntfy-priority-5: "Priorita 5"
     cloud-title: Dozzle Cloud
     cloud-description: Push notifikace, e-mailové alerty a AI souhrny
     webhook-url: Webhook URL

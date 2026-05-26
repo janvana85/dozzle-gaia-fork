@@ -449,17 +449,12 @@ func (m *Manager) effectiveQuietHours(sub *Subscription) (inQuiet bool, quietEnd
 // sendOrQueue decides whether to send immediately, queue for quiet-hours/hold-window, or suppress.
 func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notification, sub *Subscription, burstEscalated ...bool) {
 	inQuiet, quietEnd := m.effectiveQuietHours(sub)
-	breaksQuietHours := len(burstEscalated) > 0 && burstEscalated[0]
 
 	if inQuiet {
 		notification.NtfyTags = appendUniqueTag(notification.NtfyTags, "quiet-hours")
-		if breaksQuietHours {
-			go m.sendWithRetry(d, notification, sub.DispatcherID)
-			return
-		}
 
 		if m.queue != nil {
-			if err := m.sendQuietHoursBurstSummary(d, notification, sub); err != nil {
+			if err := m.applyQuietHoursBurstEscalation(&notification, sub); err != nil {
 				log.Warn().Err(err).Msg("Failed to evaluate quiet-hours burst")
 			}
 			pendingCount, err := m.queue.PendingCountForSubscription(sub.ID)
@@ -492,7 +487,7 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 	go m.sendWithRetry(d, notification, sub.DispatcherID)
 }
 
-func (m *Manager) sendQuietHoursBurstSummary(d dispatcher.Dispatcher, notification types.Notification, sub *Subscription) error {
+func (m *Manager) applyQuietHoursBurstEscalation(notification *types.Notification, sub *Subscription) error {
 	qh := m.GetQuietHours()
 
 	threshold := qh.StackThreshold
@@ -540,21 +535,11 @@ func (m *Manager) sendQuietHoursBurstSummary(d dispatcher.Dispatcher, notificati
 
 	state.Count++
 	if state.Count >= threshold && !state.StackedSent {
-		windowMins := stackWindowSec / 60
-		stackedNotif := notification
-		stackedNotif.NtfyPriority = stackedPriority
-		stackedNotif.Detail = fmt.Sprintf(
-			"Repeated alert during quiet hours\n\nAlert: %s\nHost: %s\nContainer: %s\nCount: %d in %d min\n\nEscalated because it repeated %d times within the quiet window.",
-			sub.Name, notification.Container.HostName, notification.Container.Name,
-			state.Count, windowMins, state.Count,
-		)
-		if !qh.StackedUsesQuietTopic {
-			stackedNotif.NtfyTopic = ""
-		} else if qh.QuietTopic != "" {
-			stackedNotif.NtfyTopic = qh.QuietTopic
-		}
 		state.StackedSent = true
-		go m.sendWithRetry(d, stackedNotif, sub.DispatcherID)
+		notification.NtfyPriority = stackedPriority
+		if qh.StackedUsesQuietTopic && qh.QuietTopic != "" {
+			notification.NtfyTopic = qh.QuietTopic
+		}
 	}
 
 	if err := m.queue.UpsertAlertState(state); err != nil {

@@ -353,7 +353,7 @@ func TestPerAlertQuietHoursOverrideGlobalQuietHours(t *testing.T) {
 	assert.Equal(t, 5, dispatcher.notifications()[0].NtfyPriority)
 }
 
-func TestQuietHoursQueuesFirstAndBreaksThroughOnRepeatedAlert(t *testing.T) {
+func TestQuietHoursQueuesRepeatedAlertWithEscalatedPriority(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "notifications.db")
 	manager, _, cancel := newNotificationTestManagerWithDB(t, dbPath)
 	defer cancel()
@@ -390,14 +390,18 @@ func TestQuietHoursQueuesFirstAndBreaksThroughOnRepeatedAlert(t *testing.T) {
 	assert.Equal(t, 2, countPendingNotifications(t, dbPath))
 
 	manager.sendOrQueue(dispatcher, notificationForTest(sub), sub)
-	require.Eventually(t, func() bool {
-		return dispatcher.count.Load() == 1
-	}, time.Second, 10*time.Millisecond)
-	sent := dispatcher.notifications()
-	assert.Equal(t, 5, sent[0].NtfyPriority)
-	assert.Contains(t, sent[0].Detail, "Repeated alert during quiet hours")
-	assert.Contains(t, sent[0].NtfyTags, "quiet-hours")
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, int32(0), dispatcher.count.Load())
 	assert.Equal(t, 3, countPendingNotifications(t, dbPath))
+
+	queued := pendingNotifications(t, dbPath)
+	require.Len(t, queued, 3)
+	assert.Equal(t, 4, queued[0].NtfyPriority)
+	assert.Equal(t, 4, queued[1].NtfyPriority)
+	assert.Equal(t, 5, queued[2].NtfyPriority)
+	for _, notification := range queued {
+		assert.Contains(t, notification.NtfyTags, "quiet-hours")
+	}
 }
 
 func TestQuietHoursTakesPrecedenceOverHoldWindow(t *testing.T) {
@@ -468,14 +472,73 @@ func TestQuietHoursQueuesEveryAlertWithQuietHoursTagAndSpacing(t *testing.T) {
 	manager.flushQueue()
 
 	require.Eventually(t, func() bool {
-		return dispatcher.count.Load() == 10
+		return dispatcher.count.Load() == 1
 	}, time.Second, 10*time.Millisecond)
 	for _, notification := range dispatcher.notifications() {
 		assert.Contains(t, notification.NtfyTags, "quiet-hours")
 	}
+	assert.Equal(t, 9, countPendingNotifications(t, dbPath))
 }
 
-func TestBurstEscalationBreaksThroughQuietHoursImmediately(t *testing.T) {
+func TestQuietHoursHoldsPriorityFiveNotificationsAndDrainsQueueSequentially(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "notifications.db")
+	manager, _, cancel := newNotificationTestManagerWithDB(t, dbPath)
+	defer cancel()
+	defer manager.queue.Close()
+	manager.SetQuietHours(QuietHoursConfig{
+		Enabled:        true,
+		Start:          "00:00",
+		End:            "23:59",
+		StackThreshold: 100,
+		StackWindow:    60,
+	})
+
+	dispatcher := &recordingDispatcher{}
+	dispatcherID := manager.AddDispatcher(dispatcher)
+	sub := &Subscription{
+		ID:           1,
+		Name:         "priority-five-during-quiet-hours",
+		Enabled:      true,
+		DispatcherID: dispatcherID,
+		NtfyPriority: 5,
+	}
+	manager.subscriptions.Store(sub.ID, sub)
+
+	for range 3 {
+		manager.sendOrQueue(dispatcher, notificationForTest(sub), sub)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, int32(0), dispatcher.count.Load())
+	assert.Equal(t, 3, countPendingNotifications(t, dbPath))
+	queued := pendingNotifications(t, dbPath)
+	require.Len(t, queued, 3)
+	for _, notification := range queued {
+		assert.Equal(t, 5, notification.NtfyPriority)
+		assert.Contains(t, notification.NtfyTags, "quiet-hours")
+	}
+
+	markPendingNotificationsReady(t, dbPath)
+
+	manager.flushQueue()
+	assert.Equal(t, int32(1), dispatcher.count.Load())
+	assert.Equal(t, 2, countPendingNotifications(t, dbPath))
+
+	manager.flushQueue()
+	assert.Equal(t, int32(2), dispatcher.count.Load())
+	assert.Equal(t, 1, countPendingNotifications(t, dbPath))
+
+	manager.flushQueue()
+	assert.Equal(t, int32(3), dispatcher.count.Load())
+	assert.Equal(t, 0, countPendingNotifications(t, dbPath))
+
+	for _, notification := range dispatcher.notifications() {
+		assert.Equal(t, 5, notification.NtfyPriority)
+		assert.Contains(t, notification.NtfyTags, "quiet-hours")
+	}
+}
+
+func TestBurstEscalationRespectsQuietHours(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "notifications.db")
 	manager, _, cancel := newNotificationTestManagerWithDB(t, dbPath)
 	defer cancel()
@@ -499,11 +562,13 @@ func TestBurstEscalationBreaksThroughQuietHoursImmediately(t *testing.T) {
 
 	manager.sendOrQueue(dispatcher, notificationForTest(sub), sub, true)
 
-	require.Eventually(t, func() bool {
-		return dispatcher.count.Load() == 1
-	}, time.Second, 10*time.Millisecond)
-	assert.Equal(t, 0, countPendingNotifications(t, dbPath))
-	assert.Contains(t, dispatcher.notifications()[0].NtfyTags, "quiet-hours")
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, int32(0), dispatcher.count.Load())
+	assert.Equal(t, 1, countPendingNotifications(t, dbPath))
+	queued := pendingNotifications(t, dbPath)
+	require.Len(t, queued, 1)
+	assert.Equal(t, 5, queued[0].NtfyPriority)
+	assert.Contains(t, queued[0].NtfyTags, "quiet-hours")
 }
 
 func TestQueuedNotificationSurvivesManagerRestartAndFlushesWhenReady(t *testing.T) {
@@ -629,6 +694,28 @@ func countPendingNotifications(t *testing.T, dbPath string) int {
 	var count int
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM notification_queue WHERE status = 'pending'`).Scan(&count))
 	return count
+}
+
+func pendingNotifications(t *testing.T, dbPath string) []types.Notification {
+	t.Helper()
+	db, err := sql.Open("sqlite", dbPath)
+	require.NoError(t, err)
+	defer db.Close()
+
+	rows, err := db.Query(`SELECT payload FROM notification_queue WHERE status = 'pending' ORDER BY deliver_at ASC`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var notifications []types.Notification
+	for rows.Next() {
+		var payload string
+		require.NoError(t, rows.Scan(&payload))
+		var notification types.Notification
+		require.NoError(t, json.Unmarshal([]byte(payload), &notification))
+		notifications = append(notifications, notification)
+	}
+	require.NoError(t, rows.Err())
+	return notifications
 }
 
 func markPendingNotificationsReady(t *testing.T, dbPath string) {
