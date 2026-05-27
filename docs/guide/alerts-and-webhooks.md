@@ -22,6 +22,8 @@ Each alert pairs a **container expression** (which containers to watch) with a *
 
 > [!IMPORTANT]
 > Alert and destination configurations are stored in the `/data` directory. You must mount this directory as a volume to persist your notification settings across container restarts.
+>
+> Quiet-hours timezone is configured in the alert settings themselves. Setting `TZ` in the container only aligns runtime local time for logs and UI.
 
 ::: code-group
 

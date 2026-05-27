@@ -1070,6 +1070,7 @@ func (h *handler) testNtfy(w http.ResponseWriter, r *http.Request) {
 // Quiet hours handlers
 func (h *handler) getQuietHours(w http.ResponseWriter, r *http.Request) {
 	qh := h.hostService.GetQuietHours()
+	now := time.Now()
 	writeJSON(w, http.StatusOK, QuietHoursResponse{
 		QuietHoursConfig: qh,
 		ServerNow:        now,

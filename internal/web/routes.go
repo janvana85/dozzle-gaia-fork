@@ -116,6 +116,7 @@ type HostService interface {
 	RemoveCloudConfig()
 	GetQuietHours() notification.QuietHoursConfig
 	SetQuietHours(cfg notification.QuietHoursConfig)
+	ResetCloudDispatcherBreaker()
 }
 
 type handler struct {

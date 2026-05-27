@@ -235,7 +235,7 @@ notifications:
     alert-quiet-start: Ticho od
     alert-quiet-end: Do
     alert-quiet-timezone: Časová zóna
-    alert-quiet-timezone-placeholder: Europe/Prague (prázdné = lokální čas serveru)
+    alert-quiet-timezone-placeholder: Europe/Prague (prázdné = lokální čas serveru/kontejneru)
     alert-quiet-help: Když je zapnuto, tyto tiché hodiny platí jen pro tento alert. Pravidla pro burst eskalaci pořád používají globální konfiguraci.
   settings:
     title: Nastavení
@@ -251,7 +251,7 @@ notifications:
     quiet-topic: Topic pro tiché hodiny (volitelné)
     stacked-uses-quiet-topic: Posílat eskalované alerty ve frontě do topicu pro tiché hodiny
     timezone-section: Časová zóna
-    timezone: Časová zóna
+    timezone: Časová zóna (pro tiché hodiny)
     server-now: Server nyní
     quiet-hours-active-now: Tichá hodina je právě aktivní
   destination-form:

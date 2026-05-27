@@ -169,6 +169,16 @@ func (q *Queue) MarkSent(id int64) error {
 	return err
 }
 
+// UpdateDeliverAt reschedules a pending queued notification.
+func (q *Queue) UpdateDeliverAt(id int64, deliverAt time.Time) error {
+	_, err := q.db.Exec(
+		`UPDATE notification_queue SET deliver_at = ?, attempts = 0 WHERE id = ? AND status = 'pending'`,
+		deliverAt.UTC(),
+		id,
+	)
+	return err
+}
+
 // MarkFailed increments the attempt counter. When attempts reaches 3 the row is
 // marked 'dropped' and will not be retried.
 func (q *Queue) MarkFailed(id int64, attempts int) error {

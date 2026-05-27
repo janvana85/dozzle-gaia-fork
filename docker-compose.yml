@@ -26,6 +26,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
+      - TZ=Europe/Prague
       - DOZZLE_FILTER=name=dozzle
       - DOZZLE_NO_ANALYTICS=1
       - DOZZLE_HOSTNAME=localhost
@@ -64,6 +65,7 @@ services:
     container_name: agent
     command: agent
     environment:
+      - TZ=Europe/Prague
       - DOZZLE_HOSTNAME=production-agent
       - DOZZLE_NO_ANALYTICS=1
     healthcheck:

@@ -228,11 +228,18 @@ toasts:
     title: Copied
     message: Copied to clipboard
 analytics:
+  title: SQL Analytics
   creating_table: Creating temporary table...
   downloading: Fetching container logs... ({size})
   evaluating_query: Evaluating query...
   total_records: Total {count} records.
   showing_first: Showing first {count}.
+  no_results: No rows match your query.
+  columns: Columns
+  examples: Examples
+  example_all: All logs
+  example_count: Row count
+  example_group: Count by {column}
 notifications:
   title: Notifications
   description: Configure where and when to receive alerts
@@ -340,7 +347,7 @@ notifications:
     alert-quiet-start: Quiet from
     alert-quiet-end: Until
     alert-quiet-timezone: Timezone
-    alert-quiet-timezone-placeholder: Europe/Prague (blank = server local)
+    alert-quiet-timezone-placeholder: Europe/Prague (blank = server/container local)
     alert-quiet-help: When enabled, these quiet hours apply only to this alert. Burst escalation rules still use the global config.
   settings:
     title: Settings
@@ -356,7 +363,7 @@ notifications:
     quiet-topic: Quiet topic (optional)
     stacked-uses-quiet-topic: Send escalated queued alerts to quiet topic
     timezone-section: Timezone
-    timezone: Timezone
+    timezone: Timezone (used for quiet hours)
     server-now: Server now
     quiet-hours-active-now: Quiet hours active now
   destination-form:

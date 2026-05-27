@@ -10,6 +10,8 @@ services:
     ports:
       - "8080:8080"
     environment:
+      # Runtime timezone only; quiet-hours timezone is still configured in Dozzle.
+      - TZ=Europe/Prague
       - DOZZLE_NO_ANALYTICS=1
       # Optional: enable simple auth (requires /data/users.yml)
       # - DOZZLE_AUTH_PROVIDER=simple
