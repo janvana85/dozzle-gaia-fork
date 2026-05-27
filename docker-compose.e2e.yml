@@ -1,4 +1,7 @@
 services:
+  simple-auth:
+    volumes:
+      - ./e2e/data/users.yml:/data/users.yml:ro
   playwright:
     image: mcr.microsoft.com/playwright:v1.60.0-jammy
     depends_on:
@@ -18,4 +21,5 @@ services:
     environment:
       - CI=true
       - PLAYWRIGHT_HTML_REPORT=playwright-report
+      - DOZZLE_E2E_DATA=/work/e2e/data
     command: ["/bin/sh", "-lc", "corepack enable && pnpm install --frozen-lockfile --prefer-offline && pnpm exec playwright test"]
