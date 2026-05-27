@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
@@ -54,6 +55,13 @@ type NotificationRuleResponse struct {
 	AlertQuietStart        string              `json:"alertQuietStart,omitempty"`
 	AlertQuietEnd          string              `json:"alertQuietEnd,omitempty"`
 	AlertQuietTimezone     string              `json:"alertQuietTimezone,omitempty"`
+}
+
+type QuietHoursResponse struct {
+	notification.QuietHoursConfig
+	ServerNow      time.Time `json:"serverNow"`
+	ServerNowLabel  string    `json:"serverNowLabel"`
+	ActiveNow      bool      `json:"activeNow"`
 }
 
 type DispatcherResponse struct {
@@ -1061,7 +1069,46 @@ func (h *handler) testNtfy(w http.ResponseWriter, r *http.Request) {
 
 // Quiet hours handlers
 func (h *handler) getQuietHours(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, h.hostService.GetQuietHours())
+	qh := h.hostService.GetQuietHours()
+	writeJSON(w, http.StatusOK, QuietHoursResponse{
+		QuietHoursConfig: qh,
+		ServerNow:        now,
+		ServerNowLabel:   now.Format("2006-01-02 15:04:05 MST -0700"),
+		ActiveNow:        quietHoursActiveNow(qh, now),
+	})
+}
+
+func quietHoursActiveNow(qh notification.QuietHoursConfig, now time.Time) bool {
+	if !qh.Enabled || qh.Start == "" || qh.End == "" {
+		return false
+	}
+
+	loc := time.Local
+	if qh.Timezone != "" {
+		if loaded, err := time.LoadLocation(qh.Timezone); err == nil {
+			loc = loaded
+		}
+	}
+
+	current := now.In(loc)
+	startH, startM := parseTimeOfDay(qh.Start)
+	endH, endM := parseTimeOfDay(qh.End)
+
+	start := time.Date(current.Year(), current.Month(), current.Day(), startH, startM, 0, 0, loc)
+	end := time.Date(current.Year(), current.Month(), current.Day(), endH, endM, 0, 0, loc)
+
+	if start.Before(end) {
+		return !current.Before(start) && current.Before(end)
+	}
+	return !current.Before(start) || current.Before(end)
+}
+
+func parseTimeOfDay(value string) (int, int) {
+	var hour, minute int
+	if _, err := fmt.Sscanf(value, "%d:%d", &hour, &minute); err != nil {
+		return 0, 0
+	}
+	return hour, minute
 }
 
 func (h *handler) setQuietHours(w http.ResponseWriter, r *http.Request) {

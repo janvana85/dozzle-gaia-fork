@@ -118,6 +118,12 @@
                   class="input input-sm focus:input-primary w-full"
                   @change="saveQuietHours"
                 />
+                <p v-if="serverNowLabel" class="text-base-content/50 mt-2 text-xs">
+                  {{ $t("notifications.settings.server-now") }}: {{ serverNowLabel }}
+                </p>
+                <p v-if="quietHoursActiveLabel" class="text-base-content/50 text-xs">
+                  {{ $t("notifications.settings.quiet-hours-active-now") }}: {{ quietHoursActiveLabel }}
+                </p>
               </div>
             </template>
           </div>
@@ -235,7 +241,9 @@ const quietHours = ref({
   stackedPriority: 4,
   quietTopic: "",
   stackedUsesQuietTopic: false,
+  activeNow: false,
 });
+const serverNowLabel = ref("");
 
 function orderedAlerts(data: NotificationRule[]) {
   const byId = new Map(data.map((alert) => [alert.id, alert]));
@@ -262,6 +270,7 @@ async function fetchQuietHours() {
   const res = await fetch(withBase("/api/notifications/quiet-hours"));
   if (res.ok) {
     const data = await res.json();
+    serverNowLabel.value = data.serverNowLabel || "";
     quietHours.value = {
       ...data,
       stackWindow: Math.round((data.stackWindow || 900) / 60),
@@ -331,6 +340,11 @@ watch(
   () => route.query.action,
   (action) => consumeAction(action),
 );
+
+const quietHoursActiveLabel = computed(() => {
+  if (typeof quietHours.value.activeNow !== "boolean") return "";
+  return quietHours.value.activeNow ? "Yes" : "No";
+});
 
 // Local state
 const filter = ref<"all" | "enabled" | "paused">("all");

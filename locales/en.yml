@@ -357,6 +357,8 @@ notifications:
     stacked-uses-quiet-topic: Send escalated queued alerts to quiet topic
     timezone-section: Timezone
     timezone: Timezone
+    server-now: Server now
+    quiet-hours-active-now: Quiet hours active now
   destination-form:
     create-title: Add Destination
     edit-title: Edit Destination

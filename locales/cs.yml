@@ -252,6 +252,8 @@ notifications:
     stacked-uses-quiet-topic: Posílat eskalované alerty ve frontě do topicu pro tiché hodiny
     timezone-section: Časová zóna
     timezone: Časová zóna
+    server-now: Server nyní
+    quiet-hours-active-now: Tichá hodina je právě aktivní
   destination-form:
     create-title: Přidat cíl
     edit-title: Upravit cíl

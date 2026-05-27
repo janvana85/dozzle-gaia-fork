@@ -475,6 +475,72 @@ func TestPerAlertQuietHoursOverrideGlobalQuietHours(t *testing.T) {
 	assert.Equal(t, 5, dispatcher.notifications()[0].NtfyPriority)
 }
 
+func TestPerAlertQuietHoursQueuesToSQLiteWhenActive(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "notifications.db")
+	manager, _, cancel := newNotificationTestManagerWithDB(t, dbPath)
+	defer cancel()
+	defer manager.queue.Close()
+
+	start, end := quietWindowContainingNow()
+	dispatcher := &recordingDispatcher{}
+	dispatcherID := manager.AddDispatcher(dispatcher)
+	sub := &Subscription{
+		ID:                 1,
+		Name:               "per-alert-quiet-hours",
+		Enabled:            true,
+		DispatcherID:       dispatcherID,
+		NtfyPriority:       5,
+		QuietPriority:      1,
+		AlertQuietEnabled:  true,
+		AlertQuietStart:    start,
+		AlertQuietEnd:      end,
+		AlertQuietTimezone: "UTC",
+	}
+	manager.subscriptions.Store(sub.ID, sub)
+
+	manager.sendOrQueue(dispatcher, notificationForTest(sub), sub)
+
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, int32(0), dispatcher.count.Load())
+	assert.Equal(t, 1, countPendingNotifications(t, dbPath))
+	queued := pendingNotifications(t, dbPath)
+	require.Len(t, queued, 1)
+	assert.Contains(t, queued[0].NtfyTags, "quiet-hours")
+}
+
+func TestBypassQuietHoursSendsImmediatelyEvenWhenPerAlertQuietHoursActive(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "notifications.db")
+	manager, _, cancel := newNotificationTestManagerWithDB(t, dbPath)
+	defer cancel()
+	defer manager.queue.Close()
+
+	start, end := quietWindowContainingNow()
+	dispatcher := &recordingDispatcher{}
+	dispatcherID := manager.AddDispatcher(dispatcher)
+	sub := &Subscription{
+		ID:                 1,
+		Name:               "bypass-per-alert-quiet-hours",
+		Enabled:            true,
+		DispatcherID:       dispatcherID,
+		NtfyPriority:       5,
+		QuietPriority:      1,
+		BypassQuietHours:   true,
+		AlertQuietEnabled:  true,
+		AlertQuietStart:    start,
+		AlertQuietEnd:      end,
+		AlertQuietTimezone: "UTC",
+	}
+	manager.subscriptions.Store(sub.ID, sub)
+
+	manager.sendOrQueue(dispatcher, notificationForTest(sub), sub)
+
+	require.Eventually(t, func() bool {
+		return dispatcher.count.Load() == 1
+	}, time.Second, 10*time.Millisecond)
+	assert.Equal(t, 0, countPendingNotifications(t, dbPath))
+	assert.Equal(t, 5, dispatcher.notifications()[0].NtfyPriority)
+}
+
 func TestQuietHoursQueuesRepeatedAlertWithEscalatedPriority(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "notifications.db")
 	manager, _, cancel := newNotificationTestManagerWithDB(t, dbPath)
@@ -804,6 +870,13 @@ func quietWindowOutsideNow() (string, string) {
 	now := time.Now().UTC()
 	start := now.Add(2 * time.Hour)
 	end := start.Add(time.Hour)
+	return start.Format("15:04"), end.Format("15:04")
+}
+
+func quietWindowContainingNow() (string, string) {
+	now := time.Now().UTC()
+	start := now.Add(-time.Hour)
+	end := now.Add(time.Hour)
 	return start.Format("15:04"), end.Format("15:04")
 }
 
