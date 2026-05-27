@@ -151,6 +151,10 @@ jobs:
           docker tag "${DOZZLE_IMAGE_PREFIX}-dozzle:latest" "${DOZZLE_IMAGE_PREFIX}-remote:latest"
           docker tag "${DOZZLE_IMAGE_PREFIX}-dozzle:latest" "${DOZZLE_IMAGE_PREFIX}-with-agent:latest"
           docker tag "${DOZZLE_IMAGE_PREFIX}-dozzle:latest" "${DOZZLE_IMAGE_PREFIX}-agent:latest"
+      - name: Debug Docker images
+        run: |
+          docker image ls --format '{{.Repository}}:{{.Tag}}' | rg '^dozzle-gaia-fork-' || true
+          docker compose -f docker-compose.yml -f docker-compose.e2e.yml config
       - name: Run Playwright tests
         run: docker compose -f docker-compose.yml -f docker-compose.e2e.yml up --no-build --exit-code-from playwright
       - uses: actions/upload-artifact@v7
