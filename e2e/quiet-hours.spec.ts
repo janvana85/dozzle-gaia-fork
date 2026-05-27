@@ -64,3 +64,36 @@ test("shows active quiet-hours status from the notifications api", async ({ page
   await expect(page.getByText("Quiet hours active now:")).toBeVisible();
   await expect(page.getByText("Yes")).toBeVisible();
 });
+
+test("falls back to server local when timezone is blank", async ({ page }) => {
+  await page.route("**/api/notifications/quiet-hours", async (route) => {
+    const method = route.request().method();
+    if (method === "GET") {
+      await route.fulfill({
+        json: {
+          enabled: true,
+          start: "00:00",
+          end: "23:59",
+          timezone: "",
+          stackThreshold: 3,
+          stackWindow: 15,
+          stackedPriority: 4,
+          quietTopic: "",
+          stackedUsesQuietTopic: false,
+          serverNow: "2026-05-28T10:30:00Z",
+          serverNowLabel: "2026-05-28 10:30:00 UTC +0000",
+          activeNow: false,
+        },
+      });
+      return;
+    }
+
+    await route.fulfill({ json: {} });
+  });
+
+  await page.goto("http://dozzle:8080/notifications");
+
+  await expect(page.getByLabel("Timezone (used for quiet hours)")).toHaveValue("");
+  await expect(page.getByText("Server now: 2026-05-28 10:30:00 UTC +0000")).toBeVisible();
+  await expect(page.getByText("Quiet hours active now: No")).toBeVisible();
+});

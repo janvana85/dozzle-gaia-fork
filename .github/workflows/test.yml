@@ -1,0 +1,137 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        name: Install pnpm
+      - uses: actions/setup-node@v6
+        name: Install Node
+        with:
+          node-version: 24.16.0
+      - run: corepack enable
+      - run: pnpm --version
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.16.0
+          cache: "pnpm"
+          cache-dependency-path: "**/pnpm-lock.yaml"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+      - name: Run Typecheck
+        run: pnpm run typecheck
+
+  npm-test:
+    name: JavaScript Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        name: Install pnpm
+      - run: corepack enable
+      - run: pnpm --version
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.16.0
+          cache: "pnpm"
+          cache-dependency-path: "**/pnpm-lock.yaml"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+      - name: Run Tests
+        run: pnpm run test -- --outputTruncateLength=500
+
+  go-test:
+    name: Go Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.3"
+          check-latest: true
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install gRPC and Go
+        run: |
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+      - name: Run Go Tests with Coverage
+        run: make test
+
+  staticcheck:
+    runs-on: ubuntu-latest
+    name: Go Staticcheck
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.3"
+          check-latest: true
+      - name: Generate dependencies
+        run: make fake_assets shared_key.pem shared_cert.pem
+      - name: Stactic checker
+        uses: dominikh/staticcheck-action@v1.4.1
+        with:
+          install-go: false
+
+  int-test:
+    name: Integration Tests
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        name: Install pnpm
+      - uses: actions/setup-node@v6
+        name: Install Node
+        with:
+          node-version: 24.16.0
+      - run: corepack enable
+      - run: pnpm --version
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.16.0
+          cache: "pnpm"
+          cache-dependency-path: "**/pnpm-lock.yaml"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Generate certs
+        run: make shared_key.pem shared_cert.pem
+      - name: Build
+        uses: docker/bake-action@v7
+        with:
+          source: .
+          load: true
+          set: |
+            *.cache-from=type=gha
+            *.cache-to=type=gha,mode=max
+      - name: Run Playwright tests
+        run: docker compose -f docker-compose.yml -f docker-compose.e2e.yml up --exit-code-from playwright
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30

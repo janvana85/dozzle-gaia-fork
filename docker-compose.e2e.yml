@@ -1,0 +1,21 @@
+services:
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.60.0-jammy
+    depends_on:
+      dozzle:
+        condition: service_started
+      custom_base:
+        condition: service_started
+      simple-auth:
+        condition: service_started
+      remote:
+        condition: service_started
+      dozzle-with-agent:
+        condition: service_started
+    working_dir: /work
+    volumes:
+      - ./:/work
+    environment:
+      - CI=true
+      - PLAYWRIGHT_HTML_REPORT=playwright-report
+    command: ["/bin/sh", "-lc", "corepack enable && pnpm install --frozen-lockfile --prefer-offline && pnpm exec playwright test"]
