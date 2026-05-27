@@ -10,9 +10,10 @@ test("persists quiet-hours settings through the notifications api", async ({ pag
   const enabled = page.getByLabel("Enable Quiet Hours");
   await enabled.check();
 
-  const start = page.getByLabel("Start");
-  const end = page.getByLabel("End");
-  const timezone = page.getByLabel("Timezone (used for quiet hours)");
+  const quietTimeInputs = page.locator('input[type="time"]');
+  const start = quietTimeInputs.first();
+  const end = quietTimeInputs.nth(1);
+  const timezone = page.locator('input[placeholder="Europe/Prague"]');
 
   await start.fill("21:15");
   await end.fill("06:45");
@@ -62,7 +63,7 @@ test("shows active quiet-hours status from the notifications api", async ({ page
 
   await expect(page.getByText("Server now: 2026-05-28 10:30:00 CEST +0200")).toBeVisible();
   await expect(page.getByText("Quiet hours active now:")).toBeVisible();
-  await expect(page.getByText("Yes")).toBeVisible();
+  await expect(page.getByText("Quiet hours active now: Yes", { exact: true })).toBeVisible();
 });
 
 test("falls back to server local when timezone is blank", async ({ page }) => {
@@ -93,7 +94,7 @@ test("falls back to server local when timezone is blank", async ({ page }) => {
 
   await page.goto("http://dozzle:8080/notifications");
 
-  await expect(page.getByLabel("Timezone (used for quiet hours)")).toHaveValue("");
+  await expect(page.locator('input[placeholder="Europe/Prague"]')).toHaveValue("");
   await expect(page.getByText("Server now: 2026-05-28 10:30:00 UTC +0000")).toBeVisible();
   await expect(page.getByText("Quiet hours active now: No")).toBeVisible();
 });
