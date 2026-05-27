@@ -28,9 +28,20 @@ permissions:
   contents: read
 
 jobs:
+  build-image:
+    name: Build image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Build docker images
+        run: docker compose build
+
   typecheck:
     name: Typecheck
     if: ${{ inputs.run_typecheck }}
+    needs: build-image
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -55,6 +66,7 @@ jobs:
   npm-test:
     name: JavaScript Tests
     if: ${{ inputs.run_js_tests }}
+    needs: build-image
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -75,6 +87,7 @@ jobs:
   go-test:
     name: Go Tests
     if: ${{ inputs.run_go_tests }}
+    needs: build-image
     runs-on: ubuntu-latest
     steps:
       - name: Install Go
@@ -97,6 +110,7 @@ jobs:
 
   staticcheck:
     if: ${{ inputs.run_staticcheck }}
+    needs: build-image
     runs-on: ubuntu-latest
     name: Go Staticcheck
     steps:
@@ -117,6 +131,7 @@ jobs:
   int-test:
     name: Integration Tests
     if: ${{ inputs.run_integration_tests }}
+    needs: build-image
     timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
@@ -140,16 +155,8 @@ jobs:
         uses: docker/setup-buildx-action@v4
       - name: Generate certs
         run: make shared_key.pem shared_cert.pem
-      - name: Build
-        uses: docker/bake-action@v7
-        with:
-          source: .
-          load: true
-          set: |
-            *.cache-from=type=gha
-            *.cache-to=type=gha,mode=max
       - name: Run Playwright tests
-        run: docker compose -f docker-compose.yml -f docker-compose.e2e.yml up --exit-code-from playwright
+        run: docker compose -f docker-compose.yml -f docker-compose.e2e.yml up --no-build --exit-code-from playwright
       - uses: actions/upload-artifact@v7
         if: always()
         with:
