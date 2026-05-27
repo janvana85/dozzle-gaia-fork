@@ -1,5 +1,6 @@
 services:
   custom_base:
+    image: ${DOZZLE_IMAGE_PREFIX:-dozzle-gaia-fork}-custom_base:latest
     container_name: custom_base
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -13,6 +14,7 @@ services:
     build:
       context: .
   simple-auth:
+    image: ${DOZZLE_IMAGE_PREFIX:-dozzle-gaia-fork}-simple-auth:latest
     container_name: simple-auth
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -22,6 +24,7 @@ services:
     build:
       context: .
   dozzle:
+    image: ${DOZZLE_IMAGE_PREFIX:-dozzle-gaia-fork}-dozzle:latest
     container_name: dozzle
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -36,6 +39,7 @@ services:
     build:
       context: .
   remote:
+    image: ${DOZZLE_IMAGE_PREFIX:-dozzle-gaia-fork}-remote:latest
     container_name: remote
     environment:
       - DOZZLE_REMOTE_HOST=tcp://proxy:2375|remote-host
@@ -49,6 +53,7 @@ services:
       proxy:
         condition: service_healthy
   dozzle-with-agent:
+    image: ${DOZZLE_IMAGE_PREFIX:-dozzle-gaia-fork}-with-agent:latest
     container_name: with-agent
     environment:
       - DOZZLE_REMOTE_AGENT=agent:7007
@@ -62,6 +67,7 @@ services:
       agent:
         condition: service_healthy
   agent:
+    image: ${DOZZLE_IMAGE_PREFIX:-dozzle-gaia-fork}-agent:latest
     container_name: agent
     command: agent
     environment:

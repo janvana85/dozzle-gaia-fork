@@ -119,6 +119,8 @@ jobs:
     if: ${{ inputs.run_integration_tests }}
     timeout-minutes: 60
     runs-on: ubuntu-latest
+    env:
+      DOZZLE_IMAGE_PREFIX: dozzle-gaia-fork
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
