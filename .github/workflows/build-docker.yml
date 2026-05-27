@@ -2,6 +2,11 @@ name: Docker
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Push the built image to Docker Hub
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -54,6 +59,7 @@ jobs:
 
   publish:
     name: Publish image
+    if: ${{ inputs.publish }}
     needs: prepare
     runs-on: ubuntu-latest
     environment:

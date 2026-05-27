@@ -2,6 +2,27 @@ name: Test
 
 on:
   workflow_dispatch:
+    inputs:
+      run_typecheck:
+        description: Run Typecheck job
+        type: boolean
+        default: true
+      run_js_tests:
+        description: Run JavaScript test job
+        type: boolean
+        default: true
+      run_go_tests:
+        description: Run Go test job
+        type: boolean
+        default: true
+      run_staticcheck:
+        description: Run staticcheck job
+        type: boolean
+        default: true
+      run_integration_tests:
+        description: Run Playwright integration job
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -9,6 +30,7 @@ permissions:
 jobs:
   typecheck:
     name: Typecheck
+    if: ${{ inputs.run_typecheck }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -32,6 +54,7 @@ jobs:
 
   npm-test:
     name: JavaScript Tests
+    if: ${{ inputs.run_js_tests }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -51,6 +74,7 @@ jobs:
 
   go-test:
     name: Go Tests
+    if: ${{ inputs.run_go_tests }}
     runs-on: ubuntu-latest
     steps:
       - name: Install Go
@@ -72,6 +96,7 @@ jobs:
         run: make test
 
   staticcheck:
+    if: ${{ inputs.run_staticcheck }}
     runs-on: ubuntu-latest
     name: Go Staticcheck
     steps:
@@ -91,6 +116,7 @@ jobs:
 
   int-test:
     name: Integration Tests
+    if: ${{ inputs.run_integration_tests }}
     timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
