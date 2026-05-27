@@ -1,9 +1,6 @@
 name: Push Smoke
 
 on:
-  push:
-    branches:
-      - master
   workflow_dispatch:
 
 jobs:
