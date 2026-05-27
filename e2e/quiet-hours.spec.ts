@@ -31,3 +31,36 @@ test("persists quiet-hours settings through the notifications api", async ({ pag
   await expect(page.getByText("Server now")).toBeVisible();
   await expect(page.getByText("Quiet hours active now")).toBeVisible();
 });
+
+test("shows active quiet-hours status from the notifications api", async ({ page }) => {
+  await page.route("**/api/notifications/quiet-hours", async (route) => {
+    const method = route.request().method();
+    if (method === "GET") {
+      await route.fulfill({
+        json: {
+          enabled: true,
+          start: "00:00",
+          end: "23:59",
+          timezone: "Europe/Prague",
+          stackThreshold: 3,
+          stackWindow: 15,
+          stackedPriority: 4,
+          quietTopic: "",
+          stackedUsesQuietTopic: false,
+          serverNow: "2026-05-28T10:30:00+02:00",
+          serverNowLabel: "2026-05-28 10:30:00 CEST +0200",
+          activeNow: true,
+        },
+      });
+      return;
+    }
+
+    await route.fulfill({ json: {} });
+  });
+
+  await page.goto("http://dozzle:8080/notifications");
+
+  await expect(page.getByText("Server now: 2026-05-28 10:30:00 CEST +0200")).toBeVisible();
+  await expect(page.getByText("Quiet hours active now:")).toBeVisible();
+  await expect(page.getByText("Yes")).toBeVisible();
+});
