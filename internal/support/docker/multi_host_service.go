@@ -307,7 +307,7 @@ func (m *MultiHostService) StartNotificationManager(ctx context.Context) error {
 	storeCh := make(chan *container.LogEvent, 1000)
 	cacheDir := os.Getenv("DOZZLE_LOG_CACHE_DIR")
 	if cacheDir == "" {
-		cacheDir = "/opt/dozzle-gaia/cache"
+		cacheDir = "./cache"
 	}
 	m.logStore = log_storage.NewStore(cacheDir)
 	m.logStore.Start(ctx, storeCh)

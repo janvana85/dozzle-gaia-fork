@@ -6,13 +6,15 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - dozzle-data:/data
+      - ./data:/data
+      - ./cache:/cache
     ports:
       - "8080:8080"
     environment:
       # Runtime timezone only; quiet-hours timezone is still configured in Dozzle.
       - TZ=Europe/Prague
       - DOZZLE_NO_ANALYTICS=1
+      - DOZZLE_LOG_CACHE_DIR=/cache
       # Optional: enable simple auth (requires /data/users.yml)
       # - DOZZLE_AUTH_PROVIDER=simple
       # Optional: custom hostname shown in the UI
@@ -21,9 +23,6 @@ services:
       # - DOZZLE_LEVEL=info
     networks:
       - npm-bridge
-
-volumes:
-  dozzle-data:
 
 networks:
   npm-bridge:
