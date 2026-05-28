@@ -61,8 +61,13 @@ func NewManager(listener *ContainerLogListener, statsListener *ContainerStatsLis
 		if err != nil {
 			log.Warn().Err(err).Str("path", dbPath).Msg("Failed to open notification queue; persistence disabled")
 		} else {
-			m.queue = q
-			go m.drainQueue()
+			if err := q.Healthcheck(ctx); err != nil {
+				log.Warn().Err(err).Str("path", dbPath).Msg("Notification queue healthcheck failed; persistence disabled")
+				_ = q.Close()
+			} else {
+				m.queue = q
+				go m.drainQueue()
+			}
 		}
 	}
 

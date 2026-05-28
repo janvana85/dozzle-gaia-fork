@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/amir20/dozzle/types"
@@ -94,6 +95,60 @@ func NewQueue(dbPath string) (*Queue, error) {
 // Close closes the underlying database connection.
 func (q *Queue) Close() error {
 	return q.db.Close()
+}
+
+// Healthcheck verifies the queue database can execute a write and read round-trip.
+func (q *Queue) Healthcheck(ctx context.Context) error {
+	tx, err := q.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin healthcheck tx: %w", err)
+	}
+	defer tx.Rollback() // rollback is safe even after commit/no-op and keeps the probe side-effect free
+
+	marker := fmt.Sprintf("healthcheck-%d", rand.Int63())
+	now := time.Now().UTC()
+	notification := types.Notification{
+		ID:        marker,
+		Type:      types.LogNotification,
+		Detail:    "healthcheck",
+		Log:       &types.NotificationLog{Message: "healthcheck"},
+		Timestamp: now,
+		Subscription: types.SubscriptionConfig{
+			ID:           -1,
+			DispatcherID: -1,
+			Name:         "healthcheck",
+			Enabled:      true,
+		},
+	}
+	payload, err := json.Marshal(notification)
+	if err != nil {
+		return fmt.Errorf("marshal healthcheck notification: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO notification_queue
+		 (subscription_id, dispatcher_id, payload, ntfy_topic, ntfy_priority, created_at, deliver_at, attempts, status)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'pending')`,
+		notification.Subscription.ID,
+		notification.Subscription.DispatcherID,
+		string(payload),
+		notification.NtfyTopic,
+		notification.NtfyPriority,
+		now,
+		now,
+	); err != nil {
+		return fmt.Errorf("insert healthcheck row: %w", err)
+	}
+
+	var count int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM notification_queue WHERE payload = ?`, string(payload)).Scan(&count); err != nil {
+		return fmt.Errorf("verify healthcheck row: %w", err)
+	}
+	if count != 1 {
+		return fmt.Errorf("unexpected healthcheck row count %d", count)
+	}
+
+	return nil
 }
 
 // Enqueue stores a notification that should be delivered at deliverAt.
