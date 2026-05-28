@@ -371,9 +371,6 @@ func (s *Subscription) MatchesLog(l types.NotificationLog) bool {
 
 	result, err := expr.Run(s.LogProgram, l)
 	if err != nil {
-		// Type mismatches are expected when expression doesn't match log type
-		// e.g., "message contains X" on JSON logs or "message.field" on string logs
-		log.Debug().Err(err).Str("expression", s.LogExpression).Msg("log expression evaluation error")
 		return false
 	}
 
