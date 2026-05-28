@@ -44,7 +44,6 @@ jobs:
           images: janvana85/dozzle-gaia
           tags: |
             type=raw,value=${{ inputs.tag }}
-            type=sha,prefix=sha-
 
       - name: Build and push
         uses: docker/build-push-action@v7.2.0
