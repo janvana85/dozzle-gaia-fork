@@ -450,6 +450,16 @@ func (m *Manager) effectiveQuietHours(sub *Subscription) (inQuiet bool, quietEnd
 func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notification, sub *Subscription, burstEscalated ...bool) {
 	inQuiet, quietEnd := m.effectiveQuietHours(sub)
 
+	if sub.BypassQuietHours {
+		log.Debug().
+			Int("subscription_id", sub.ID).
+			Str("subscription", sub.Name).
+			Str("container_id", notification.Container.ID).
+			Str("container", notification.Container.Name).
+			Str("reason", "bypass-quiet-hours").
+			Msg("Sending notification immediately")
+	}
+
 	if inQuiet {
 		notification.NtfyTags = appendUniqueTag(notification.NtfyTags, "quiet-hours")
 
@@ -481,11 +491,27 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 		if sub.QuietPriority > 0 {
 			notification.NtfyPriority = sub.QuietPriority
 		}
+		log.Debug().
+			Int("subscription_id", sub.ID).
+			Str("subscription", sub.Name).
+			Str("container_id", notification.Container.ID).
+			Str("container", notification.Container.Name).
+			Int("priority", notification.NtfyPriority).
+			Str("reason", "quiet-hours-no-queue").
+			Msg("Sending notification immediately during quiet hours")
 	}
 
 	// Hold window only applies after quiet-hours policy has allowed the alert.
 	if sub.HoldClearWindow > 0 && m.queue != nil {
 		deliverAt := time.Now().Add(time.Duration(sub.HoldClearWindow) * time.Second)
+		log.Debug().
+			Int("subscription_id", sub.ID).
+			Str("subscription", sub.Name).
+			Str("container_id", notification.Container.ID).
+			Str("container", notification.Container.Name).
+			Time("deliver_at", deliverAt).
+			Str("reason", "hold-window").
+			Msg("Queued notification")
 		if err := m.queue.Enqueue(notification, deliverAt); err != nil {
 			log.Warn().Err(err).Msg("Failed to enqueue hold-window notification")
 		}
