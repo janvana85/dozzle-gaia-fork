@@ -52,7 +52,9 @@ RUN pnpm build
 
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
-RUN apk add --no-cache ca-certificates openssl && mkdir /dozzle
+RUN apk add --no-cache ca-certificates openssl tzdata && \
+    cp /usr/share/zoneinfo/Europe/Prague /etc/localtime && \
+    mkdir /dozzle
 
 WORKDIR /dozzle
 
@@ -86,9 +88,13 @@ RUN mkdir /data
 
 FROM scratch
 
+ENV TZ=Europe/Prague
+
 COPY --from=builder /data /data
 COPY --from=builder /tmp /tmp
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+COPY --from=builder /etc/localtime /etc/localtime
 COPY --from=builder /dozzle/dozzle /dozzle
 
 EXPOSE 8080
