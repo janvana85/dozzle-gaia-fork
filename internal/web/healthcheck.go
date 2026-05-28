@@ -11,7 +11,7 @@ import (
 )
 
 func (h *handler) healthcheck(w http.ResponseWriter, r *http.Request) {
-	log.Debug().Msg("Executing healthcheck")
+	log.Trace().Msg("Executing healthcheck")
 
 	clients := h.hostService.LocalClients()
 

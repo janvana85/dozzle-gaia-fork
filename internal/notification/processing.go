@@ -177,13 +177,24 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 		now := time.Now()
 		sub.LastTriggeredAt.Store(&now)
 
-		log.Debug().Str("containerID", notificationContainer.ID).Interface("log", notificationLog.Message).Msg("Matched subscription")
+		notificationID := fmt.Sprintf("%s-%d", c.ID, time.Now().UnixNano())
+
+		log.Info().
+			Str("alert_type", string(types.LogNotification)).
+			Str("action", "hit").
+			Int("subscription_id", sub.ID).
+			Str("subscription", sub.Name).
+			Str("container_id", notificationContainer.ID).
+			Str("container", notificationContainer.Name).
+			Str("notification_id", notificationID).
+			Interface("log", notificationLog.Message).
+			Msg("Alert hit")
 
 		priority := sub.NtfyPriority
 		priority, burstEscalated := sub.DetectBurst(logEvent.ContainerID, priority)
 
 		notification := types.Notification{
-			ID:           fmt.Sprintf("%s-%d", c.ID, time.Now().UnixNano()),
+			ID:           notificationID,
 			Type:         types.LogNotification,
 			Detail:       formatLogMessage(notificationLog.Message),
 			Container:    notificationContainer,
@@ -456,11 +467,18 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 		now := time.Now()
 		sub.LastTriggeredAt.Store(&now)
 
-		log.Debug().
-			Str("containerID", event.Event.ActorID).
-			Str("event", event.Event.Name).
+		notificationID := fmt.Sprintf("%s-event-%d", event.Event.ActorID, time.Now().UnixNano())
+
+		log.Info().
+			Str("alert_type", string(types.EventNotification)).
+			Str("action", "hit").
+			Int("subscription_id", sub.ID).
 			Str("subscription", sub.Name).
-			Msg("Event alert triggered")
+			Str("container_id", event.Event.ActorID).
+			Str("container", notificationContainer.Name).
+			Str("notification_id", notificationID).
+			Str("event", event.Event.Name).
+			Msg("Alert hit")
 
 		detail := fmt.Sprintf("Container event: %s", event.Event.Name)
 		if exitCode, ok := event.Event.ActorAttributes["exitCode"]; ok && event.Event.Name == "die" {
@@ -470,7 +488,7 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 		priority, burstEscalated := sub.DetectBurst(event.Event.ActorID, sub.NtfyPriority)
 
 		notification := types.Notification{
-			ID:           fmt.Sprintf("%s-event-%d", event.Event.ActorID, time.Now().UnixNano()),
+			ID:           notificationID,
 			Type:         types.EventNotification,
 			Detail:       detail,
 			Container:    notificationContainer,
@@ -603,11 +621,16 @@ func (m *Manager) fireRestartLoopAlert(sub *Subscription, containerID string, no
 		Timestamp: time.Now(),
 	}
 
-	log.Debug().
-		Str("containerID", containerID).
+	log.Info().
+		Str("alert_type", string(types.EventNotification)).
+		Str("action", "hit").
+		Int("subscription_id", sub.ID).
 		Str("subscription", sub.Name).
+		Str("container_id", containerID).
+		Str("container", notificationContainer.Name).
+		Str("notification_id", notification.ID).
 		Str("reason", detail).
-		Msg("Restart loop alert triggered")
+		Msg("Alert hit")
 
 	if d, ok := m.getDispatcher(sub.DispatcherID); ok {
 		m.sendOrQueue(d, notification, sub, burstEscalated)
@@ -653,13 +676,16 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 	inQuiet, quietEnd := m.effectiveQuietHours(sub)
 
 	if sub.BypassQuietHours {
-		log.Debug().
+		log.Info().
+			Str("alert_type", string(types.LogNotification)).
+			Str("action", "send_now").
 			Int("subscription_id", sub.ID).
 			Str("subscription", sub.Name).
 			Str("container_id", notification.Container.ID).
 			Str("container", notification.Container.Name).
+			Str("notification_id", notification.ID).
 			Str("reason", "bypass-quiet-hours").
-			Msg("Sending notification immediately")
+			Msg("Notification send requested")
 	}
 
 	if inQuiet {
@@ -675,14 +701,17 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 				pendingCount = 0
 			}
 			deliverAt := quietEnd.Add(time.Duration(pendingCount) * 2 * time.Second)
-			log.Debug().
+			log.Info().
+				Str("alert_type", string(notification.Type)).
+				Str("action", "queued").
 				Int("subscription_id", sub.ID).
 				Str("subscription", sub.Name).
 				Str("container_id", notification.Container.ID).
 				Str("container", notification.Container.Name).
+				Str("notification_id", notification.ID).
 				Time("deliver_at", deliverAt).
 				Str("reason", "quiet-hours").
-				Msg("Queued notification")
+				Msg("Notification queued")
 			if err := m.queue.Enqueue(notification, deliverAt); err != nil {
 				log.Warn().Err(err).Msg("Failed to enqueue quiet-hours notification")
 			}
@@ -693,27 +722,33 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 		if sub.QuietPriority > 0 {
 			notification.NtfyPriority = sub.QuietPriority
 		}
-		log.Debug().
+		log.Info().
+			Str("alert_type", string(types.EventNotification)).
+			Str("action", "send_now").
 			Int("subscription_id", sub.ID).
 			Str("subscription", sub.Name).
 			Str("container_id", notification.Container.ID).
 			Str("container", notification.Container.Name).
+			Str("notification_id", notification.ID).
 			Int("priority", notification.NtfyPriority).
 			Str("reason", "quiet-hours-no-queue").
-			Msg("Sending notification immediately during quiet hours")
+			Msg("Notification send requested")
 	}
 
 	// Hold window only applies after quiet-hours policy has allowed the alert.
 	if sub.HoldClearWindow > 0 && m.queue != nil {
 		deliverAt := time.Now().Add(time.Duration(sub.HoldClearWindow) * time.Second)
-		log.Debug().
+		log.Info().
+			Str("alert_type", string(types.LogNotification)).
+			Str("action", "queued").
 			Int("subscription_id", sub.ID).
 			Str("subscription", sub.Name).
 			Str("container_id", notification.Container.ID).
 			Str("container", notification.Container.Name).
+			Str("notification_id", notification.ID).
 			Time("deliver_at", deliverAt).
 			Str("reason", "hold-window").
-			Msg("Queued notification")
+			Msg("Notification queued")
 		if err := m.queue.Enqueue(notification, deliverAt); err != nil {
 			log.Warn().Err(err).Msg("Failed to enqueue hold-window notification")
 		}
@@ -794,7 +829,13 @@ func (m *Manager) applyQuietHoursBurstEscalation(notification *types.Notificatio
 // sendWithRetry sends a notification with up to 3 attempts and quadratic backoff (30s, 120s).
 func (m *Manager) sendWithRetry(d dispatcher.Dispatcher, notification types.Notification, dispatcherID int) {
 	if !m.isSubscriptionActive(notification.Subscription.ID) {
-		log.Debug().Int("subscription", notification.Subscription.ID).Msg("Notification dropped: subscription inactive")
+		log.Info().
+			Str("alert_type", string(types.EventNotification)).
+			Str("action", "drop").
+			Str("reason", "subscription-inactive").
+			Str("notification_id", notification.ID).
+			Int("subscription_id", notification.Subscription.ID).
+			Msg("Notification dropped")
 		return
 	}
 
@@ -808,7 +849,13 @@ func (m *Manager) sendWithRetry(d dispatcher.Dispatcher, notification types.Noti
 
 	for attempt := 1; attempt <= 3; attempt++ {
 		if !m.isSubscriptionActive(notification.Subscription.ID) {
-			log.Debug().Int("subscription", notification.Subscription.ID).Msg("Notification retry stopped: subscription inactive")
+			log.Info().
+				Str("alert_type", string(notification.Type)).
+				Str("action", "drop").
+				Str("reason", "subscription-inactive").
+				Str("notification_id", notification.ID).
+				Int("subscription_id", notification.Subscription.ID).
+				Msg("Notification dropped")
 			return
 		}
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
@@ -819,7 +866,9 @@ func (m *Manager) sendWithRetry(d dispatcher.Dispatcher, notification types.Noti
 		}
 		if attempt < 3 {
 			backoff := time.Duration(attempt*attempt) * 30 * time.Second
-			log.Warn().Err(err).Int("attempt", attempt).Int("dispatcher", dispatcherID).
+			log.Warn().Err(err).Str("action", "retry").Int("attempt", attempt).Int("dispatcher_id", dispatcherID).
+				Str("notification_id", notification.ID).
+				Int("subscription_id", notification.Subscription.ID).
 				Dur("backoff", backoff).Msg("Notification send failed, retrying")
 			select {
 			case <-m.ctx.Done():
@@ -827,7 +876,10 @@ func (m *Manager) sendWithRetry(d dispatcher.Dispatcher, notification types.Noti
 			case <-time.After(backoff):
 			}
 		} else {
-			log.Error().Err(err).Int("dispatcher", dispatcherID).Msg("Notification failed after 3 attempts")
+			log.Error().Err(err).Str("action", "failed").Int("dispatcher_id", dispatcherID).
+				Str("notification_id", notification.ID).
+				Int("subscription_id", notification.Subscription.ID).
+				Msg("Notification failed after 3 attempts")
 		}
 	}
 }

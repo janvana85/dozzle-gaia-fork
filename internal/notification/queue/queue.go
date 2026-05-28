@@ -170,6 +170,17 @@ func (q *Queue) Enqueue(notification types.Notification, deliverAt time.Time) er
 		time.Now().UTC(),
 		deliverAt.UTC(),
 	)
+	if err == nil {
+		log.Info().
+			Str("alert_type", string(notification.Type)).
+			Str("action", "persisted").
+			Int("subscription_id", notification.Subscription.ID).
+			Str("subscription", notification.Subscription.Name).
+			Str("notification_id", notification.ID).
+			Str("status", "pending").
+			Time("deliver_at", deliverAt.UTC()).
+			Msg("Notification persisted to SQLite queue")
+	}
 	return err
 }
 
@@ -215,12 +226,22 @@ func (q *Queue) DrainReady(ctx context.Context) ([]QueuedNotification, error) {
 		}
 		result = append(result, qn)
 	}
+	if len(result) > 0 {
+		log.Info().Str("action", "drain").Int("count", len(result)).Msg("Notification queue drained ready items")
+	}
 	return result, rows.Err()
 }
 
 // MarkSent marks a queued notification as successfully sent.
 func (q *Queue) MarkSent(id int64) error {
 	_, err := q.db.Exec(`UPDATE notification_queue SET status = 'sent' WHERE id = ?`, id)
+	if err == nil {
+		log.Info().
+			Str("action", "sent").
+			Int64("queue_id", id).
+			Str("status", "sent").
+			Msg("Queued notification delivered")
+	}
 	return err
 }
 
@@ -231,6 +252,13 @@ func (q *Queue) UpdateDeliverAt(id int64, deliverAt time.Time) error {
 		deliverAt.UTC(),
 		id,
 	)
+	if err == nil {
+		log.Info().
+			Str("action", "rescheduled").
+			Int64("queue_id", id).
+			Time("deliver_at", deliverAt.UTC()).
+			Msg("Queued notification rescheduled")
+	}
 	return err
 }
 
@@ -250,6 +278,14 @@ func (q *Queue) MarkFailed(id int64, attempts int) error {
 		time.Now().UTC().Add(time.Duration(nextAttempts*nextAttempts)*30*time.Second),
 		id,
 	)
+	if err == nil {
+		log.Warn().
+			Str("action", "failed").
+			Int64("queue_id", id).
+			Int("attempts", nextAttempts).
+			Str("status", status).
+			Msg("Queued notification delivery failed")
+	}
 	return err
 }
 
