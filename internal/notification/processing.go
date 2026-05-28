@@ -447,6 +447,11 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 			}
 		}
 
+		if sub.RestartLoopEnabled {
+			m.processRestartLoop(sub, event, notificationContainer, notificationEvent)
+			return true
+		}
+
 		if sub.IsEventCooldownActive(event.Event.ActorID) {
 			return true
 		}
@@ -514,10 +519,6 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 
 		if d, ok := m.getDispatcher(sub.DispatcherID); ok {
 			m.sendOrQueue(d, notification, sub, burstEscalated)
-		}
-
-		if sub.RestartLoopEnabled {
-			m.processRestartLoop(sub, event, notificationContainer, notificationEvent)
 		}
 		return true
 	})
@@ -590,10 +591,14 @@ func (m *Manager) fireRestartLoopAlert(sub *Subscription, containerID string, no
 	sub.LastTriggeredAt.Store(&now)
 
 	priority, burstEscalated := sub.DetectBurst(containerID, sub.NtfyPriority)
+	notificationDetail := detail
+	if sub.RestartLoopTriggerMessage != "" {
+		notificationDetail = sub.RestartLoopTriggerMessage
+	}
 	notification := types.Notification{
 		ID:           fmt.Sprintf("%s-restart-loop-%d", containerID, time.Now().UnixNano()),
 		Type:         types.EventNotification,
-		Detail:       detail,
+		Detail:       notificationDetail,
 		Container:    notificationContainer,
 		Event:        &notificationEvent,
 		NtfyTopic:    sub.NtfyTopic,

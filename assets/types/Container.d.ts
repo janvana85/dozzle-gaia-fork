@@ -46,5 +46,13 @@ export type ContainerJson = {
   readonly group?: string;
 };
 
-export type ContainerState = "created" | "running" | "exited" | "dead" | "paused" | "restarting" | "deleted";
+export type ContainerState =
+  | "created"
+  | "running"
+  | "exited"
+  | "dead"
+  | "paused"
+  | "restarting"
+  | "deleted"
+  | "offline";
 export type ContainerHealth = "healthy" | "unhealthy" | "starting";

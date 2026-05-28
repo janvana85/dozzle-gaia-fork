@@ -71,7 +71,7 @@ export const useContainerStore = defineStore("container", () => {
       if (container) {
         switch (event.name) {
           case "die":
-            container.state = "exited";
+            container.state = "offline";
             container.finishedAt = new Date(event.time);
             break;
           case "destroy":

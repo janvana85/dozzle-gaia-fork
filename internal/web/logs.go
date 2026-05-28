@@ -214,6 +214,11 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 	}
 
 	startIdFound := startId == 0
+	if h.logStore != nil && containerService != nil {
+		if err := h.logStore.RecordContainer(containerService.Container); err != nil {
+			log.Debug().Err(err).Str("container", id).Msg("failed to record cached container metadata")
+		}
+	}
 	for {
 		if minimum > 0 && buffer.Len() >= minimum {
 			break
@@ -490,6 +495,11 @@ func (h *handler) streamLogsForContainers(w http.ResponseWriter, r *http.Request
 			return
 		}
 		c = containerService.Container
+		if h.logStore != nil {
+			if err := h.logStore.RecordContainer(c); err != nil {
+				log.Debug().Err(err).Str("container", c.ID).Msg("failed to record cached container metadata")
+			}
+		}
 		start := utils.Max(absoluteTime, c.StartedAt)
 
 		if h.logStore != nil && h.logStore.HasLogs(c.Host, c.ID) {

@@ -280,14 +280,35 @@ func (s *Subscription) CompileExpressions() error {
 	}
 
 	if s.WatchdogPattern != "" {
-		program, err := expr.Compile(s.WatchdogPattern, expr.Env(types.NotificationLog{}))
-		if err != nil {
-			return fmt.Errorf("failed to compile watchdog pattern: %w", err)
+		var logErr error
+		var eventErr error
+
+		if s.LogExpression != "" || s.EventExpression == "" {
+			program, err := expr.Compile(s.WatchdogPattern, expr.Env(types.NotificationLog{}))
+			if err == nil {
+				s.WatchdogProgram = program
+			} else {
+				logErr = err
+			}
 		}
-		s.WatchdogProgram = program
-		eventProgram, err := expr.Compile(s.WatchdogPattern, expr.Env(types.NotificationEvent{}))
-		if err == nil {
-			s.WatchdogEventProgram = eventProgram
+
+		if s.EventExpression != "" {
+			eventProgram, err := expr.Compile(s.WatchdogPattern, expr.Env(types.NotificationEvent{}))
+			if err == nil {
+				s.WatchdogEventProgram = eventProgram
+			} else {
+				eventErr = err
+			}
+		}
+
+		if s.LogExpression != "" && s.WatchdogProgram == nil {
+			return fmt.Errorf("failed to compile watchdog pattern: %w", logErr)
+		}
+		if s.EventExpression != "" && s.WatchdogEventProgram == nil {
+			return fmt.Errorf("failed to compile watchdog pattern: %w", eventErr)
+		}
+		if s.LogExpression == "" && s.EventExpression == "" && s.WatchdogProgram == nil && s.WatchdogEventProgram == nil {
+			return fmt.Errorf("failed to compile watchdog pattern: %w", logErr)
 		}
 	}
 

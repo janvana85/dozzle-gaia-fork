@@ -87,7 +87,7 @@
           <tr
             v-for="container in paginated"
             :key="container.id"
-            v-memo="[container.id, statMode, isMobile]"
+            v-memo="[container.id, container.state, statMode, isMobile]"
             class="hover:bg-base-100/80!"
           >
             <td v-if="isVisible('name')" class="max-w-80 truncate max-md:max-w-32">
@@ -96,7 +96,14 @@
               </router-link>
             </td>
             <td v-if="isVisible('host')">{{ container.hostLabel }}</td>
-            <td v-if="isVisible('state')">{{ container.state }}</td>
+            <td v-if="isVisible('state')">
+              <span
+                class="status-pill"
+                :class="container.state === 'running' ? 'status-pill-success' : 'status-pill-neutral'"
+              >
+                {{ container.state }}
+              </span>
+            </td>
             <td v-if="isVisible('created')">
               <RelativeTime :date="container.created" />
             </td>

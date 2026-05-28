@@ -62,6 +62,15 @@ CREATE TABLE IF NOT EXISTS log_chunks (
   PRIMARY KEY (host, container_id, day)
 );
 CREATE INDEX IF NOT EXISTS idx_log_chunks_lookup ON log_chunks(host, container_id, day, first_ts, last_ts);
+
+CREATE TABLE IF NOT EXISTS cached_containers (
+  host TEXT NOT NULL,
+  container_id TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (host, container_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cached_containers_host ON cached_containers(host, updated_at);
 `); err != nil {
 		_ = db.Close()
 		return err
@@ -170,6 +179,32 @@ ON CONFLICT(host, container_id, day) DO UPDATE SET
 	return err
 }
 
+// RecordContainer stores lightweight metadata so cached containers can remain visible
+// even after the live agent or Docker container disappears.
+func (s *Store) RecordContainer(c container.Container) error {
+	if c.ID == "" {
+		return nil
+	}
+	if err := s.openDB(); err != nil {
+		return err
+	}
+	c.Stats = nil
+	c.Env = nil
+	c.Ports = nil
+	payload, err := json.Marshal(c)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`
+INSERT INTO cached_containers(host, container_id, payload, updated_at)
+VALUES(?, ?, ?, ?)
+ON CONFLICT(host, container_id) DO UPDATE SET
+  payload=excluded.payload,
+  updated_at=excluded.updated_at
+`, c.Host, c.ID, string(payload), time.Now().Unix())
+	return err
+}
+
 func (s *Store) flush() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -204,6 +239,14 @@ func (s *Store) cleanup() {
 			}
 			_ = rows.Close()
 			_, _ = s.db.Exec(`DELETE FROM log_chunks WHERE last_ts < ?`, cutoffTS*1000)
+			_, _ = s.db.Exec(`
+DELETE FROM cached_containers
+WHERE NOT EXISTS (
+  SELECT 1 FROM log_chunks
+  WHERE log_chunks.host = cached_containers.host
+    AND log_chunks.container_id = cached_containers.container_id
+)
+`)
 		}
 	}
 	cutoff := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -retentionDays)
@@ -250,6 +293,47 @@ func (s *Store) cleanup() {
 			_ = os.Remove(hostDir)
 		}
 	}
+}
+
+// CachedContainers returns cached container metadata. Returned containers are
+// marked offline because they only represent locally cached logs, not a live
+// Docker object.
+func (s *Store) CachedContainers(host string) ([]container.Container, error) {
+	if err := s.openDB(); err != nil {
+		return nil, err
+	}
+	query := `SELECT payload FROM cached_containers WHERE EXISTS (
+  SELECT 1 FROM log_chunks
+  WHERE log_chunks.host = cached_containers.host
+    AND log_chunks.container_id = cached_containers.container_id
+)`
+	args := []any{}
+	if host != "" {
+		query += ` AND cached_containers.host = ?`
+		args = append(args, host)
+	}
+	query += ` ORDER BY updated_at DESC`
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]container.Container, 0)
+	for rows.Next() {
+		var payload string
+		if err := rows.Scan(&payload); err != nil {
+			continue
+		}
+		var c container.Container
+		if err := json.Unmarshal([]byte(payload), &c); err != nil {
+			continue
+		}
+		c.State = "offline"
+		c.Stats = nil
+		result = append(result, c)
+	}
+	return result, rows.Err()
 }
 
 // HasLogs returns true if any stored log files exist for the container.

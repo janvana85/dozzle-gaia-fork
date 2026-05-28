@@ -74,12 +74,16 @@ func (m *MultiHostService) FindContainer(host string, id string, labels containe
 func (m *MultiHostService) ListContainersForHost(host string, labels container.ContainerLabels) ([]container.Container, error) {
 	client, ok := m.manager.Find(host)
 	if !ok {
-		return nil, fmt.Errorf("host %s not found", host)
+		return m.cachedContainersForHost(host, labels), fmt.Errorf("host %s not found", host)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), m.timeout)
 	defer cancel()
 
-	return client.ListContainers(ctx, labels)
+	containers, err := client.ListContainers(ctx, labels)
+	if err != nil {
+		return m.cachedContainersForHost(host, labels), err
+	}
+	return m.mergeCachedContainers(containers, m.cachedContainersForHost(host, labels), labels), nil
 }
 
 func (m *MultiHostService) ListAllContainers(labels container.ContainerLabels) ([]container.Container, []error) {
@@ -114,7 +118,98 @@ func (m *MultiHostService) ListAllContainers(labels container.ContainerLabels) (
 		}
 	}
 
-	return containers, errors
+	return m.mergeCachedContainers(containers, m.cachedContainers(labels), labels), errors
+}
+
+func (m *MultiHostService) cachedContainers(labels container.ContainerLabels) []container.Container {
+	if m.logStore == nil {
+		return nil
+	}
+	cached, err := m.logStore.CachedContainers("")
+	if err != nil {
+		log.Debug().Err(err).Msg("failed to load cached containers")
+		return nil
+	}
+	return filterCachedContainers(cached, labels)
+}
+
+func (m *MultiHostService) cachedContainersForHost(host string, labels container.ContainerLabels) []container.Container {
+	if m.logStore == nil {
+		return nil
+	}
+	cached, err := m.logStore.CachedContainers(host)
+	if err != nil {
+		log.Debug().Err(err).Str("host", host).Msg("failed to load cached containers")
+		return nil
+	}
+	return filterCachedContainers(cached, labels)
+}
+
+func (m *MultiHostService) mergeCachedContainers(live []container.Container, cached []container.Container, labels container.ContainerLabels) []container.Container {
+	if len(cached) == 0 {
+		return live
+	}
+	cachedByID := make(map[string]container.Container, len(cached))
+	for _, c := range filterCachedContainers(cached, labels) {
+		cachedByID[containerCacheKey(c)] = c
+	}
+	merged := make([]container.Container, 0, len(live)+len(cachedByID))
+	for _, c := range live {
+		key := containerCacheKey(c)
+		if cached, ok := cachedByID[key]; ok {
+			delete(cachedByID, key)
+			if c.State != "running" {
+				cached.State = "offline"
+				merged = append(merged, cached)
+				continue
+			}
+		}
+		merged = append(merged, c)
+	}
+	for _, c := range cachedByID {
+		if c.State != "offline" {
+			continue
+		}
+		merged = append(merged, c)
+	}
+	return merged
+}
+
+func containerCacheKey(c container.Container) string {
+	return c.Host + "/" + c.ID
+}
+
+func filterCachedContainers(containers []container.Container, labels container.ContainerLabels) []container.Container {
+	if !labels.Exists() {
+		return containers
+	}
+	filtered := make([]container.Container, 0, len(containers))
+	for _, c := range containers {
+		if containerMatchesLabels(c, labels) {
+			filtered = append(filtered, c)
+		}
+	}
+	return filtered
+}
+
+func containerMatchesLabels(c container.Container, labels container.ContainerLabels) bool {
+	for key, allowed := range labels {
+		value, ok := c.Labels[key]
+		if !ok {
+			return false
+		}
+		matched := false
+		for _, expected := range allowed {
+			if value == expected {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *MultiHostService) ListAllContainersFiltered(userLabels container.ContainerLabels, filter container_support.ContainerFilter) ([]container.Container, []error) {

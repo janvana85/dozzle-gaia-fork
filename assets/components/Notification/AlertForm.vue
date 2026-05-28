@@ -572,8 +572,11 @@ const ntfyFields = computed(() => ({
 }));
 
 const hasValidPairAlert = computed(() => {
-  if (alertType.value !== "log" || !pairAlertEnabled.value || watchdogWindowMins.value <= 0) return true;
-  const triggerExpression = fieldsRef.value?.typeFields.logExpression;
+  if (!["log", "event"].includes(alertType.value) || !pairAlertEnabled.value || watchdogWindowMins.value <= 0) {
+    return true;
+  }
+  const typeFields = fieldsRef.value?.typeFields as { eventExpression?: string; logExpression?: string } | undefined;
+  const triggerExpression = alertType.value === "event" ? typeFields?.eventExpression : typeFields?.logExpression;
   return Boolean(triggerExpression?.trim() && watchdogPattern.value.trim());
 });
 const canSave = computed(() => baseCanSave.value && (fieldsRef.value?.canSave ?? false) && hasValidPairAlert.value);
@@ -582,7 +585,7 @@ async function save() {
   if (!canSave.value || !fieldsRef.value) return;
   const extra = selectedDestination.value?.type === "ntfy" ? ntfyFields.value : {};
   const watchdog =
-    alertType.value === "log" && pairAlertEnabled.value && watchdogWindowMins.value > 0
+    ["log", "event"].includes(alertType.value) && pairAlertEnabled.value && watchdogWindowMins.value > 0
       ? {
           watchdogPattern: watchdogPattern.value.trim() || undefined,
           watchdogWindow: watchdogWindowMins.value * 60,
