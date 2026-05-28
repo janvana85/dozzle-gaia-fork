@@ -463,6 +463,14 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 				pendingCount = 0
 			}
 			deliverAt := quietEnd.Add(time.Duration(pendingCount) * 2 * time.Second)
+			log.Debug().
+				Int("subscription_id", sub.ID).
+				Str("subscription", sub.Name).
+				Str("container_id", notification.Container.ID).
+				Str("container", notification.Container.Name).
+				Time("deliver_at", deliverAt).
+				Str("reason", "quiet-hours").
+				Msg("Queued notification")
 			if err := m.queue.Enqueue(notification, deliverAt); err != nil {
 				log.Warn().Err(err).Msg("Failed to enqueue quiet-hours notification")
 			}
