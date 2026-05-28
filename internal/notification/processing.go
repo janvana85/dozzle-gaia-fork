@@ -151,6 +151,14 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 
 		// Per-container log cooldown
 		if sub.Cooldown > 0 && sub.IsLogCooldownActive(logEvent.ContainerID) {
+			log.Debug().
+				Int("subscription_id", sub.ID).
+				Str("subscription", sub.Name).
+				Str("container_id", notificationContainer.ID).
+				Str("container", notificationContainer.Name).
+				Int("cooldown_seconds", sub.Cooldown).
+				Str("reason", "cooldown-active").
+				Msg("Skipping log alert due to cooldown")
 			return true
 		}
 		if sub.Cooldown > 0 {
