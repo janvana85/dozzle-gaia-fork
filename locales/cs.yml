@@ -216,19 +216,29 @@ notifications:
     hold-clear-hint: Zpozdí doručení o zadaný počet sekund. Pro trigger/clear logiku použijte Pair Alert.
     watchdog-title: Pair Alert
     pair-alert-enabled: Zapnout párový trigger/clear alert
-    pair-alert-hint: Log filtr výše je trigger. Tady přidáte clear filtr a maximální čas mezi oběma zprávami.
+    pair-alert-hint: Filtr výše je trigger. Tady přidáte clear filtr a maximální čas mezi trigger a clear eventy/zprávami.
     watchdog-window: Maximální zpoždění mezi trigger a clear
     watchdog-window-unit: minut (0 = vypnuto)
     watchdog-window-hint: Když trigger filtr odpovídá, čeká se na clear filtr. Pokud clear dorazí včas, trigger notifikace se zahodí.
     watchdog-pattern: Clear filtr
     watchdog-pattern-placeholder: např. message contains "backup completed"
-    watchdog-pattern-hint: Tento výraz musí odpovídat clear logu před vypršením limitu.
+    watchdog-pattern-hint: Tento výraz musí odpovídat clear eventu nebo logu před vypršením limitu.
     watchdog-cooldown: Cooldown mezi alerty (min)
     watchdog-cooldown-hint: Minimální počet minut mezi opakovanými Pair Alerty. 0 = bez cooldownu.
     watchdog-trigger-message: Trigger zpráva (volitelné)
     watchdog-trigger-message-hint: Vlastní text notifikace, když trigger vyprší bez clear logu. Prázdné = výchozí text.
     watchdog-clear-message: Clear zpráva (volitelné)
     watchdog-clear-message-hint: Pošle se, když clear filtr odpovídá před vypršením limitu. Prázdné = bez clear notifikace.
+    restart-loop-title: Restart loop
+    restart-loop-enabled: Detekovat opakované restarty kontejneru
+    restart-loop-hint: Notifikace se pošle až po potvrzení loopu podle délky stavu restarting nebo počtu restartů.
+    restart-loop-state-window: Délka stavu `restarting`
+    restart-loop-event-count: Počet restart eventů
+    restart-loop-in: za
+    restart-loop-minutes: minut
+    restart-loop-trigger-message: Trigger zpráva
+    restart-loop-trigger-placeholder: Kontejner je zaseknutý v restartech
+    restart-loop-cooldown: Cooldown
     alert-quiet-title: Tiché hodiny jen pro tento alert
     alert-quiet-enabled: Přepsat globální tiché hodiny pro tento alert
     alert-quiet-hint: Když je vypnuto, použije se globální nastavení tichých hodin.

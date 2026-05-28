@@ -337,17 +337,17 @@
     <!-- Restart Loop (event alerts only) -->
     <template v-if="alertType === 'event'">
       <fieldset class="fieldset">
-        <legend class="fieldset-legend text-lg">Restart loop</legend>
+        <legend class="fieldset-legend text-lg">{{ $t("notifications.alert-form.restart-loop-title") }}</legend>
         <label class="flex cursor-pointer items-center gap-2">
           <input type="checkbox" v-model="restartLoopEnabled" class="checkbox checkbox-primary" />
-          <span class="text-sm">Detect repeated container restarts</span>
+          <span class="text-sm">{{ $t("notifications.alert-form.restart-loop-enabled") }}</span>
         </label>
         <p class="text-base-content/50 mt-1 text-xs">
-          Notify only after loop is confirmed by state duration or restart count.
+          {{ $t("notifications.alert-form.restart-loop-hint") }}
         </p>
         <div v-show="restartLoopEnabled" class="mt-3 space-y-3">
           <div>
-            <label class="label text-sm">`restarting` state duration</label>
+            <label class="label text-sm">{{ $t("notifications.alert-form.restart-loop-state-window") }}</label>
             <div class="flex items-center gap-2">
               <input
                 v-model.number="restartLoopStateWindowMins"
@@ -356,11 +356,13 @@
                 class="input focus:input-primary w-32"
                 placeholder="0"
               />
-              <span class="text-base-content/60 text-sm">minutes</span>
+              <span class="text-base-content/60 text-sm">{{
+                $t("notifications.alert-form.restart-loop-minutes")
+              }}</span>
             </div>
           </div>
           <div>
-            <label class="label text-sm">Restart event count</label>
+            <label class="label text-sm">{{ $t("notifications.alert-form.restart-loop-event-count") }}</label>
             <div class="flex items-center gap-2">
               <input
                 v-model.number="restartLoopEventCount"
@@ -369,7 +371,7 @@
                 class="input focus:input-primary w-32"
                 placeholder="0"
               />
-              <span class="text-base-content/60 text-sm">in</span>
+              <span class="text-base-content/60 text-sm">{{ $t("notifications.alert-form.restart-loop-in") }}</span>
               <input
                 v-model.number="restartLoopEventWindowMins"
                 type="number"
@@ -377,20 +379,22 @@
                 class="input focus:input-primary w-32"
                 placeholder="0"
               />
-              <span class="text-base-content/60 text-sm">minutes</span>
+              <span class="text-base-content/60 text-sm">{{
+                $t("notifications.alert-form.restart-loop-minutes")
+              }}</span>
             </div>
           </div>
           <div>
-            <label class="label text-sm">Trigger message</label>
+            <label class="label text-sm">{{ $t("notifications.alert-form.restart-loop-trigger-message") }}</label>
             <input
               v-model="restartLoopTriggerMessage"
               type="text"
               class="input focus:input-primary w-full text-base"
-              placeholder="Container is stuck restarting"
+              :placeholder="$t('notifications.alert-form.restart-loop-trigger-placeholder')"
             />
           </div>
           <div>
-            <label class="label text-sm">Cooldown</label>
+            <label class="label text-sm">{{ $t("notifications.alert-form.restart-loop-cooldown") }}</label>
             <input
               v-model.number="restartLoopCooldownMins"
               type="number"

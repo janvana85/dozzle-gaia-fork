@@ -328,19 +328,29 @@ notifications:
     hold-clear-hint: Delay delivery by this many seconds. Use Pair Alert when you need trigger/clear matching.
     watchdog-title: Pair Alert
     pair-alert-enabled: Enable paired trigger/clear alert
-    pair-alert-hint: The log filter above is the trigger. Enable this to add a clear filter and a max delay between the two messages.
+    pair-alert-hint: The filter above is the trigger. Enable this to add a clear filter and a max delay between the trigger and clear events/messages.
     watchdog-window: Max delay between trigger and clear
     watchdog-window-unit: minutes (0 = disabled)
     watchdog-window-hint: When the trigger filter matches, wait this long for the clear filter. If clear arrives in time, the trigger notification is dropped.
     watchdog-pattern: Clear Filter
     watchdog-pattern-placeholder: e.g. message contains "backup completed"
-    watchdog-pattern-hint: This expression must match the paired clear log message before the max delay expires.
+    watchdog-pattern-hint: This expression must match the paired clear event or log message before the max delay expires.
     watchdog-cooldown: Cooldown between alerts (min)
     watchdog-cooldown-hint: Minimum minutes between repeated pair alerts. 0 = no cooldown.
     watchdog-trigger-message: Trigger message (optional)
     watchdog-trigger-message-hint: Custom notification text when the trigger side times out. Leave blank for default.
     watchdog-clear-message: Clear message (optional)
     watchdog-clear-message-hint: Sent when the clear filter matches before the max delay expires. Leave blank for no clear notification.
+    restart-loop-title: Restart loop
+    restart-loop-enabled: Detect repeated container restarts
+    restart-loop-hint: Notify only after a loop is confirmed by restarting state duration or restart count.
+    restart-loop-state-window: "`restarting` state duration"
+    restart-loop-event-count: Restart event count
+    restart-loop-in: in
+    restart-loop-minutes: minutes
+    restart-loop-trigger-message: Trigger message
+    restart-loop-trigger-placeholder: Container is stuck restarting
+    restart-loop-cooldown: Cooldown
     alert-quiet-title: Per-alert quiet hours override
     alert-quiet-enabled: Override global quiet hours for this alert
     alert-quiet-hint: Leave this off to use the global quiet hours setting for the destination.
