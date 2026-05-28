@@ -1,0 +1,39 @@
+name: Docker Caching Build
+
+on:
+  push:
+    branches:
+      - dozzle-gaia-caching
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-caching-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build caching image
+    runs-on: ubuntu-latest
+    env:
+      DOZZLE_IMAGE_PREFIX: dozzle-gaia-caching
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image
+        uses: docker/build-push-action@v7.2.0
+        with:
+          context: .
+          push: false
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ env.DOZZLE_IMAGE_PREFIX }}-dozzle:latest
+          build-args: |
+            TAG=dev
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -3,8 +3,8 @@ package log_storage
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -12,14 +12,17 @@ import (
 
 	"github.com/amir20/dozzle/internal/container"
 	"github.com/rs/zerolog/log"
+	_ "modernc.org/sqlite"
 )
 
 const retentionDays = 4
 
 // Store persists log events to NDJSON files on disk and serves them back.
-// Files are organized as {dataDir}/{containerID[:12]}/{YYYY-MM-DD}.ndjson.
+// Files are organized as {dataDir}/{host}/{containerID[:12]}/{YYYY-MM-DD}.ndjson.
 type Store struct {
 	dataDir string
+	dbPath  string
+	db      *sql.DB
 	mu      sync.Mutex
 	files   map[string]*os.File
 	writers map[string]*bufio.Writer
@@ -28,14 +31,51 @@ type Store struct {
 func NewStore(dataDir string) *Store {
 	return &Store{
 		dataDir: dataDir,
+		dbPath:  filepath.Join(dataDir, "index.sqlite"),
 		files:   make(map[string]*os.File),
 		writers: make(map[string]*bufio.Writer),
 	}
 }
 
+func (s *Store) openDB() error {
+	if s.db != nil {
+		return nil
+	}
+	if err := os.MkdirAll(s.dataDir, 0o755); err != nil {
+		return err
+	}
+	db, err := sql.Open("sqlite", s.dbPath)
+	if err != nil {
+		return err
+	}
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS log_chunks (
+  host TEXT NOT NULL,
+  container_id TEXT NOT NULL,
+  day TEXT NOT NULL,
+  path TEXT NOT NULL,
+  first_ts INTEGER NOT NULL,
+  last_ts INTEGER NOT NULL,
+  lines INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (host, container_id, day)
+);
+CREATE INDEX IF NOT EXISTS idx_log_chunks_lookup ON log_chunks(host, container_id, day, first_ts, last_ts);
+`); err != nil {
+		_ = db.Close()
+		return err
+	}
+	s.db = db
+	return nil
+}
+
 // Start begins consuming events from ch, writing them to disk.
 // It also flushes every 5 seconds and runs daily cleanup/rotation.
 func (s *Store) Start(ctx context.Context, ch <-chan *container.LogEvent) {
+	if err := s.openDB(); err != nil {
+		log.Error().Err(err).Msg("log_storage: failed to open sqlite index")
+	}
 	s.cleanup()
 
 	go func() {
@@ -53,7 +93,7 @@ func (s *Store) Start(ctx context.Context, ch <-chan *container.LogEvent) {
 				if !ok {
 					return
 				}
-				if err := s.write(ev); err != nil {
+				if err := s.write("unknown", ev); err != nil {
 					log.Error().Err(err).Str("containerID", ev.ContainerID).Msg("log_storage: write failed")
 				}
 			case <-flushTicker.C:
@@ -67,24 +107,28 @@ func (s *Store) Start(ctx context.Context, ch <-chan *container.LogEvent) {
 	}()
 }
 
-func (s *Store) containerDir(containerID string) string {
+func (s *Store) containerDir(host, containerID string) string {
+	if host == "" {
+		host = "unknown"
+	}
 	short := containerID
 	if len(short) > 12 {
 		short = short[:12]
 	}
-	return filepath.Join(s.dataDir, short)
+	return filepath.Join(s.dataDir, host, short)
 }
 
-func (s *Store) filePath(containerID string, day time.Time) string {
-	return filepath.Join(s.containerDir(containerID), day.UTC().Format("2006-01-02")+".ndjson")
+func (s *Store) filePath(host, containerID string, day time.Time) string {
+	return filepath.Join(s.containerDir(host, containerID), day.UTC().Format("2006-01-02")+".ndjson")
 }
 
-func (s *Store) write(ev *container.LogEvent) error {
+func (s *Store) write(host string, ev *container.LogEvent) error {
 	if ev.ContainerID == "" {
 		return nil
 	}
 	ts := time.UnixMilli(ev.Timestamp).UTC()
-	path := s.filePath(ev.ContainerID, ts)
+	path := s.filePath(host, ev.ContainerID, ts)
+	day := ts.Format("2006-01-02")
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -103,7 +147,27 @@ func (s *Store) write(ev *container.LogEvent) error {
 		s.writers[path] = w
 	}
 
-	return json.NewEncoder(w).Encode(ev)
+	if err := json.NewEncoder(w).Encode(ev); err != nil {
+		return err
+	}
+	return s.upsertIndex(host, ev.ContainerID, day, path, ev.Timestamp)
+}
+
+func (s *Store) upsertIndex(host, containerID, day, path string, ts int64) error {
+	if err := s.openDB(); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`
+INSERT INTO log_chunks(host, container_id, day, path, first_ts, last_ts, lines, updated_at)
+VALUES(?, ?, ?, ?, ?, ?, 1, ?)
+ON CONFLICT(host, container_id, day) DO UPDATE SET
+  path=excluded.path,
+  first_ts=MIN(log_chunks.first_ts, excluded.first_ts),
+  last_ts=MAX(log_chunks.last_ts, excluded.last_ts),
+  lines=log_chunks.lines+1,
+  updated_at=excluded.updated_at
+`, host, containerID, day, path, ts, ts, time.Now().Unix())
+	return err
 }
 
 func (s *Store) flush() {
@@ -128,69 +192,112 @@ func (s *Store) closeAll() {
 }
 
 func (s *Store) cleanup() {
-	cutoff := time.Now().UTC().Truncate(24 * time.Hour).AddDate(0, 0, -retentionDays)
+	if err := s.openDB(); err == nil {
+		cutoffTS := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -retentionDays).Unix()
+		rows, err := s.db.Query(`SELECT path FROM log_chunks WHERE last_ts < ?`, cutoffTS*1000)
+		if err == nil {
+			var path string
+			for rows.Next() {
+				if err := rows.Scan(&path); err == nil {
+					_ = os.Remove(path)
+				}
+			}
+			_ = rows.Close()
+			_, _ = s.db.Exec(`DELETE FROM log_chunks WHERE last_ts < ?`, cutoffTS*1000)
+		}
+	}
+	cutoff := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -retentionDays)
 	entries, err := os.ReadDir(s.dataDir)
 	if err != nil {
 		return
 	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
+	for _, hostEntry := range entries {
+		if !hostEntry.IsDir() {
 			continue
 		}
-		dir := filepath.Join(s.dataDir, entry.Name())
-		files, _ := os.ReadDir(dir)
-		for _, f := range files {
-			if !f.Type().IsRegular() {
+		hostDir := filepath.Join(s.dataDir, hostEntry.Name())
+		containerEntries, _ := os.ReadDir(hostDir)
+		for _, containerEntry := range containerEntries {
+			if !containerEntry.IsDir() {
 				continue
 			}
-			name := f.Name()
-			if len(name) < 10 {
-				continue
+			containerDir := filepath.Join(hostDir, containerEntry.Name())
+			files, _ := os.ReadDir(containerDir)
+			for _, f := range files {
+				if !f.Type().IsRegular() {
+					continue
+				}
+				name := f.Name()
+				if len(name) < 10 {
+					continue
+				}
+				t, err := time.Parse("2006-01-02", name[:10])
+				if err != nil {
+					continue
+				}
+				if t.Before(cutoff) {
+					_ = os.Remove(filepath.Join(containerDir, name))
+					log.Debug().Str("file", name).Str("container", containerEntry.Name()).Str("host", hostEntry.Name()).Msg("log_storage: removed expired file")
+				}
 			}
-			t, err := time.Parse("2006-01-02", name[:10])
-			if err != nil {
-				continue
-			}
-			if t.Before(cutoff) {
-				_ = os.Remove(filepath.Join(dir, name))
-				log.Debug().Str("file", name).Str("container", entry.Name()).Msg("log_storage: removed expired file")
+			remaining, _ := os.ReadDir(containerDir)
+			if len(remaining) == 0 {
+				_ = os.Remove(containerDir)
 			}
 		}
-		remaining, _ := os.ReadDir(dir)
-		if len(remaining) == 0 {
-			_ = os.Remove(dir)
+		remainingHosts, _ := os.ReadDir(hostDir)
+		if len(remainingHosts) == 0 {
+			_ = os.Remove(hostDir)
 		}
 	}
 }
 
 // HasLogs returns true if any stored log files exist for the container.
-func (s *Store) HasLogs(containerID string) bool {
-	dir := s.containerDir(containerID)
-	entries, err := os.ReadDir(dir)
-	return err == nil && len(entries) > 0
+func (s *Store) HasLogs(host, containerID string) bool {
+	if err := s.openDB(); err != nil {
+		dir := s.containerDir(host, containerID)
+		entries, err := os.ReadDir(dir)
+		return err == nil && len(entries) > 0
+	}
+	var exists int
+	if err := s.db.QueryRow(`SELECT 1 FROM log_chunks WHERE host = ? AND container_id = ? LIMIT 1`, host, containerID).Scan(&exists); err != nil {
+		return false
+	}
+	return true
 }
 
 // LogsBetweenDates returns a channel of stored log events for the container
 // between from and to (inclusive). The channel is closed when done.
-func (s *Store) LogsBetweenDates(ctx context.Context, containerID string, from, to time.Time) (<-chan *container.LogEvent, error) {
-	dir := s.containerDir(containerID)
-	if _, err := os.Stat(dir); err != nil {
-		short := containerID
-		if len(short) > 12 {
-			short = short[:12]
-		}
-		return nil, fmt.Errorf("no stored logs for container %s", short)
+func (s *Store) LogsBetweenDates(ctx context.Context, host, containerID string, from, to time.Time) (<-chan *container.LogEvent, error) {
+	if err := s.openDB(); err != nil {
+		return nil, err
 	}
-
 	ch := make(chan *container.LogEvent, 100)
 	go func() {
 		defer close(ch)
-		for d := from.UTC().Truncate(24 * time.Hour); !d.After(to.UTC()); d = d.AddDate(0, 0, 1) {
-			path := filepath.Join(dir, d.Format("2006-01-02")+".ndjson")
+		rows, err := s.db.QueryContext(ctx, `
+SELECT path FROM log_chunks
+WHERE host = ? AND container_id = ? AND day >= ? AND day <= ?
+ORDER BY day ASC`,
+			host, containerID, from.UTC().Format("2006-01-02"), to.UTC().Format("2006-01-02"))
+		if err != nil {
+			return
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var path string
+			if err := rows.Scan(&path); err != nil {
+				continue
+			}
 			s.readFile(ctx, path, from, to, ch)
 		}
 	}()
 	return ch, nil
+}
+
+// Append stores one log event for the given host/container.
+func (s *Store) Append(host string, ev *container.LogEvent) error {
+	return s.write(host, ev)
 }
 
 func (s *Store) readFile(ctx context.Context, path string, from, to time.Time, ch chan<- *container.LogEvent) {

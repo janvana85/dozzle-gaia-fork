@@ -6,6 +6,21 @@
     >
       <slot name="header"></slot>
     </header>
+    <div
+      v-if="!historical"
+      class="border-base-content/10 bg-base-100 sticky top-[calc(55px+env(safe-area-inset-top)+3rem)] z-10 flex items-center justify-between border-b px-4 py-2 text-sm md:top-[3.25rem]"
+    >
+      <div class="flex items-center gap-2">
+        <span class="badge badge-outline" :class="cached ? 'badge-warning' : 'badge-neutral'">
+          {{ cached ? "cached" : "live" }}
+        </span>
+        <span class="text-base-content/60" v-if="!followLogs">paused at history</span>
+        <span class="text-base-content/60" v-else>following agent stream</span>
+      </div>
+      <button class="btn btn-primary btn-sm" @click="followLogs = !followLogs">
+        {{ followLogs ? "Pause follow" : "Follow logs" }}
+      </button>
+    </div>
     <main :data-scrolling="scrollable ? true : undefined" class="min-h-[300px] snap-y overflow-auto">
       <div class="invisible relative md:visible" v-show="scrollContext.paused">
         <div class="absolute top-4 right-44">
@@ -44,12 +59,13 @@
 const { scrollable = false } = defineProps<{ scrollable?: boolean }>();
 
 const hasMore = ref(false);
+const followLogs = ref(true);
 const scrollObserver = ref<HTMLElement>();
 const scrollableContent = ref<HTMLElement>();
 
 const scrollContext = provideScrollContext();
+const { cached, loadingMore, historical } = useLoggingContext();
 
-const { loadingMore, historical } = useLoggingContext();
 if (!historical.value) {
   useIntersectionObserver(scrollObserver, ([entry]) => (scrollContext.paused = entry.intersectionRatio == 0), {
     threshold: [0, 1],
@@ -59,7 +75,7 @@ if (!historical.value) {
   useMutationObserver(
     scrollableContent,
     (records) => {
-      if (!scrollContext.paused) {
+      if (!scrollContext.paused && followLogs.value) {
         scrollToBottom();
       } else {
         const record = records[records.length - 1];
@@ -77,6 +93,11 @@ function scrollToBottom(behavior: "auto" | "smooth" = "auto") {
   scrollObserver.value?.scrollIntoView({ behavior });
   hasMore.value = false;
 }
+
+defineExpose({
+  followLogs,
+  cached,
+});
 </script>
 <style scoped>
 .fade-enter-active,

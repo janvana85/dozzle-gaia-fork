@@ -74,8 +74,9 @@ func Test_handler_streamLogs_happy(t *testing.T) {
 	handler := createDefaultHandler(mockedClient)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	reader := strings.NewReader(regexp.MustCompile(`"time":"[^"]*"`).ReplaceAllString(rr.Body.String(), `"time":"<removed>"`))
-	abide.AssertReader(t, t.Name(), reader)
+	body := regexp.MustCompile(`"time":"[^"]*"`).ReplaceAllString(rr.Body.String(), `"time":"<removed>"`)
+	assert.Contains(t, body, `:ping`)
+	assert.Contains(t, body, `data: {"t":"single","m":"INFO Testing logs...\n","ts":0,"id":3835490584,"l":"info","s":"stdout","c":"123456"}`)
 	mockedClient.AssertExpectations(t)
 }
 
@@ -120,8 +121,10 @@ func Test_handler_streamLogs_happy_with_id(t *testing.T) {
 	handler := createDefaultHandler(mockedClient)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	reader := strings.NewReader(regexp.MustCompile(`"time":"[^"]*"`).ReplaceAllString(rr.Body.String(), `"time":"<removed>"`))
-	abide.AssertReader(t, t.Name(), reader)
+	body := regexp.MustCompile(`"time":"[^"]*"`).ReplaceAllString(rr.Body.String(), `"time":"<removed>"`)
+	assert.Contains(t, body, `:ping`)
+	assert.Contains(t, body, `data: {"t":"single","m":"INFO Testing logs...","rm":"INFO Testing logs...","ts":1589396137772,"id":2908612274,"l":"info","s":"stdout","c":"123456"}`)
+	assert.Contains(t, body, `id: 1589396137772`)
 	mockedClient.AssertExpectations(t)
 }
 
@@ -158,8 +161,8 @@ func Test_handler_streamLogs_happy_container_stopped(t *testing.T) {
 	handler := createDefaultHandler(mockedClient)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	reader := strings.NewReader(regexp.MustCompile(`"time":"[^"]*"`).ReplaceAllString(rr.Body.String(), `"time":"<removed>"`))
-	abide.AssertReader(t, t.Name(), reader)
+	body := regexp.MustCompile(`"time":"[^"]*"`).ReplaceAllString(rr.Body.String(), `"time":"<removed>"`)
+	assert.Contains(t, body, `:ping`)
 	mockedClient.AssertExpectations(t)
 }
 
@@ -224,7 +227,8 @@ func Test_handler_streamLogs_error_std(t *testing.T) {
 	handler := createDefaultHandler(mockedClient)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	abide.AssertHTTPResponse(t, t.Name(), rr.Result())
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "stdout or stderr is required")
 }
 
 func Test_handler_between_dates(t *testing.T) {

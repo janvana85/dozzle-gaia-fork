@@ -52,6 +52,10 @@ _Avoid_: Watchdog when discussing the user-facing concept.
 An event alert that confirms a container is stuck in repeated restarts before notifying, using either sustained `restarting` state or repeated `restart` events within a window.
 _Avoid_: Restart storm when referring to the user-facing alert concept.
 
+**Log Cache**:
+A server-side log store on Dozzle that keeps recent container log history for fast browsing, search, and export even if the originating agent is unavailable.
+_Avoid_: Do not use cache to mean live stream buffering only.
+
 **Hold Window**:
 A short delay before an alert is delivered. It does not define a clear condition by itself.
 _Avoid_: Do not use this to describe the trigger/clear matching of a **Pair Alert**.

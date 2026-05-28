@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"crypto/tls"
+	"strings"
 	"time"
 
 	"net/http"
@@ -12,7 +13,7 @@ import (
 	"github.com/amir20/dozzle/internal/container"
 	docker_support "github.com/amir20/dozzle/internal/support/docker"
 	"github.com/amir20/dozzle/internal/utils"
-	"github.com/beme/abide"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -63,6 +64,10 @@ func Test_handler_streamEvents_happy(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
-	abide.AssertHTTPResponse(t, t.Name(), rr.Result())
+	body := strings.ReplaceAll(rr.Body.String(), "\r\n", "\n")
+	assert.Contains(t, body, "event: containers-changed")
+	assert.Contains(t, body, "event: container-event")
+	assert.Contains(t, body, `"name":"start"`)
+	assert.Contains(t, body, `"actorId":"1234"`)
 	mockedClient.AssertExpectations(t)
 }

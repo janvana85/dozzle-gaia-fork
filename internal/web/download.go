@@ -147,33 +147,61 @@ func (h *handler) downloadLogs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Get container logs - use LogsBetweenDates if filtering is needed, otherwise use RawLogs
-		if regex != nil || len(levels) > 0 {
-			// Fetch parsed log events for filtering
-			events, err := c.containerService.LogsBetweenDates(r.Context(), time.Time{}, now, stdTypes)
+		useStore := h.logStore != nil && h.logStore.HasLogs(c.host, c.id)
+		if useStore {
+			events, err := h.logStore.LogsBetweenDates(r.Context(), c.host, c.id, time.Time{}, now)
 			if err != nil {
-				log.Error().Err(err).Msgf("error getting logs for container %s", c.id)
+				log.Error().Err(err).Msgf("error getting cached logs for container %s", c.id)
 				return
 			}
-
-			// Filter and write events
 			for event := range events {
-				// Apply regex filter if provided
 				if regex != nil && !support_web.Search(regex, event) {
 					continue
 				}
-
-				// Apply level filter if provided
 				if len(levels) > 0 {
 					if _, ok := levels[event.Level]; !ok {
 						continue
 					}
 				}
-
-				// Format timestamp in UTC
 				timestamp := time.UnixMilli(event.Timestamp).UTC().Format(time.RFC3339Nano)
+				if event.Type == container.LogTypeGroup {
+					if fragments, ok := event.Message.([]container.LogFragment); ok {
+						for _, fragment := range fragments {
+							_, err = fmt.Fprintf(f, "%s %s\n", timestamp, fragment.Message)
+							if err != nil {
+								log.Error().Err(err).Msgf("error writing log for container %s", c.id)
+								return
+							}
+						}
+					}
+					continue
+				}
+				_, err = fmt.Fprintf(f, "%s %s\n", timestamp, event.RawMessage)
+				if err != nil {
+					log.Error().Err(err).Msgf("error writing log for container %s", c.id)
+					return
+				}
+			}
+			continue
+		}
 
-				// Handle grouped logs
+		// Get container logs - use LogsBetweenDates if filtering is needed, otherwise use RawLogs
+		if regex != nil || len(levels) > 0 {
+			events, err := c.containerService.LogsBetweenDates(r.Context(), time.Time{}, now, stdTypes)
+			if err != nil {
+				log.Error().Err(err).Msgf("error getting logs for container %s", c.id)
+				return
+			}
+			for event := range events {
+				if regex != nil && !support_web.Search(regex, event) {
+					continue
+				}
+				if len(levels) > 0 {
+					if _, ok := levels[event.Level]; !ok {
+						continue
+					}
+				}
+				timestamp := time.UnixMilli(event.Timestamp).UTC().Format(time.RFC3339Nano)
 				if event.Type == container.LogTypeGroup {
 					if fragments, ok := event.Message.([]container.LogFragment); ok {
 						for _, fragment := range fragments {
@@ -185,7 +213,6 @@ func (h *handler) downloadLogs(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 				} else {
-					// Write timestamp followed by message for single/complex logs
 					_, err = fmt.Fprintf(f, "%s %s\n", timestamp, event.RawMessage)
 					if err != nil {
 						log.Error().Err(err).Msgf("error writing log for container %s", c.id)
@@ -194,14 +221,11 @@ func (h *handler) downloadLogs(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		} else {
-			// No filtering needed, use raw logs for better performance
 			reader, err := c.containerService.RawLogs(r.Context(), time.Time{}, now, stdTypes)
 			if err != nil {
 				log.Error().Err(err).Msgf("error getting logs for container %s", c.id)
 				return
 			}
-
-			// Copy logs to zip file
 			_, err = io.Copy(f, reader)
 			if err != nil {
 				log.Error().Err(err).Msgf("error copying logs for container %s", c.id)

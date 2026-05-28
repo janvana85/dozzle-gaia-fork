@@ -79,7 +79,7 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 	}
 
 	containerService, findErr := h.hostService.FindContainer(hostKey(r), id, h.resolveLabels(r))
-	usingStore := findErr != nil && h.logStore != nil && h.logStore.HasLogs(id)
+	usingStore := findErr != nil && h.logStore != nil && h.logStore.HasLogs(hostKey(r), id)
 	if findErr != nil && !usingStore {
 		http.Error(w, findErr.Error(), http.StatusNotFound)
 		return
@@ -176,7 +176,7 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 		if everything {
 			queryFrom = time.Now().AddDate(0, 0, -4)
 		}
-		events, err := h.logStore.LogsBetweenDates(r.Context(), id, queryFrom, to)
+		events, err := h.logStore.LogsBetweenDates(r.Context(), hostKey(r), id, queryFrom, to)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -491,22 +491,49 @@ func (h *handler) streamLogsForContainers(w http.ResponseWriter, r *http.Request
 		}
 		c = containerService.Container
 		start := utils.Max(absoluteTime, c.StartedAt)
-		err = containerService.StreamLogs(r.Context(), start, stdTypes, liveLogs)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				log.Debug().Str("container", c.ID).Msg("streaming ended")
-				finishedAt := c.FinishedAt
-				if c.FinishedAt.IsZero() {
-					finishedAt = time.Now()
+
+		if h.logStore != nil && h.logStore.HasLogs(c.Host, c.ID) {
+			if cachedLogs, err := h.logStore.LogsBetweenDates(r.Context(), c.Host, c.ID, start, time.Now()); err == nil {
+				cached := make([]*container.LogEvent, 0, 128)
+				for logEvent := range cachedLogs {
+					if !matchesFilter(logEvent, regex, levels, inverse) {
+						continue
+					}
+					cached = append(cached, logEvent)
 				}
-				events <- &container.ContainerEvent{
-					ActorID: c.ID,
-					Name:    "container-stopped",
-					Host:    c.Host,
-					Time:    finishedAt,
+				if len(cached) > 0 {
+					select {
+					case backfill <- cached:
+					case <-r.Context().Done():
+						return
+					}
 				}
-			} else if !errors.Is(err, context.Canceled) {
-				log.Error().Err(err).Str("container", c.ID).Msg("unknown error while streaming logs")
+			}
+		}
+
+		localLogs := make(chan *container.LogEvent, 100)
+		go func() {
+			defer close(localLogs)
+			err = containerService.StreamLogs(r.Context(), start, stdTypes, localLogs)
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					log.Debug().Str("container", c.ID).Msg("streaming ended")
+				} else if !errors.Is(err, context.Canceled) {
+					log.Error().Err(err).Str("container", c.ID).Msg("unknown error while streaming logs")
+				}
+			}
+		}()
+
+		for logEvent := range localLogs {
+			if h.logStore != nil {
+				if err := h.logStore.Append(c.Host, logEvent); err != nil {
+					log.Debug().Err(err).Str("container", c.ID).Msg("failed to append log cache")
+				}
+			}
+			select {
+			case liveLogs <- logEvent:
+			case <-r.Context().Done():
+				return
 			}
 		}
 	}

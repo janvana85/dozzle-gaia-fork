@@ -75,6 +75,7 @@ function useLogStream(url: Ref<string>, container?: Ref<Container>) {
   const error = ref(false);
   const { paused: scrollingPaused } = useScrollContext();
   const { streamConfig, hasComplexLogs, levels, loadingMore, containers } = useLoggingContext();
+  const { cached } = useLoggingContext();
   let initial = true;
 
   const params = computed(() => {
@@ -154,6 +155,7 @@ function useLogStream(url: Ref<string>, container?: Ref<Container>) {
   function connect({ clear } = { clear: true }) {
     close();
     if (clear) clearMessages();
+    cached.value = false;
     opened.value = false;
     loading.value = true;
     error.value = false;
@@ -180,6 +182,7 @@ function useLogStream(url: Ref<string>, container?: Ref<Container>) {
     es.addEventListener("logs-backfill", (e) => {
       const data = JSON.parse((e as MessageEvent).data) as LogEvent[];
       const logs = data.map((e) => asLogEntry(e));
+      cached.value = true;
       messages.value = [...logs, ...messages.value];
     });
 

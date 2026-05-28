@@ -3,6 +3,7 @@ package docker_support
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -209,7 +210,11 @@ func (m *MultiHostService) StartNotificationManager(ctx context.Context) error {
 
 	// Set up log persistence store
 	storeCh := make(chan *container.LogEvent, 1000)
-	m.logStore = log_storage.NewStore("./data/logs")
+	cacheDir := os.Getenv("DOZZLE_LOG_CACHE_DIR")
+	if cacheDir == "" {
+		cacheDir = "/opt/dozzle-gaia/cache"
+	}
+	m.logStore = log_storage.NewStore(cacheDir)
 	m.logStore.Start(ctx, storeCh)
 	m.notificationManager.SetLogStore(storeCh)
 
