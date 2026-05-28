@@ -297,6 +297,10 @@ func (m *Manager) AddSubscription(sub *Subscription) error {
 	sub.BurstTrackers = xsync.NewMap[string, []time.Time]()
 	sub.WatchdogTimers = xsync.NewMap[string, *time.Timer]()
 	sub.WatchdogCooldowns = xsync.NewMap[string, time.Time]()
+	sub.RestartLoopTimers = xsync.NewMap[string, *time.Timer]()
+	sub.RestartLoopCooldowns = xsync.NewMap[string, time.Time]()
+	sub.RestartLoopFirstSeenAt = xsync.NewMap[string, time.Time]()
+	sub.RestartLoopRestartStreaks = xsync.NewMap[string, []time.Time]()
 
 	if err := sub.CompileExpressions(); err != nil {
 		return err
@@ -327,6 +331,10 @@ func (m *Manager) ReplaceSubscription(sub *Subscription) error {
 	sub.EventCooldowns = xsync.NewMap[string, time.Time]()
 	sub.LogCooldowns = xsync.NewMap[string, time.Time]()
 	sub.BurstTrackers = xsync.NewMap[string, []time.Time]()
+	sub.RestartLoopTimers = xsync.NewMap[string, *time.Timer]()
+	sub.RestartLoopCooldowns = xsync.NewMap[string, time.Time]()
+	sub.RestartLoopFirstSeenAt = xsync.NewMap[string, time.Time]()
+	sub.RestartLoopRestartStreaks = xsync.NewMap[string, []time.Time]()
 
 	if err := sub.CompileExpressions(); err != nil {
 		return err
@@ -359,50 +367,61 @@ func (m *Manager) UpdateSubscription(id int, updates map[string]any) error {
 
 		// Clone the subscription
 		updated := &Subscription{
-			ID:                     sub.ID,
-			Name:                   sub.Name,
-			Enabled:                sub.Enabled,
-			DispatcherID:           sub.DispatcherID,
-			ContainerExpression:    sub.ContainerExpression,
-			ContainerProgram:       sub.ContainerProgram,
-			LogExpression:          sub.LogExpression,
-			LogProgram:             sub.LogProgram,
-			MetricExpression:       sub.MetricExpression,
-			MetricProgram:          sub.MetricProgram,
-			EventExpression:        sub.EventExpression,
-			EventProgram:           sub.EventProgram,
-			Cooldown:               sub.Cooldown,
-			SampleWindow:           sub.SampleWindow,
-			NtfyTopic:              sub.NtfyTopic,
-			NtfyPriority:           sub.NtfyPriority,
-			NtfyTags:               sub.NtfyTags,
-			BypassQuietHours:       sub.BypassQuietHours,
-			QuietPriority:          sub.QuietPriority,
-			HoldDuringQuiet:        sub.HoldDuringQuiet,
-			HoldClearWindow:        sub.HoldClearWindow,
-			BurstCount:             sub.BurstCount,
-			BurstWindow:            sub.BurstWindow,
-			BurstPriority:          sub.BurstPriority,
-			WatchdogPattern:        sub.WatchdogPattern,
-			WatchdogWindow:         sub.WatchdogWindow,
-			WatchdogCooldown:       sub.WatchdogCooldown,
-			WatchdogProgram:        sub.WatchdogProgram,
-			WatchdogTriggerMessage: sub.WatchdogTriggerMessage,
-			WatchdogClearMessage:   sub.WatchdogClearMessage,
-			AlertQuietEnabled:      sub.AlertQuietEnabled,
-			AlertQuietStart:        sub.AlertQuietStart,
-			AlertQuietEnd:          sub.AlertQuietEnd,
-			AlertQuietTimezone:     sub.AlertQuietTimezone,
-			QuietStackThreshold:    sub.QuietStackThreshold,
-			QuietStackWindow:       sub.QuietStackWindow,
-			EventCooldowns:         sub.EventCooldowns,
-			MetricCooldowns:        sub.MetricCooldowns,
-			MetricSampleBuffers:    sub.MetricSampleBuffers,
-			LogCooldowns:           sub.LogCooldowns,
-			BurstTrackers:          sub.BurstTrackers,
-			WatchdogTimers:         sub.WatchdogTimers,
-			WatchdogCooldowns:      sub.WatchdogCooldowns,
-			TriggeredContainerIDs:  sub.TriggeredContainerIDs,
+			ID:                        sub.ID,
+			Name:                      sub.Name,
+			Enabled:                   sub.Enabled,
+			DispatcherID:              sub.DispatcherID,
+			ContainerExpression:       sub.ContainerExpression,
+			ContainerProgram:          sub.ContainerProgram,
+			LogExpression:             sub.LogExpression,
+			LogProgram:                sub.LogProgram,
+			MetricExpression:          sub.MetricExpression,
+			MetricProgram:             sub.MetricProgram,
+			EventExpression:           sub.EventExpression,
+			EventProgram:              sub.EventProgram,
+			Cooldown:                  sub.Cooldown,
+			SampleWindow:              sub.SampleWindow,
+			NtfyTopic:                 sub.NtfyTopic,
+			NtfyPriority:              sub.NtfyPriority,
+			NtfyTags:                  sub.NtfyTags,
+			BypassQuietHours:          sub.BypassQuietHours,
+			QuietPriority:             sub.QuietPriority,
+			HoldDuringQuiet:           sub.HoldDuringQuiet,
+			HoldClearWindow:           sub.HoldClearWindow,
+			BurstCount:                sub.BurstCount,
+			BurstWindow:               sub.BurstWindow,
+			BurstPriority:             sub.BurstPriority,
+			WatchdogPattern:           sub.WatchdogPattern,
+			WatchdogWindow:            sub.WatchdogWindow,
+			WatchdogCooldown:          sub.WatchdogCooldown,
+			WatchdogProgram:           sub.WatchdogProgram,
+			WatchdogEventProgram:      sub.WatchdogEventProgram,
+			WatchdogTriggerMessage:    sub.WatchdogTriggerMessage,
+			WatchdogClearMessage:      sub.WatchdogClearMessage,
+			RestartLoopEnabled:        sub.RestartLoopEnabled,
+			RestartLoopStateWindow:    sub.RestartLoopStateWindow,
+			RestartLoopEventCount:     sub.RestartLoopEventCount,
+			RestartLoopEventWindow:    sub.RestartLoopEventWindow,
+			RestartLoopCooldown:       sub.RestartLoopCooldown,
+			RestartLoopTriggerMessage: sub.RestartLoopTriggerMessage,
+			AlertQuietEnabled:         sub.AlertQuietEnabled,
+			AlertQuietStart:           sub.AlertQuietStart,
+			AlertQuietEnd:             sub.AlertQuietEnd,
+			AlertQuietTimezone:        sub.AlertQuietTimezone,
+			QuietStackThreshold:       sub.QuietStackThreshold,
+			QuietStackWindow:          sub.QuietStackWindow,
+			EventCooldowns:            sub.EventCooldowns,
+			MetricCooldowns:           sub.MetricCooldowns,
+			MetricSampleBuffers:       sub.MetricSampleBuffers,
+			LogCooldowns:              sub.LogCooldowns,
+			BurstTrackers:             sub.BurstTrackers,
+			WatchdogTimers:            sub.WatchdogTimers,
+			WatchdogCooldowns:         sub.WatchdogCooldowns,
+			RestartLoopTimers:         sub.RestartLoopTimers,
+			RestartLoopCooldowns:      sub.RestartLoopCooldowns,
+			RestartLoopFirstSeenAt:    sub.RestartLoopFirstSeenAt,
+			RestartLoopRestartStreaks: sub.RestartLoopRestartStreaks,
+			TriggeredContainerIDs:     sub.TriggeredContainerIDs,
 		}
 
 		// Preserve runtime stats (atomics can't be copied in struct literal)
@@ -539,9 +558,16 @@ func (m *Manager) UpdateSubscription(id int, updates map[string]any) error {
 						}
 						updated.WatchdogPattern = exprStr
 						updated.WatchdogProgram = program
+						eventProgram, err := expr.Compile(exprStr, expr.Env(types.NotificationEvent{}))
+						if err != nil {
+							updateErr = fmt.Errorf("failed to compile watchdog event pattern: %w", err)
+							return nil, xsync.CancelOp
+						}
+						updated.WatchdogEventProgram = eventProgram
 					} else {
 						updated.WatchdogPattern = ""
 						updated.WatchdogProgram = nil
+						updated.WatchdogEventProgram = nil
 					}
 				}
 			case "watchdogWindow":
@@ -559,6 +585,30 @@ func (m *Manager) UpdateSubscription(id int, updates map[string]any) error {
 			case "watchdogClearMessage":
 				if message, ok := value.(string); ok {
 					updated.WatchdogClearMessage = message
+				}
+			case "restartLoopEnabled":
+				if enabled, ok := value.(bool); ok {
+					updated.RestartLoopEnabled = enabled
+				}
+			case "restartLoopStateWindow":
+				if window, ok := value.(int); ok {
+					updated.RestartLoopStateWindow = window
+				}
+			case "restartLoopEventCount":
+				if count, ok := value.(int); ok {
+					updated.RestartLoopEventCount = count
+				}
+			case "restartLoopEventWindow":
+				if window, ok := value.(int); ok {
+					updated.RestartLoopEventWindow = window
+				}
+			case "restartLoopCooldown":
+				if cooldown, ok := value.(int); ok {
+					updated.RestartLoopCooldown = cooldown
+				}
+			case "restartLoopTriggerMessage":
+				if message, ok := value.(string); ok {
+					updated.RestartLoopTriggerMessage = message
 				}
 			case "alertQuietEnabled":
 				if enabled, ok := value.(bool); ok {

@@ -23,44 +23,50 @@ import (
 
 // Response types for JSON serialization
 type NotificationRuleResponse struct {
-	ID                     int                 `json:"id"`
-	Name                   string              `json:"name"`
-	Enabled                bool                `json:"enabled"`
-	ContainerExpression    string              `json:"containerExpression"`
-	LogExpression          string              `json:"logExpression"`
-	MetricExpression       string              `json:"metricExpression,omitempty"`
-	EventExpression        string              `json:"eventExpression,omitempty"`
-	Cooldown               int                 `json:"cooldown,omitempty"`
-	SampleWindow           int                 `json:"sampleWindow,omitempty"`
-	TriggerCount           int64               `json:"triggerCount"`
-	TriggeredContainers    int                 `json:"triggeredContainers"`
-	LastTriggeredAt        *time.Time          `json:"lastTriggeredAt"`
-	Dispatcher             *DispatcherResponse `json:"dispatcher"`
-	NtfyTopic              string              `json:"ntfyTopic,omitempty"`
-	NtfyPriority           int                 `json:"ntfyPriority,omitempty"`
-	NtfyTags               []string            `json:"ntfyTags,omitempty"`
-	BypassQuietHours       bool                `json:"bypassQuietHours,omitempty"`
-	QuietPriority          int                 `json:"quietPriority,omitempty"`
-	HoldDuringQuiet        bool                `json:"holdDuringQuiet,omitempty"`
-	HoldClearWindow        int                 `json:"holdClearWindow,omitempty"`
-	BurstCount             int                 `json:"burstCount,omitempty"`
-	BurstWindow            int                 `json:"burstWindow,omitempty"`
-	BurstPriority          int                 `json:"burstPriority,omitempty"`
-	WatchdogPattern        string              `json:"watchdogPattern,omitempty"`
-	WatchdogWindow         int                 `json:"watchdogWindow,omitempty"`
-	WatchdogCooldown       int                 `json:"watchdogCooldown,omitempty"`
-	WatchdogTriggerMessage string              `json:"watchdogTriggerMessage,omitempty"`
-	WatchdogClearMessage   string              `json:"watchdogClearMessage,omitempty"`
-	AlertQuietEnabled      bool                `json:"alertQuietEnabled,omitempty"`
-	AlertQuietStart        string              `json:"alertQuietStart,omitempty"`
-	AlertQuietEnd          string              `json:"alertQuietEnd,omitempty"`
-	AlertQuietTimezone     string              `json:"alertQuietTimezone,omitempty"`
+	ID                        int                 `json:"id"`
+	Name                      string              `json:"name"`
+	Enabled                   bool                `json:"enabled"`
+	ContainerExpression       string              `json:"containerExpression"`
+	LogExpression             string              `json:"logExpression"`
+	MetricExpression          string              `json:"metricExpression,omitempty"`
+	EventExpression           string              `json:"eventExpression,omitempty"`
+	Cooldown                  int                 `json:"cooldown,omitempty"`
+	SampleWindow              int                 `json:"sampleWindow,omitempty"`
+	TriggerCount              int64               `json:"triggerCount"`
+	TriggeredContainers       int                 `json:"triggeredContainers"`
+	LastTriggeredAt           *time.Time          `json:"lastTriggeredAt"`
+	Dispatcher                *DispatcherResponse `json:"dispatcher"`
+	NtfyTopic                 string              `json:"ntfyTopic,omitempty"`
+	NtfyPriority              int                 `json:"ntfyPriority,omitempty"`
+	NtfyTags                  []string            `json:"ntfyTags,omitempty"`
+	BypassQuietHours          bool                `json:"bypassQuietHours,omitempty"`
+	QuietPriority             int                 `json:"quietPriority,omitempty"`
+	HoldDuringQuiet           bool                `json:"holdDuringQuiet,omitempty"`
+	HoldClearWindow           int                 `json:"holdClearWindow,omitempty"`
+	BurstCount                int                 `json:"burstCount,omitempty"`
+	BurstWindow               int                 `json:"burstWindow,omitempty"`
+	BurstPriority             int                 `json:"burstPriority,omitempty"`
+	WatchdogPattern           string              `json:"watchdogPattern,omitempty"`
+	WatchdogWindow            int                 `json:"watchdogWindow,omitempty"`
+	WatchdogCooldown          int                 `json:"watchdogCooldown,omitempty"`
+	WatchdogTriggerMessage    string              `json:"watchdogTriggerMessage,omitempty"`
+	WatchdogClearMessage      string              `json:"watchdogClearMessage,omitempty"`
+	RestartLoopEnabled        bool                `json:"restartLoopEnabled,omitempty"`
+	RestartLoopStateWindow    int                 `json:"restartLoopStateWindow,omitempty"`
+	RestartLoopEventCount     int                 `json:"restartLoopEventCount,omitempty"`
+	RestartLoopEventWindow    int                 `json:"restartLoopEventWindow,omitempty"`
+	RestartLoopCooldown       int                 `json:"restartLoopCooldown,omitempty"`
+	RestartLoopTriggerMessage string              `json:"restartLoopTriggerMessage,omitempty"`
+	AlertQuietEnabled         bool                `json:"alertQuietEnabled,omitempty"`
+	AlertQuietStart           string              `json:"alertQuietStart,omitempty"`
+	AlertQuietEnd             string              `json:"alertQuietEnd,omitempty"`
+	AlertQuietTimezone        string              `json:"alertQuietTimezone,omitempty"`
 }
 
 type QuietHoursResponse struct {
 	notification.QuietHoursConfig
 	ServerNow      time.Time `json:"serverNow"`
-	ServerNowLabel  string    `json:"serverNowLabel"`
+	ServerNowLabel string    `json:"serverNowLabel"`
 	ActiveNow      bool      `json:"activeNow"`
 }
 
@@ -82,65 +88,77 @@ type DispatcherResponse struct {
 }
 
 type NotificationRuleInput struct {
-	Name                   string   `json:"name"`
-	Enabled                bool     `json:"enabled"`
-	DispatcherID           int      `json:"dispatcherId"`
-	LogExpression          string   `json:"logExpression"`
-	ContainerExpression    string   `json:"containerExpression"`
-	MetricExpression       string   `json:"metricExpression,omitempty"`
-	EventExpression        string   `json:"eventExpression,omitempty"`
-	Cooldown               int      `json:"cooldown,omitempty"`
-	SampleWindow           int      `json:"sampleWindow,omitempty"`
-	NtfyTopic              string   `json:"ntfyTopic,omitempty"`
-	NtfyPriority           int      `json:"ntfyPriority,omitempty"`
-	NtfyTags               []string `json:"ntfyTags,omitempty"`
-	BypassQuietHours       bool     `json:"bypassQuietHours,omitempty"`
-	QuietPriority          int      `json:"quietPriority,omitempty"`
-	HoldDuringQuiet        bool     `json:"holdDuringQuiet,omitempty"`
-	HoldClearWindow        int      `json:"holdClearWindow,omitempty"`
-	BurstCount             int      `json:"burstCount,omitempty"`
-	BurstWindow            int      `json:"burstWindow,omitempty"`
-	BurstPriority          int      `json:"burstPriority,omitempty"`
-	WatchdogPattern        string   `json:"watchdogPattern,omitempty"`
-	WatchdogWindow         int      `json:"watchdogWindow,omitempty"`
-	WatchdogCooldown       int      `json:"watchdogCooldown,omitempty"`
-	WatchdogTriggerMessage string   `json:"watchdogTriggerMessage,omitempty"`
-	WatchdogClearMessage   string   `json:"watchdogClearMessage,omitempty"`
-	AlertQuietEnabled      bool     `json:"alertQuietEnabled,omitempty"`
-	AlertQuietStart        string   `json:"alertQuietStart,omitempty"`
-	AlertQuietEnd          string   `json:"alertQuietEnd,omitempty"`
-	AlertQuietTimezone     string   `json:"alertQuietTimezone,omitempty"`
+	Name                      string   `json:"name"`
+	Enabled                   bool     `json:"enabled"`
+	DispatcherID              int      `json:"dispatcherId"`
+	LogExpression             string   `json:"logExpression"`
+	ContainerExpression       string   `json:"containerExpression"`
+	MetricExpression          string   `json:"metricExpression,omitempty"`
+	EventExpression           string   `json:"eventExpression,omitempty"`
+	Cooldown                  int      `json:"cooldown,omitempty"`
+	SampleWindow              int      `json:"sampleWindow,omitempty"`
+	NtfyTopic                 string   `json:"ntfyTopic,omitempty"`
+	NtfyPriority              int      `json:"ntfyPriority,omitempty"`
+	NtfyTags                  []string `json:"ntfyTags,omitempty"`
+	BypassQuietHours          bool     `json:"bypassQuietHours,omitempty"`
+	QuietPriority             int      `json:"quietPriority,omitempty"`
+	HoldDuringQuiet           bool     `json:"holdDuringQuiet,omitempty"`
+	HoldClearWindow           int      `json:"holdClearWindow,omitempty"`
+	BurstCount                int      `json:"burstCount,omitempty"`
+	BurstWindow               int      `json:"burstWindow,omitempty"`
+	BurstPriority             int      `json:"burstPriority,omitempty"`
+	WatchdogPattern           string   `json:"watchdogPattern,omitempty"`
+	WatchdogWindow            int      `json:"watchdogWindow,omitempty"`
+	WatchdogCooldown          int      `json:"watchdogCooldown,omitempty"`
+	WatchdogTriggerMessage    string   `json:"watchdogTriggerMessage,omitempty"`
+	WatchdogClearMessage      string   `json:"watchdogClearMessage,omitempty"`
+	RestartLoopEnabled        bool     `json:"restartLoopEnabled,omitempty"`
+	RestartLoopStateWindow    int      `json:"restartLoopStateWindow,omitempty"`
+	RestartLoopEventCount     int      `json:"restartLoopEventCount,omitempty"`
+	RestartLoopEventWindow    int      `json:"restartLoopEventWindow,omitempty"`
+	RestartLoopCooldown       int      `json:"restartLoopCooldown,omitempty"`
+	RestartLoopTriggerMessage string   `json:"restartLoopTriggerMessage,omitempty"`
+	AlertQuietEnabled         bool     `json:"alertQuietEnabled,omitempty"`
+	AlertQuietStart           string   `json:"alertQuietStart,omitempty"`
+	AlertQuietEnd             string   `json:"alertQuietEnd,omitempty"`
+	AlertQuietTimezone        string   `json:"alertQuietTimezone,omitempty"`
 }
 
 type NotificationRuleUpdateInput struct {
-	Name                   *string  `json:"name,omitempty"`
-	Enabled                *bool    `json:"enabled,omitempty"`
-	DispatcherID           *int     `json:"dispatcherId,omitempty"`
-	LogExpression          *string  `json:"logExpression,omitempty"`
-	ContainerExpression    *string  `json:"containerExpression,omitempty"`
-	MetricExpression       *string  `json:"metricExpression,omitempty"`
-	EventExpression        *string  `json:"eventExpression,omitempty"`
-	Cooldown               *int     `json:"cooldown,omitempty"`
-	SampleWindow           *int     `json:"sampleWindow,omitempty"`
-	NtfyTopic              *string  `json:"ntfyTopic,omitempty"`
-	NtfyPriority           *int     `json:"ntfyPriority,omitempty"`
-	NtfyTags               []string `json:"ntfyTags,omitempty"`
-	BypassQuietHours       *bool    `json:"bypassQuietHours,omitempty"`
-	QuietPriority          *int     `json:"quietPriority,omitempty"`
-	HoldDuringQuiet        *bool    `json:"holdDuringQuiet,omitempty"`
-	HoldClearWindow        *int     `json:"holdClearWindow,omitempty"`
-	BurstCount             *int     `json:"burstCount,omitempty"`
-	BurstWindow            *int     `json:"burstWindow,omitempty"`
-	BurstPriority          *int     `json:"burstPriority,omitempty"`
-	WatchdogPattern        *string  `json:"watchdogPattern,omitempty"`
-	WatchdogWindow         *int     `json:"watchdogWindow,omitempty"`
-	WatchdogCooldown       *int     `json:"watchdogCooldown,omitempty"`
-	WatchdogTriggerMessage *string  `json:"watchdogTriggerMessage,omitempty"`
-	WatchdogClearMessage   *string  `json:"watchdogClearMessage,omitempty"`
-	AlertQuietEnabled      *bool    `json:"alertQuietEnabled,omitempty"`
-	AlertQuietStart        *string  `json:"alertQuietStart,omitempty"`
-	AlertQuietEnd          *string  `json:"alertQuietEnd,omitempty"`
-	AlertQuietTimezone     *string  `json:"alertQuietTimezone,omitempty"`
+	Name                      *string  `json:"name,omitempty"`
+	Enabled                   *bool    `json:"enabled,omitempty"`
+	DispatcherID              *int     `json:"dispatcherId,omitempty"`
+	LogExpression             *string  `json:"logExpression,omitempty"`
+	ContainerExpression       *string  `json:"containerExpression,omitempty"`
+	MetricExpression          *string  `json:"metricExpression,omitempty"`
+	EventExpression           *string  `json:"eventExpression,omitempty"`
+	Cooldown                  *int     `json:"cooldown,omitempty"`
+	SampleWindow              *int     `json:"sampleWindow,omitempty"`
+	NtfyTopic                 *string  `json:"ntfyTopic,omitempty"`
+	NtfyPriority              *int     `json:"ntfyPriority,omitempty"`
+	NtfyTags                  []string `json:"ntfyTags,omitempty"`
+	BypassQuietHours          *bool    `json:"bypassQuietHours,omitempty"`
+	QuietPriority             *int     `json:"quietPriority,omitempty"`
+	HoldDuringQuiet           *bool    `json:"holdDuringQuiet,omitempty"`
+	HoldClearWindow           *int     `json:"holdClearWindow,omitempty"`
+	BurstCount                *int     `json:"burstCount,omitempty"`
+	BurstWindow               *int     `json:"burstWindow,omitempty"`
+	BurstPriority             *int     `json:"burstPriority,omitempty"`
+	WatchdogPattern           *string  `json:"watchdogPattern,omitempty"`
+	WatchdogWindow            *int     `json:"watchdogWindow,omitempty"`
+	WatchdogCooldown          *int     `json:"watchdogCooldown,omitempty"`
+	WatchdogTriggerMessage    *string  `json:"watchdogTriggerMessage,omitempty"`
+	WatchdogClearMessage      *string  `json:"watchdogClearMessage,omitempty"`
+	RestartLoopEnabled        *bool    `json:"restartLoopEnabled,omitempty"`
+	RestartLoopStateWindow    *int     `json:"restartLoopStateWindow,omitempty"`
+	RestartLoopEventCount     *int     `json:"restartLoopEventCount,omitempty"`
+	RestartLoopEventWindow    *int     `json:"restartLoopEventWindow,omitempty"`
+	RestartLoopCooldown       *int     `json:"restartLoopCooldown,omitempty"`
+	RestartLoopTriggerMessage *string  `json:"restartLoopTriggerMessage,omitempty"`
+	AlertQuietEnabled         *bool    `json:"alertQuietEnabled,omitempty"`
+	AlertQuietStart           *string  `json:"alertQuietStart,omitempty"`
+	AlertQuietEnd             *string  `json:"alertQuietEnd,omitempty"`
+	AlertQuietTimezone        *string  `json:"alertQuietTimezone,omitempty"`
 }
 
 type DispatcherInput struct {
@@ -239,38 +257,44 @@ func subscriptionToResponse(sub *notification.Subscription, dispatchers []notifi
 	}
 
 	return &NotificationRuleResponse{
-		ID:                     sub.ID,
-		Name:                   sub.Name,
-		Enabled:                sub.Enabled,
-		Dispatcher:             disp,
-		LogExpression:          sub.LogExpression,
-		ContainerExpression:    sub.ContainerExpression,
-		MetricExpression:       sub.MetricExpression,
-		EventExpression:        sub.EventExpression,
-		Cooldown:               sub.Cooldown,
-		SampleWindow:           sub.SampleWindow,
-		TriggerCount:           triggerCount,
-		LastTriggeredAt:        lastTriggeredAt,
-		TriggeredContainers:    triggeredContainers,
-		NtfyTopic:              sub.NtfyTopic,
-		NtfyPriority:           sub.NtfyPriority,
-		NtfyTags:               sub.NtfyTags,
-		BypassQuietHours:       sub.BypassQuietHours,
-		QuietPriority:          sub.QuietPriority,
-		HoldDuringQuiet:        sub.HoldDuringQuiet,
-		HoldClearWindow:        sub.HoldClearWindow,
-		BurstCount:             sub.BurstCount,
-		BurstWindow:            sub.BurstWindow,
-		BurstPriority:          sub.BurstPriority,
-		WatchdogPattern:        sub.WatchdogPattern,
-		WatchdogWindow:         sub.WatchdogWindow,
-		WatchdogCooldown:       sub.WatchdogCooldown,
-		WatchdogTriggerMessage: sub.WatchdogTriggerMessage,
-		WatchdogClearMessage:   sub.WatchdogClearMessage,
-		AlertQuietEnabled:      sub.AlertQuietEnabled,
-		AlertQuietStart:        sub.AlertQuietStart,
-		AlertQuietEnd:          sub.AlertQuietEnd,
-		AlertQuietTimezone:     sub.AlertQuietTimezone,
+		ID:                        sub.ID,
+		Name:                      sub.Name,
+		Enabled:                   sub.Enabled,
+		Dispatcher:                disp,
+		LogExpression:             sub.LogExpression,
+		ContainerExpression:       sub.ContainerExpression,
+		MetricExpression:          sub.MetricExpression,
+		EventExpression:           sub.EventExpression,
+		Cooldown:                  sub.Cooldown,
+		SampleWindow:              sub.SampleWindow,
+		TriggerCount:              triggerCount,
+		LastTriggeredAt:           lastTriggeredAt,
+		TriggeredContainers:       triggeredContainers,
+		NtfyTopic:                 sub.NtfyTopic,
+		NtfyPriority:              sub.NtfyPriority,
+		NtfyTags:                  sub.NtfyTags,
+		BypassQuietHours:          sub.BypassQuietHours,
+		QuietPriority:             sub.QuietPriority,
+		HoldDuringQuiet:           sub.HoldDuringQuiet,
+		HoldClearWindow:           sub.HoldClearWindow,
+		BurstCount:                sub.BurstCount,
+		BurstWindow:               sub.BurstWindow,
+		BurstPriority:             sub.BurstPriority,
+		WatchdogPattern:           sub.WatchdogPattern,
+		WatchdogWindow:            sub.WatchdogWindow,
+		WatchdogCooldown:          sub.WatchdogCooldown,
+		WatchdogTriggerMessage:    sub.WatchdogTriggerMessage,
+		WatchdogClearMessage:      sub.WatchdogClearMessage,
+		RestartLoopEnabled:        sub.RestartLoopEnabled,
+		RestartLoopStateWindow:    sub.RestartLoopStateWindow,
+		RestartLoopEventCount:     sub.RestartLoopEventCount,
+		RestartLoopEventWindow:    sub.RestartLoopEventWindow,
+		RestartLoopCooldown:       sub.RestartLoopCooldown,
+		RestartLoopTriggerMessage: sub.RestartLoopTriggerMessage,
+		AlertQuietEnabled:         sub.AlertQuietEnabled,
+		AlertQuietStart:           sub.AlertQuietStart,
+		AlertQuietEnd:             sub.AlertQuietEnd,
+		AlertQuietTimezone:        sub.AlertQuietTimezone,
 	}
 }
 
@@ -373,34 +397,40 @@ func (h *handler) createNotificationRule(w http.ResponseWriter, r *http.Request)
 	}
 
 	sub := &notification.Subscription{
-		Name:                   input.Name,
-		Enabled:                input.Enabled,
-		DispatcherID:           input.DispatcherID,
-		LogExpression:          input.LogExpression,
-		ContainerExpression:    input.ContainerExpression,
-		MetricExpression:       input.MetricExpression,
-		EventExpression:        input.EventExpression,
-		Cooldown:               input.Cooldown,
-		SampleWindow:           input.SampleWindow,
-		NtfyTopic:              input.NtfyTopic,
-		NtfyPriority:           input.NtfyPriority,
-		NtfyTags:               input.NtfyTags,
-		BypassQuietHours:       input.BypassQuietHours,
-		QuietPriority:          input.QuietPriority,
-		HoldDuringQuiet:        input.HoldDuringQuiet,
-		HoldClearWindow:        input.HoldClearWindow,
-		BurstCount:             input.BurstCount,
-		BurstWindow:            input.BurstWindow,
-		BurstPriority:          input.BurstPriority,
-		WatchdogPattern:        input.WatchdogPattern,
-		WatchdogWindow:         input.WatchdogWindow,
-		WatchdogCooldown:       input.WatchdogCooldown,
-		WatchdogTriggerMessage: input.WatchdogTriggerMessage,
-		WatchdogClearMessage:   input.WatchdogClearMessage,
-		AlertQuietEnabled:      input.AlertQuietEnabled,
-		AlertQuietStart:        input.AlertQuietStart,
-		AlertQuietEnd:          input.AlertQuietEnd,
-		AlertQuietTimezone:     input.AlertQuietTimezone,
+		Name:                      input.Name,
+		Enabled:                   input.Enabled,
+		DispatcherID:              input.DispatcherID,
+		LogExpression:             input.LogExpression,
+		ContainerExpression:       input.ContainerExpression,
+		MetricExpression:          input.MetricExpression,
+		EventExpression:           input.EventExpression,
+		Cooldown:                  input.Cooldown,
+		SampleWindow:              input.SampleWindow,
+		NtfyTopic:                 input.NtfyTopic,
+		NtfyPriority:              input.NtfyPriority,
+		NtfyTags:                  input.NtfyTags,
+		BypassQuietHours:          input.BypassQuietHours,
+		QuietPriority:             input.QuietPriority,
+		HoldDuringQuiet:           input.HoldDuringQuiet,
+		HoldClearWindow:           input.HoldClearWindow,
+		BurstCount:                input.BurstCount,
+		BurstWindow:               input.BurstWindow,
+		BurstPriority:             input.BurstPriority,
+		WatchdogPattern:           input.WatchdogPattern,
+		WatchdogWindow:            input.WatchdogWindow,
+		WatchdogCooldown:          input.WatchdogCooldown,
+		WatchdogTriggerMessage:    input.WatchdogTriggerMessage,
+		WatchdogClearMessage:      input.WatchdogClearMessage,
+		RestartLoopEnabled:        input.RestartLoopEnabled,
+		RestartLoopStateWindow:    input.RestartLoopStateWindow,
+		RestartLoopEventCount:     input.RestartLoopEventCount,
+		RestartLoopEventWindow:    input.RestartLoopEventWindow,
+		RestartLoopCooldown:       input.RestartLoopCooldown,
+		RestartLoopTriggerMessage: input.RestartLoopTriggerMessage,
+		AlertQuietEnabled:         input.AlertQuietEnabled,
+		AlertQuietStart:           input.AlertQuietStart,
+		AlertQuietEnd:             input.AlertQuietEnd,
+		AlertQuietTimezone:        input.AlertQuietTimezone,
 	}
 
 	if err := h.hostService.AddSubscription(sub); err != nil {
@@ -425,35 +455,41 @@ func (h *handler) replaceNotificationRule(w http.ResponseWriter, r *http.Request
 	}
 
 	sub := &notification.Subscription{
-		ID:                     id,
-		Name:                   input.Name,
-		Enabled:                input.Enabled,
-		DispatcherID:           input.DispatcherID,
-		LogExpression:          input.LogExpression,
-		ContainerExpression:    input.ContainerExpression,
-		MetricExpression:       input.MetricExpression,
-		EventExpression:        input.EventExpression,
-		Cooldown:               input.Cooldown,
-		SampleWindow:           input.SampleWindow,
-		NtfyTopic:              input.NtfyTopic,
-		NtfyPriority:           input.NtfyPriority,
-		NtfyTags:               input.NtfyTags,
-		BypassQuietHours:       input.BypassQuietHours,
-		QuietPriority:          input.QuietPriority,
-		HoldDuringQuiet:        input.HoldDuringQuiet,
-		HoldClearWindow:        input.HoldClearWindow,
-		BurstCount:             input.BurstCount,
-		BurstWindow:            input.BurstWindow,
-		BurstPriority:          input.BurstPriority,
-		WatchdogPattern:        input.WatchdogPattern,
-		WatchdogWindow:         input.WatchdogWindow,
-		WatchdogCooldown:       input.WatchdogCooldown,
-		WatchdogTriggerMessage: input.WatchdogTriggerMessage,
-		WatchdogClearMessage:   input.WatchdogClearMessage,
-		AlertQuietEnabled:      input.AlertQuietEnabled,
-		AlertQuietStart:        input.AlertQuietStart,
-		AlertQuietEnd:          input.AlertQuietEnd,
-		AlertQuietTimezone:     input.AlertQuietTimezone,
+		ID:                        id,
+		Name:                      input.Name,
+		Enabled:                   input.Enabled,
+		DispatcherID:              input.DispatcherID,
+		LogExpression:             input.LogExpression,
+		ContainerExpression:       input.ContainerExpression,
+		MetricExpression:          input.MetricExpression,
+		EventExpression:           input.EventExpression,
+		Cooldown:                  input.Cooldown,
+		SampleWindow:              input.SampleWindow,
+		NtfyTopic:                 input.NtfyTopic,
+		NtfyPriority:              input.NtfyPriority,
+		NtfyTags:                  input.NtfyTags,
+		BypassQuietHours:          input.BypassQuietHours,
+		QuietPriority:             input.QuietPriority,
+		HoldDuringQuiet:           input.HoldDuringQuiet,
+		HoldClearWindow:           input.HoldClearWindow,
+		BurstCount:                input.BurstCount,
+		BurstWindow:               input.BurstWindow,
+		BurstPriority:             input.BurstPriority,
+		WatchdogPattern:           input.WatchdogPattern,
+		WatchdogWindow:            input.WatchdogWindow,
+		WatchdogCooldown:          input.WatchdogCooldown,
+		WatchdogTriggerMessage:    input.WatchdogTriggerMessage,
+		WatchdogClearMessage:      input.WatchdogClearMessage,
+		RestartLoopEnabled:        input.RestartLoopEnabled,
+		RestartLoopStateWindow:    input.RestartLoopStateWindow,
+		RestartLoopEventCount:     input.RestartLoopEventCount,
+		RestartLoopEventWindow:    input.RestartLoopEventWindow,
+		RestartLoopCooldown:       input.RestartLoopCooldown,
+		RestartLoopTriggerMessage: input.RestartLoopTriggerMessage,
+		AlertQuietEnabled:         input.AlertQuietEnabled,
+		AlertQuietStart:           input.AlertQuietStart,
+		AlertQuietEnd:             input.AlertQuietEnd,
+		AlertQuietTimezone:        input.AlertQuietTimezone,
 	}
 
 	if err := h.hostService.ReplaceSubscription(sub); err != nil {
@@ -549,6 +585,24 @@ func (h *handler) updateNotificationRule(w http.ResponseWriter, r *http.Request)
 	}
 	if input.WatchdogClearMessage != nil {
 		updates["watchdogClearMessage"] = *input.WatchdogClearMessage
+	}
+	if input.RestartLoopEnabled != nil {
+		updates["restartLoopEnabled"] = *input.RestartLoopEnabled
+	}
+	if input.RestartLoopStateWindow != nil {
+		updates["restartLoopStateWindow"] = *input.RestartLoopStateWindow
+	}
+	if input.RestartLoopEventCount != nil {
+		updates["restartLoopEventCount"] = *input.RestartLoopEventCount
+	}
+	if input.RestartLoopEventWindow != nil {
+		updates["restartLoopEventWindow"] = *input.RestartLoopEventWindow
+	}
+	if input.RestartLoopCooldown != nil {
+		updates["restartLoopCooldown"] = *input.RestartLoopCooldown
+	}
+	if input.RestartLoopTriggerMessage != nil {
+		updates["restartLoopTriggerMessage"] = *input.RestartLoopTriggerMessage
 	}
 	if input.AlertQuietEnabled != nil {
 		updates["alertQuietEnabled"] = *input.AlertQuietEnabled

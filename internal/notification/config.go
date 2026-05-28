@@ -296,6 +296,18 @@ func (m *Manager) loadSubscription(sub *Subscription) error {
 	if sub.WatchdogCooldowns == nil {
 		sub.WatchdogCooldowns = xsync.NewMap[string, time.Time]()
 	}
+	if sub.RestartLoopTimers == nil {
+		sub.RestartLoopTimers = xsync.NewMap[string, *time.Timer]()
+	}
+	if sub.RestartLoopCooldowns == nil {
+		sub.RestartLoopCooldowns = xsync.NewMap[string, time.Time]()
+	}
+	if sub.RestartLoopFirstSeenAt == nil {
+		sub.RestartLoopFirstSeenAt = xsync.NewMap[string, time.Time]()
+	}
+	if sub.RestartLoopRestartStreaks == nil {
+		sub.RestartLoopRestartStreaks = xsync.NewMap[string, []time.Time]()
+	}
 
 	m.subscriptions.Store(sub.ID, sub)
 	log.Debug().Str("name", sub.Name).Int("id", sub.ID).Msg("Loaded subscription")

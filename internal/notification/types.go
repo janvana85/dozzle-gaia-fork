@@ -155,6 +155,14 @@ type Subscription struct {
 	WatchdogTriggerMessage string `json:"watchdogTriggerMessage,omitempty" yaml:"watchdogTriggerMessage,omitempty"` // custom alert message
 	WatchdogClearMessage   string `json:"watchdogClearMessage,omitempty" yaml:"watchdogClearMessage,omitempty"`     // sent when watchdog resolves
 
+	// Restart loop detection for event alerts.
+	RestartLoopEnabled        bool   `json:"restartLoopEnabled,omitempty" yaml:"restartLoopEnabled,omitempty"`
+	RestartLoopStateWindow    int    `json:"restartLoopStateWindow,omitempty" yaml:"restartLoopStateWindow,omitempty"`       // seconds; 0 = disabled
+	RestartLoopEventCount     int    `json:"restartLoopEventCount,omitempty" yaml:"restartLoopEventCount,omitempty"`         // 0 = disabled
+	RestartLoopEventWindow    int    `json:"restartLoopEventWindow,omitempty" yaml:"restartLoopEventWindow,omitempty"`       // seconds; 0 = disabled
+	RestartLoopCooldown       int    `json:"restartLoopCooldown,omitempty" yaml:"restartLoopCooldown,omitempty"`             // seconds between alerts; 0 = no cooldown
+	RestartLoopTriggerMessage string `json:"restartLoopTriggerMessage,omitempty" yaml:"restartLoopTriggerMessage,omitempty"` // custom alert message
+
 	// Per-alert quiet hours override: if AlertQuietEnabled, these replace global quiet hours for this alert
 	AlertQuietEnabled  bool   `json:"alertQuietEnabled,omitempty" yaml:"alertQuietEnabled,omitempty"`
 	AlertQuietStart    string `json:"alertQuietStart,omitempty" yaml:"alertQuietStart,omitempty"`       // "22:00"
@@ -162,11 +170,12 @@ type Subscription struct {
 	AlertQuietTimezone string `json:"alertQuietTimezone,omitempty" yaml:"alertQuietTimezone,omitempty"` // "Europe/Prague"
 
 	// Compiled filter expressions
-	LogProgram       *vm.Program `json:"-" yaml:"-"`
-	ContainerProgram *vm.Program `json:"-" yaml:"-"`
-	MetricProgram    *vm.Program `json:"-" yaml:"-"`
-	EventProgram     *vm.Program `json:"-" yaml:"-"`
-	WatchdogProgram  *vm.Program `json:"-" yaml:"-"`
+	LogProgram           *vm.Program `json:"-" yaml:"-"`
+	ContainerProgram     *vm.Program `json:"-" yaml:"-"`
+	MetricProgram        *vm.Program `json:"-" yaml:"-"`
+	EventProgram         *vm.Program `json:"-" yaml:"-"`
+	WatchdogProgram      *vm.Program `json:"-" yaml:"-"`
+	WatchdogEventProgram *vm.Program `json:"-" yaml:"-"`
 
 	// Runtime stats (not persisted)
 	TriggerCount          atomic.Int64                 `json:"-" yaml:"-"`
@@ -189,6 +198,12 @@ type Subscription struct {
 
 	// Per-container watchdog cooldown (last fired time)
 	WatchdogCooldowns *xsync.Map[string, time.Time] `json:"-" yaml:"-"`
+
+	// Per-container restart-loop timers and state
+	RestartLoopTimers         *xsync.Map[string, *time.Timer] `json:"-" yaml:"-"`
+	RestartLoopCooldowns      *xsync.Map[string, time.Time]   `json:"-" yaml:"-"`
+	RestartLoopFirstSeenAt    *xsync.Map[string, time.Time]   `json:"-" yaml:"-"`
+	RestartLoopRestartStreaks *xsync.Map[string, []time.Time] `json:"-" yaml:"-"`
 
 	// Per-subscription quiet hours overrides (0 = use global)
 	QuietStackThreshold int `json:"quietStackThreshold,omitempty" yaml:"quietStackThreshold,omitempty"`
@@ -270,6 +285,10 @@ func (s *Subscription) CompileExpressions() error {
 			return fmt.Errorf("failed to compile watchdog pattern: %w", err)
 		}
 		s.WatchdogProgram = program
+		eventProgram, err := expr.Compile(s.WatchdogPattern, expr.Env(types.NotificationEvent{}))
+		if err == nil {
+			s.WatchdogEventProgram = eventProgram
+		}
 	}
 
 	return nil
@@ -300,6 +319,19 @@ func (s *Subscription) MatchesWatchdog(l types.NotificationLog) bool {
 	}
 	result, err := expr.Run(s.WatchdogProgram, l)
 	if err != nil {
+		return false
+	}
+	match, ok := result.(bool)
+	return ok && match
+}
+
+func (s *Subscription) MatchesWatchdogEvent(event types.NotificationEvent) bool {
+	if s.WatchdogEventProgram == nil {
+		return false
+	}
+	result, err := expr.Run(s.WatchdogEventProgram, event)
+	if err != nil {
+		log.Debug().Err(err).Str("expression", s.WatchdogPattern).Msg("watchdog event expression evaluation error")
 		return false
 	}
 	match, ok := result.(bool)
@@ -582,6 +614,53 @@ func (s *Subscription) SetWatchdogCooldown(containerID string) {
 	if s.WatchdogCooldowns != nil {
 		s.WatchdogCooldowns.Store(containerID, time.Now())
 	}
+}
+
+// Restart loop detection helpers.
+func (s *Subscription) IsRestartLoopCooldownActive(containerID string) bool {
+	if s.RestartLoopCooldown == 0 || s.RestartLoopCooldowns == nil {
+		return false
+	}
+	lastFired, ok := s.RestartLoopCooldowns.Load(containerID)
+	if !ok {
+		return false
+	}
+	return time.Now().Before(lastFired.Add(time.Duration(s.RestartLoopCooldown) * time.Second))
+}
+
+func (s *Subscription) SetRestartLoopCooldown(containerID string) {
+	if s.RestartLoopCooldowns != nil {
+		s.RestartLoopCooldowns.Store(containerID, time.Now())
+	}
+}
+
+func (s *Subscription) CancelRestartLoopTimer(containerID string) bool {
+	if s.RestartLoopTimers == nil {
+		return false
+	}
+	t, ok := s.RestartLoopTimers.LoadAndDelete(containerID)
+	if !ok {
+		if s.RestartLoopFirstSeenAt != nil {
+			s.RestartLoopFirstSeenAt.Delete(containerID)
+		}
+		return false
+	}
+	_ = t.Stop()
+	if s.RestartLoopFirstSeenAt != nil {
+		s.RestartLoopFirstSeenAt.Delete(containerID)
+	}
+	return true
+}
+
+func (s *Subscription) resetRestartLoopTimer(containerID string, d time.Duration) {
+	if s.RestartLoopTimers == nil {
+		return
+	}
+	if existing, ok := s.RestartLoopTimers.LoadAndDelete(containerID); ok {
+		_ = existing.Stop()
+	}
+	timer := time.AfterFunc(d, func() {})
+	s.RestartLoopTimers.Store(containerID, timer)
 }
 
 // Config represents the persisted notification configuration

@@ -262,8 +262,8 @@
       </fieldset>
     </template>
 
-    <!-- Pair Alert (log alerts only) -->
-    <template v-if="alertType === 'log'">
+    <!-- Pair Alert -->
+    <template v-if="alertType === 'log' || alertType === 'event'">
       <fieldset class="fieldset">
         <legend class="fieldset-legend text-lg">{{ $t("notifications.alert-form.watchdog-title") }}</legend>
         <label class="flex cursor-pointer items-center gap-2">
@@ -329,6 +329,75 @@
             <p class="text-base-content/50 mt-1 text-xs">
               {{ $t("notifications.alert-form.watchdog-clear-message-hint") }}
             </p>
+          </div>
+        </div>
+      </fieldset>
+    </template>
+
+    <!-- Restart Loop (event alerts only) -->
+    <template v-if="alertType === 'event'">
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend text-lg">Restart loop</legend>
+        <label class="flex cursor-pointer items-center gap-2">
+          <input type="checkbox" v-model="restartLoopEnabled" class="checkbox checkbox-primary" />
+          <span class="text-sm">Detect repeated container restarts</span>
+        </label>
+        <p class="text-base-content/50 mt-1 text-xs">
+          Notify only after loop is confirmed by state duration or restart count.
+        </p>
+        <div v-show="restartLoopEnabled" class="mt-3 space-y-3">
+          <div>
+            <label class="label text-sm">`restarting` state duration</label>
+            <div class="flex items-center gap-2">
+              <input
+                v-model.number="restartLoopStateWindowMins"
+                type="number"
+                min="0"
+                class="input focus:input-primary w-32"
+                placeholder="0"
+              />
+              <span class="text-base-content/60 text-sm">minutes</span>
+            </div>
+          </div>
+          <div>
+            <label class="label text-sm">Restart event count</label>
+            <div class="flex items-center gap-2">
+              <input
+                v-model.number="restartLoopEventCount"
+                type="number"
+                min="0"
+                class="input focus:input-primary w-32"
+                placeholder="0"
+              />
+              <span class="text-base-content/60 text-sm">in</span>
+              <input
+                v-model.number="restartLoopEventWindowMins"
+                type="number"
+                min="0"
+                class="input focus:input-primary w-32"
+                placeholder="0"
+              />
+              <span class="text-base-content/60 text-sm">minutes</span>
+            </div>
+          </div>
+          <div>
+            <label class="label text-sm">Trigger message</label>
+            <input
+              v-model="restartLoopTriggerMessage"
+              type="text"
+              class="input focus:input-primary w-full text-base"
+              placeholder="Container is stuck restarting"
+            />
+          </div>
+          <div>
+            <label class="label text-sm">Cooldown</label>
+            <input
+              v-model.number="restartLoopCooldownMins"
+              type="number"
+              min="0"
+              class="input focus:input-primary w-32"
+              placeholder="0"
+            />
           </div>
         </div>
       </fieldset>
@@ -465,6 +534,18 @@ const watchdogWindowMins = ref(props.alert?.watchdogWindow ? Math.round(props.al
 const watchdogCooldownMins = ref(props.alert?.watchdogCooldown ? Math.round(props.alert.watchdogCooldown / 60) : 0);
 const watchdogTriggerMessage = ref(props.alert?.watchdogTriggerMessage ?? "");
 const watchdogClearMessage = ref(props.alert?.watchdogClearMessage ?? "");
+const restartLoopEnabled = ref(props.alert?.restartLoopEnabled ?? false);
+const restartLoopStateWindowMins = ref(
+  props.alert?.restartLoopStateWindow ? Math.round(props.alert.restartLoopStateWindow / 60) : 0,
+);
+const restartLoopEventCount = ref(props.alert?.restartLoopEventCount ?? 0);
+const restartLoopEventWindowMins = ref(
+  props.alert?.restartLoopEventWindow ? Math.round(props.alert.restartLoopEventWindow / 60) : 0,
+);
+const restartLoopCooldownMins = ref(
+  props.alert?.restartLoopCooldown ? Math.round(props.alert.restartLoopCooldown / 60) : 0,
+);
+const restartLoopTriggerMessage = ref(props.alert?.restartLoopTriggerMessage ?? "");
 
 // per-alert quiet hours override
 const alertQuietEnabled = ref(props.alert?.alertQuietEnabled ?? false);
@@ -510,6 +591,19 @@ async function save() {
           watchdogClearMessage: watchdogClearMessage.value.trim() || undefined,
         }
       : {};
+  const restartLoop =
+    alertType.value === "event" && restartLoopEnabled.value
+      ? {
+          restartLoopEnabled: true,
+          restartLoopStateWindow:
+            restartLoopStateWindowMins.value > 0 ? restartLoopStateWindowMins.value * 60 : undefined,
+          restartLoopEventCount: restartLoopEventCount.value > 0 ? restartLoopEventCount.value : undefined,
+          restartLoopEventWindow:
+            restartLoopEventWindowMins.value > 0 ? restartLoopEventWindowMins.value * 60 : undefined,
+          restartLoopCooldown: restartLoopCooldownMins.value > 0 ? restartLoopCooldownMins.value * 60 : undefined,
+          restartLoopTriggerMessage: restartLoopTriggerMessage.value.trim() || undefined,
+        }
+      : {};
   const alertQuiet = alertQuietEnabled.value
     ? {
         alertQuietEnabled: true,
@@ -518,7 +612,7 @@ async function save() {
         alertQuietTimezone: alertQuietTimezone.value.trim() || undefined,
       }
     : { alertQuietEnabled: false };
-  await saveAlert({ ...fieldsRef.value.typeFields, ...extra, ...watchdog, ...alertQuiet });
+  await saveAlert({ ...fieldsRef.value.typeFields, ...extra, ...watchdog, ...restartLoop, ...alertQuiet });
 }
 
 // Container editor

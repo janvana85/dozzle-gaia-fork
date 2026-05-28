@@ -29,6 +29,12 @@ export interface NotificationRule {
   watchdogCooldown?: number;
   watchdogTriggerMessage?: string;
   watchdogClearMessage?: string;
+  restartLoopEnabled?: boolean;
+  restartLoopStateWindow?: number;
+  restartLoopEventCount?: number;
+  restartLoopEventWindow?: number;
+  restartLoopCooldown?: number;
+  restartLoopTriggerMessage?: string;
   // per-alert quiet hours override
   alertQuietEnabled?: boolean;
   alertQuietStart?: string;
@@ -79,6 +85,12 @@ export interface NotificationRuleInput {
   watchdogCooldown?: number;
   watchdogTriggerMessage?: string;
   watchdogClearMessage?: string;
+  restartLoopEnabled?: boolean;
+  restartLoopStateWindow?: number;
+  restartLoopEventCount?: number;
+  restartLoopEventWindow?: number;
+  restartLoopCooldown?: number;
+  restartLoopTriggerMessage?: string;
   alertQuietEnabled?: boolean;
   alertQuietStart?: string;
   alertQuietEnd?: string;

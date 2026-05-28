@@ -40,9 +40,17 @@ _Avoid_: Do not use notification priority to mean quiet-hours bypass.
 A priority or routing escalation caused by the same alert triggering repeatedly within a configured window.
 _Avoid_: Traffic burst when referring specifically to notification priority escalation.
 
+**Cooldown**:
+A per-alert, per-container suppression window that prevents the same alert from firing again until the timer expires.
+_Avoid_: Do not use cooldown to mean quiet hours or burst escalation.
+
 **Pair Alert**:
-A log alert that starts a timer on a trigger message and only notifies if a matching follow-up or clear message does not arrive in time.
+A log or event alert that starts a timer on a trigger message and only notifies if a matching follow-up or clear message does not arrive in time.
 _Avoid_: Watchdog when discussing the user-facing concept.
+
+**Restart Loop**:
+An event alert that confirms a container is stuck in repeated restarts before notifying, using either sustained `restarting` state or repeated `restart` events within a window.
+_Avoid_: Restart storm when referring to the user-facing alert concept.
 
 **Hold Window**:
 A short delay before an alert is delivered. It does not define a clear condition by itself.
@@ -58,6 +66,7 @@ _Avoid_: Do not use this to describe the trigger/clear matching of a **Pair Aler
 - **Quiet-Hours Bypass** can break through **Quiet Hours**.
 - Notification priority does not bypass **Quiet Hours** by itself.
 - **Burst Escalation** does not bypass **Quiet Hours** unless paired with an explicit **Quiet-Hours Bypass** policy.
+- **Cooldown** suppresses repeated alerts for the same container; it does not change quiet-hours delivery rules.
 - **Quiet Hours** take precedence over a **Hold Window**.
 - Alerts are held by default during **Quiet Hours**, tagged with the **Quiet-Hours Tag**, and delivered gradually after the quiet window ends.
 

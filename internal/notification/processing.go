@@ -355,6 +355,87 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 			return true
 		}
 
+		if sub.WatchdogWindow > 0 {
+			// Clear: cancel timer if clear pattern matches.
+			if sub.WatchdogEventProgram != nil && sub.MatchesWatchdogEvent(notificationEvent) {
+				wasActive := sub.CancelWatchdogTimer(event.Event.ActorID)
+				if wasActive && sub.WatchdogClearMessage != "" {
+					if d, ok := m.getDispatcher(sub.DispatcherID); ok {
+						clearNotif := types.Notification{
+							ID:           fmt.Sprintf("%s-watchdog-clear-%d", event.Event.ActorID, time.Now().UnixNano()),
+							Type:         types.EventNotification,
+							Detail:       sub.WatchdogClearMessage,
+							Container:    notificationContainer,
+							Event:        &notificationEvent,
+							NtfyTopic:    sub.NtfyTopic,
+							NtfyPriority: sub.NtfyPriority,
+							NtfyTags:     sub.NtfyTags,
+							Subscription: types.SubscriptionConfig{
+								ID:                  sub.ID,
+								Name:                sub.Name,
+								Enabled:             sub.Enabled,
+								DispatcherID:        sub.DispatcherID,
+								EventExpression:     sub.EventExpression,
+								ContainerExpression: sub.ContainerExpression,
+								NtfyTopic:           sub.NtfyTopic,
+								NtfyPriority:        sub.NtfyPriority,
+								NtfyTags:            sub.NtfyTags,
+								BypassQuietHours:    sub.BypassQuietHours,
+							},
+							Timestamp: time.Now(),
+						}
+						m.sendOrQueue(d, clearNotif, sub)
+					}
+				}
+				return true
+			}
+
+			// Trigger: reset watchdog timer on matching event.
+			if d, ok := m.getDispatcher(sub.DispatcherID); ok {
+				triggerEvent := notificationEvent
+				priority, burstEscalated := sub.DetectBurst(event.Event.ActorID, sub.NtfyPriority)
+				detail := sub.WatchdogTriggerMessage
+				if detail == "" {
+					detail = fmt.Sprintf("Watchdog: no follow-up received within %d seconds", sub.WatchdogWindow)
+				}
+				notif := types.Notification{
+					ID:           fmt.Sprintf("%s-watchdog-%d", event.Event.ActorID, time.Now().UnixNano()),
+					Type:         types.EventNotification,
+					Detail:       detail,
+					Container:    notificationContainer,
+					Event:        &triggerEvent,
+					NtfyTopic:    sub.NtfyTopic,
+					NtfyPriority: priority,
+					NtfyTags:     sub.NtfyTags,
+					Subscription: types.SubscriptionConfig{
+						ID:                  sub.ID,
+						Name:                sub.Name,
+						Enabled:             sub.Enabled,
+						DispatcherID:        sub.DispatcherID,
+						EventExpression:     sub.EventExpression,
+						ContainerExpression: sub.ContainerExpression,
+						NtfyTopic:           sub.NtfyTopic,
+						NtfyPriority:        priority,
+						NtfyTags:            sub.NtfyTags,
+						BypassQuietHours:    sub.BypassQuietHours,
+					},
+					Timestamp: time.Now(),
+				}
+				sub.ResetWatchdogTimer(event.Event.ActorID, func() {
+					if sub.IsWatchdogCooldownActive(event.Event.ActorID) {
+						return
+					}
+					sub.SetWatchdogCooldown(event.Event.ActorID)
+					sub.TriggerCount.Add(1)
+					now := time.Now()
+					sub.LastTriggeredAt.Store(&now)
+					sub.AddTriggeredContainer(notificationContainer.ID)
+					m.sendOrQueue(d, notif, sub, burstEscalated)
+				}, sub.WatchdogWindow)
+				return true
+			}
+		}
+
 		if sub.IsEventCooldownActive(event.Event.ActorID) {
 			return true
 		}
@@ -416,8 +497,121 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 		if d, ok := m.getDispatcher(sub.DispatcherID); ok {
 			m.sendOrQueue(d, notification, sub, burstEscalated)
 		}
+
+		if sub.RestartLoopEnabled {
+			m.processRestartLoop(sub, event, notificationContainer, notificationEvent)
+		}
 		return true
 	})
+}
+
+func (m *Manager) processRestartLoop(sub *Subscription, event *ContainerEventEntry, notificationContainer types.NotificationContainer, notificationEvent types.NotificationEvent) {
+	containerID := event.Event.ActorID
+	now := time.Now()
+
+	if sub.IsRestartLoopCooldownActive(containerID) {
+		return
+	}
+
+	if sub.RestartLoopStateWindow > 0 {
+		if event.Container.State == "restarting" {
+			if _, ok := sub.RestartLoopFirstSeenAt.Load(containerID); !ok {
+				firstSeen := now
+				sub.RestartLoopFirstSeenAt.Store(containerID, firstSeen)
+				timer := time.AfterFunc(time.Duration(sub.RestartLoopStateWindow)*time.Second, func() {
+					sub.RestartLoopTimers.Delete(containerID)
+					first, ok := sub.RestartLoopFirstSeenAt.Load(containerID)
+					if !ok || time.Since(first) < time.Duration(sub.RestartLoopStateWindow)*time.Second {
+						return
+					}
+					if sub.IsRestartLoopCooldownActive(containerID) {
+						return
+					}
+					if current, ok := sub.RestartLoopFirstSeenAt.Load(containerID); !ok || current != first {
+						return
+					}
+					m.fireRestartLoopAlert(sub, containerID, notificationContainer, notificationEvent, "restarting state persisted")
+				})
+				sub.RestartLoopTimers.Store(containerID, timer)
+			}
+		} else {
+			if sub.CancelRestartLoopTimer(containerID) {
+				return
+			}
+		}
+	}
+
+	if sub.RestartLoopEventCount > 0 && sub.RestartLoopEventWindow > 0 && event.Event.Name == "restart" {
+		window := time.Duration(sub.RestartLoopEventWindow) * time.Second
+		cutoff := now.Add(-window)
+		streaks, _ := sub.RestartLoopRestartStreaks.LoadOrCompute(containerID, func() ([]time.Time, bool) {
+			return []time.Time{}, false
+		})
+		pruned := streaks[:0]
+		for _, ts := range streaks {
+			if ts.After(cutoff) {
+				pruned = append(pruned, ts)
+			}
+		}
+		pruned = append(pruned, now)
+		sub.RestartLoopRestartStreaks.Store(containerID, pruned)
+		if len(pruned) >= sub.RestartLoopEventCount {
+			m.fireRestartLoopAlert(sub, containerID, notificationContainer, notificationEvent, "restart events exceeded threshold")
+		}
+	}
+}
+
+func (m *Manager) fireRestartLoopAlert(sub *Subscription, containerID string, notificationContainer types.NotificationContainer, notificationEvent types.NotificationEvent, detail string) {
+	if sub.IsRestartLoopCooldownActive(containerID) {
+		return
+	}
+	sub.SetRestartLoopCooldown(containerID)
+	sub.AddTriggeredContainer(containerID)
+	sub.TriggerCount.Add(1)
+	now := time.Now()
+	sub.LastTriggeredAt.Store(&now)
+
+	priority, burstEscalated := sub.DetectBurst(containerID, sub.NtfyPriority)
+	notification := types.Notification{
+		ID:           fmt.Sprintf("%s-restart-loop-%d", containerID, time.Now().UnixNano()),
+		Type:         types.EventNotification,
+		Detail:       detail,
+		Container:    notificationContainer,
+		Event:        &notificationEvent,
+		NtfyTopic:    sub.NtfyTopic,
+		NtfyPriority: priority,
+		NtfyTags:     sub.NtfyTags,
+		Subscription: types.SubscriptionConfig{
+			ID:                        sub.ID,
+			Name:                      sub.Name,
+			Enabled:                   sub.Enabled,
+			DispatcherID:              sub.DispatcherID,
+			EventExpression:           sub.EventExpression,
+			ContainerExpression:       sub.ContainerExpression,
+			Cooldown:                  sub.Cooldown,
+			NtfyTopic:                 sub.NtfyTopic,
+			NtfyPriority:              priority,
+			NtfyTags:                  sub.NtfyTags,
+			BypassQuietHours:          sub.BypassQuietHours,
+			RestartLoopEnabled:        sub.RestartLoopEnabled,
+			RestartLoopStateWindow:    sub.RestartLoopStateWindow,
+			RestartLoopEventCount:     sub.RestartLoopEventCount,
+			RestartLoopEventWindow:    sub.RestartLoopEventWindow,
+			RestartLoopCooldown:       sub.RestartLoopCooldown,
+			RestartLoopTriggerMessage: sub.RestartLoopTriggerMessage,
+		},
+		Timestamp: time.Now(),
+	}
+
+	log.Debug().
+		Str("containerID", containerID).
+		Str("subscription", sub.Name).
+		Str("reason", detail).
+		Msg("Restart loop alert triggered")
+
+	if d, ok := m.getDispatcher(sub.DispatcherID); ok {
+		m.sendOrQueue(d, notification, sub, burstEscalated)
+	}
 }
 
 func formatLogMessage(message any) string {
