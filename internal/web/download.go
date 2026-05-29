@@ -147,9 +147,9 @@ func (h *handler) downloadLogs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		useStore := h.logStore != nil && h.logStore.HasLogs(c.host, c.id)
+		useStore := h.logStore != nil && h.logStore.HasLogsForContainer(c.containerService.Container)
 		if useStore {
-			events, err := h.logStore.LogsBetweenDates(r.Context(), c.host, c.id, time.Time{}, now)
+			events, err := h.logStore.LogsBetweenDatesForContainer(r.Context(), c.containerService.Container, time.Time{}, now)
 			if err != nil {
 				log.Error().Err(err).Msgf("error getting cached logs for container %s", c.id)
 				return

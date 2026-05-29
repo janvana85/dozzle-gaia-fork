@@ -7,6 +7,7 @@ type LogContext = {
   loadingMore: boolean;
   hasComplexLogs: boolean;
   cached: boolean;
+  cacheMode: "live" | "cache" | "mixed";
   levels: Set<Level>;
   showContainerName: boolean;
   showHostname: boolean;
@@ -33,6 +34,7 @@ export const provideLoggingContext = (
       loadingMore: false,
       hasComplexLogs: false,
       cached: false,
+      cacheMode: "live",
       levels: new Set<Level>(allLevels),
       showContainerName,
       showHostname,
@@ -50,6 +52,7 @@ export const useLoggingContext = () => {
       loadingMore: false,
       hasComplexLogs: false,
       cached: false,
+      cacheMode: "live",
       levels: new Set<Level>(allLevels),
       showContainerName: false,
       showHostname: false,

@@ -12,6 +12,8 @@ export function useLogLoader(
   params: Ref<URLSearchParams>,
   loadingMore: Ref<boolean>,
 ) {
+  const { cached, cacheMode } = useLoggingContext();
+
   async function loadOlderLogs(entry: LoadMoreLogEntry) {
     if (!(messages.value[0] instanceof LoadMoreLogEntry)) throw new Error("No loadMoreLogEntry on first item");
     if (containers.value.length === 0) return;
@@ -60,6 +62,8 @@ export function useLogLoader(
         .sort((a, b) => a.date.getTime() - b.date.getTime());
 
       if (allNewLogs.length > 0) {
+        cached.value = true;
+        cacheMode.value = "mixed";
         messages.value = [loader, ...allNewLogs, ...existingLogs];
       }
     } catch (err) {
@@ -90,6 +94,8 @@ export function useLogLoader(
         .sort((a, b) => a.date.getTime() - b.date.getTime());
 
       if (allLogs.length > 0) {
+        cached.value = true;
+        cacheMode.value = "mixed";
         const updated = messages.value.flatMap((log) => (log === entry ? allLogs : [log]));
         messages.value = updated.length > config.maxLogs ? updated.slice(-config.maxLogs) : updated;
       }

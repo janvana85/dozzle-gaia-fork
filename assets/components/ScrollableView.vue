@@ -11,14 +11,14 @@
       class="border-base-content/10 bg-base-100 sticky top-[calc(55px+env(safe-area-inset-top)+3rem)] z-10 flex items-center justify-between border-b px-4 py-2 text-sm md:top-[3.25rem]"
     >
       <div class="flex items-center gap-2">
-        <span class="badge badge-outline" :class="cached ? 'badge-warning' : 'badge-neutral'">
-          {{ cached ? "cached" : "live" }}
+        <span class="badge badge-outline" :class="cacheModeClass">
+          {{ cacheModeLabel }}
         </span>
         <span class="text-base-content/60" v-if="!followLogs">paused at history</span>
-        <span class="text-base-content/60" v-else>following agent stream</span>
+        <span class="text-base-content/60" v-else>following live for {{ followRemainingLabel }}</span>
       </div>
-      <button class="btn btn-primary btn-sm" @click="followLogs = !followLogs">
-        {{ followLogs ? "Pause follow" : "Follow logs" }}
+      <button class="btn btn-primary btn-sm" @click="toggleFollowLogs">
+        {{ followLogs ? "Pause follow" : "Follow logs for 5m" }}
       </button>
     </div>
     <main :data-scrolling="scrollable ? true : undefined" class="min-h-[300px] snap-y overflow-auto">
@@ -58,15 +58,45 @@
 <script lang="ts" setup>
 const { scrollable = false } = defineProps<{ scrollable?: boolean }>();
 
+const followDurationMs = 5 * 60 * 1000;
 const hasMore = ref(false);
 const followLogs = ref(true);
+const followUntil = ref(Date.now() + followDurationMs);
+const now = ref(Date.now());
 const scrollObserver = ref<HTMLElement>();
 const scrollableContent = ref<HTMLElement>();
 
 const scrollContext = provideScrollContext();
-const { cached, loadingMore, historical } = useLoggingContext();
+const { cached, loadingMore, historical, cacheMode } = useLoggingContext();
+
+const cacheModeLabel = computed(() => {
+  if (cacheMode.value === "mixed") return "live + cache";
+  if (cacheMode.value === "cache") return "cache";
+  return "live";
+});
+const cacheModeClass = computed(() => {
+  if (cacheMode.value === "mixed") return "badge-info";
+  if (cacheMode.value === "cache") return "badge-warning";
+  return "badge-success";
+});
+const followRemainingMs = computed(() => Math.max(0, followUntil.value - now.value));
+const followRemainingLabel = computed(() => {
+  const totalSeconds = Math.ceil(followRemainingMs.value / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+});
+
+let followTimer: ReturnType<typeof setInterval> | undefined;
 
 if (!historical.value) {
+  followTimer = setInterval(() => {
+    now.value = Date.now();
+    if (followLogs.value && now.value >= followUntil.value) {
+      followLogs.value = false;
+    }
+  }, 1000);
+
   useIntersectionObserver(scrollObserver, ([entry]) => (scrollContext.paused = entry.intersectionRatio == 0), {
     threshold: [0, 1],
     rootMargin: "40px 0px",
@@ -87,6 +117,23 @@ if (!historical.value) {
     },
     { childList: true, subtree: true },
   );
+}
+
+onScopeDispose(() => {
+  if (followTimer) {
+    clearInterval(followTimer);
+  }
+});
+
+function toggleFollowLogs() {
+  if (followLogs.value) {
+    followLogs.value = false;
+    return;
+  }
+  followUntil.value = Date.now() + followDurationMs;
+  now.value = Date.now();
+  followLogs.value = true;
+  scrollToBottom("smooth");
 }
 
 function scrollToBottom(behavior: "auto" | "smooth" = "auto") {

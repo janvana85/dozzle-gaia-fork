@@ -74,8 +74,7 @@ function useLogStream(url: Ref<string>, container?: Ref<Container>) {
   const loading = ref(true);
   const error = ref(false);
   const { paused: scrollingPaused } = useScrollContext();
-  const { streamConfig, hasComplexLogs, levels, loadingMore, containers } = useLoggingContext();
-  const { cached } = useLoggingContext();
+  const { streamConfig, hasComplexLogs, levels, loadingMore, containers, cached, cacheMode } = useLoggingContext();
   let initial = true;
 
   const params = computed(() => {
@@ -156,6 +155,7 @@ function useLogStream(url: Ref<string>, container?: Ref<Container>) {
     close();
     if (clear) clearMessages();
     cached.value = false;
+    cacheMode.value = "live";
     opened.value = false;
     loading.value = true;
     error.value = false;
@@ -183,11 +183,13 @@ function useLogStream(url: Ref<string>, container?: Ref<Container>) {
       const data = JSON.parse((e as MessageEvent).data) as LogEvent[];
       const logs = data.map((e) => asLogEntry(e));
       cached.value = true;
+      cacheMode.value = "mixed";
       messages.value = [...logs, ...messages.value];
     });
 
     es.onmessage = (e) => {
       if (e.data) {
+        cacheMode.value = cached.value ? "mixed" : "live";
         buffer.value = [...buffer.value, parseMessage(e.data)];
         flushBuffer();
       }

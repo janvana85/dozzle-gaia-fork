@@ -38,6 +38,22 @@ type Container struct {
 	FullyLoaded   bool                             `json:"-"`
 }
 
+// LogIdentity returns a stable service-level identity for log cache lookup.
+// Compose recreates containers on deploy, but project+service stays stable.
+func (container Container) LogIdentity() string {
+	labels := container.Labels
+	if labels == nil {
+		return ""
+	}
+	if project, service := labels["com.docker.compose.project"], labels["com.docker.compose.service"]; project != "" && service != "" {
+		return "compose:" + project + "/" + service
+	}
+	if project, service := labels["coolify.projectName"], labels["coolify.serviceName"]; project != "" && service != "" {
+		return "coolify:" + project + "/" + service
+	}
+	return ""
+}
+
 // Mount represents a container mount point
 type Mount struct {
 	Type        string `json:"type"`
@@ -99,19 +115,19 @@ func (container Container) ToProto() pb.Container {
 	}
 
 	return pb.Container{
-		Id:          container.ID,
-		Name:        container.Name,
-		Image:       container.Image,
-		Created:     timestamppb.New(container.Created),
-		State:       container.State,
-		Health:      container.Health,
-		Host:        container.Host,
-		Tty:         container.Tty,
-		Labels:      container.Labels,
-		Group:       container.Group,
-		Started:     timestamppb.New(container.StartedAt),
-		Finished:    timestamppb.New(container.FinishedAt),
-		Stats:       pbStats,
+		Id:            container.ID,
+		Name:          container.Name,
+		Image:         container.Image,
+		Created:       timestamppb.New(container.Created),
+		State:         container.State,
+		Health:        container.Health,
+		Host:          container.Host,
+		Tty:           container.Tty,
+		Labels:        container.Labels,
+		Group:         container.Group,
+		Started:       timestamppb.New(container.StartedAt),
+		Finished:      timestamppb.New(container.FinishedAt),
+		Stats:         pbStats,
 		Command:       container.Command,
 		MemoryLimit:   container.MemoryLimit,
 		CpuLimit:      container.CPULimit,
@@ -176,20 +192,20 @@ func FromProto(c *pb.Container) Container {
 	}
 
 	return Container{
-		ID:          c.Id,
-		Name:        c.Name,
-		Image:       c.Image,
-		Labels:      labels,
-		Group:       c.Group,
-		Created:     c.Created.AsTime(),
-		State:       c.State,
-		Health:      c.Health,
-		Host:        c.Host,
-		Tty:         c.Tty,
-		Command:     c.Command,
-		StartedAt:   c.Started.AsTime(),
-		FinishedAt:  c.Finished.AsTime(),
-		Stats:       utils.RingBufferFrom(300, stats),
+		ID:            c.Id,
+		Name:          c.Name,
+		Image:         c.Image,
+		Labels:        labels,
+		Group:         c.Group,
+		Created:       c.Created.AsTime(),
+		State:         c.State,
+		Health:        c.Health,
+		Host:          c.Host,
+		Tty:           c.Tty,
+		Command:       c.Command,
+		StartedAt:     c.Started.AsTime(),
+		FinishedAt:    c.Finished.AsTime(),
+		Stats:         utils.RingBufferFrom(300, stats),
 		MemoryLimit:   c.MemoryLimit,
 		CPULimit:      c.CpuLimit,
 		FullyLoaded:   c.FullyLoaded,

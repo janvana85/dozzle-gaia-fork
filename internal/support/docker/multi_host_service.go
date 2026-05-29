@@ -45,6 +45,7 @@ type MultiHostService struct {
 	persister           *notification.Persister
 	cloudNotifyFn       atomic.Pointer[func()]
 	logStore            *log_storage.Store
+	cacheJobs           sync.Map
 }
 
 func NewMultiHostService(manager ClientManager, timeout time.Duration) *MultiHostService {
@@ -176,6 +177,9 @@ func (m *MultiHostService) mergeCachedContainers(live []container.Container, cac
 }
 
 func containerCacheKey(c container.Container) string {
+	if identity := c.LogIdentity(); identity != "" {
+		return c.Host + "/" + identity
+	}
 	return c.Host + "/" + c.ID
 }
 
@@ -311,7 +315,7 @@ func (m *MultiHostService) StartNotificationManager(ctx context.Context) error {
 	}
 	m.logStore = log_storage.NewStore(cacheDir)
 	m.logStore.Start(ctx, storeCh)
-	m.notificationManager.SetLogStore(storeCh)
+	m.startLogCacheWorker(ctx)
 
 	// Migrate old config format before loading (splits cloud into cloud.yml)
 	migration.MigrateCloudConfig(m.persister.NotificationPath, m.persister.CloudPath)

@@ -79,7 +79,14 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 	}
 
 	containerService, findErr := h.hostService.FindContainer(hostKey(r), id, h.resolveLabels(r))
-	usingStore := findErr != nil && h.logStore != nil && h.logStore.HasLogs(hostKey(r), id)
+	usingStore := false
+	if h.logStore != nil {
+		if findErr != nil {
+			usingStore = h.logStore.HasLogs(hostKey(r), id)
+		} else if containerService != nil {
+			usingStore = h.logStore.HasLogsForContainer(containerService.Container)
+		}
+	}
 	if findErr != nil && !usingStore {
 		http.Error(w, findErr.Error(), http.StatusNotFound)
 		return
@@ -176,7 +183,12 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 		if everything {
 			queryFrom = time.Now().AddDate(0, 0, -4)
 		}
-		events, err := h.logStore.LogsBetweenDates(r.Context(), hostKey(r), id, queryFrom, to)
+		var events <-chan *container.LogEvent
+		if containerService != nil {
+			events, err = h.logStore.LogsBetweenDatesForContainer(r.Context(), containerService.Container, queryFrom, to)
+		} else {
+			events, err = h.logStore.LogsBetweenDates(r.Context(), hostKey(r), id, queryFrom, to)
+		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -234,6 +246,11 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 		}
 
 		for event := range events {
+			if h.logStore != nil && containerService != nil {
+				if err := h.logStore.AppendForContainer(containerService.Container, event); err != nil {
+					log.Debug().Err(err).Str("container", id).Msg("failed to append log cache")
+				}
+			}
 			if everything {
 				if _, ok := event.Message.(string); onlyComplex && ok {
 					continue
@@ -536,7 +553,7 @@ func (h *handler) streamLogsForContainers(w http.ResponseWriter, r *http.Request
 
 		for logEvent := range localLogs {
 			if h.logStore != nil {
-				if err := h.logStore.Append(c.Host, logEvent); err != nil {
+				if err := h.logStore.AppendForContainer(c, logEvent); err != nil {
 					log.Debug().Err(err).Str("container", c.ID).Msg("failed to append log cache")
 				}
 			}

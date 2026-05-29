@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -53,6 +54,7 @@ func (s *Store) openDB() error {
 CREATE TABLE IF NOT EXISTS log_chunks (
   host TEXT NOT NULL,
   container_id TEXT NOT NULL,
+  identity TEXT NOT NULL DEFAULT '',
   day TEXT NOT NULL,
   path TEXT NOT NULL,
   first_ts INTEGER NOT NULL,
@@ -61,22 +63,116 @@ CREATE TABLE IF NOT EXISTS log_chunks (
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (host, container_id, day)
 );
-CREATE INDEX IF NOT EXISTS idx_log_chunks_lookup ON log_chunks(host, container_id, day, first_ts, last_ts);
 
 CREATE TABLE IF NOT EXISTS cached_containers (
   host TEXT NOT NULL,
   container_id TEXT NOT NULL,
+  identity TEXT NOT NULL DEFAULT '',
   payload TEXT NOT NULL,
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (host, container_id)
 );
+`); err != nil {
+		_ = db.Close()
+		return err
+	}
+	for _, col := range []struct {
+		table string
+		name  string
+		def   string
+	}{
+		{"log_chunks", "identity", "TEXT NOT NULL DEFAULT ''"},
+		{"cached_containers", "identity", "TEXT NOT NULL DEFAULT ''"},
+	} {
+		if err := ensureColumn(db, col.table, col.name, col.def); err != nil {
+			_ = db.Close()
+			return err
+		}
+	}
+	if err := migrateCachedIdentities(db); err != nil {
+		_ = db.Close()
+		return err
+	}
+	if _, err := db.Exec(`
+CREATE INDEX IF NOT EXISTS idx_log_chunks_lookup ON log_chunks(host, container_id, day, first_ts, last_ts);
+CREATE INDEX IF NOT EXISTS idx_log_chunks_identity_lookup ON log_chunks(host, identity, day, first_ts, last_ts);
 CREATE INDEX IF NOT EXISTS idx_cached_containers_host ON cached_containers(host, updated_at);
+CREATE INDEX IF NOT EXISTS idx_cached_containers_identity ON cached_containers(host, identity);
 `); err != nil {
 		_ = db.Close()
 		return err
 	}
 	s.db = db
 	return nil
+}
+
+func migrateCachedIdentities(db *sql.DB) error {
+	rows, err := db.Query(`SELECT host, container_id, payload FROM cached_containers WHERE identity = ''`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	type update struct {
+		host        string
+		containerID string
+		identity    string
+	}
+	updates := make([]update, 0)
+	for rows.Next() {
+		var host, containerID, payload string
+		if err := rows.Scan(&host, &containerID, &payload); err != nil {
+			return err
+		}
+		var c container.Container
+		if err := json.Unmarshal([]byte(payload), &c); err != nil {
+			continue
+		}
+		identity := c.LogIdentity()
+		if identity == "" {
+			continue
+		}
+		updates = append(updates, update{host: host, containerID: containerID, identity: identity})
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, u := range updates {
+		if _, err := db.Exec(`UPDATE cached_containers SET identity = ? WHERE host = ? AND container_id = ?`, u.identity, u.host, u.containerID); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`UPDATE log_chunks SET identity = ? WHERE host = ? AND container_id = ? AND identity = ''`, u.identity, u.host, u.containerID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ensureColumn(db *sql.DB, table, column, definition string) error {
+	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull int
+		var defaultValue any
+		var pk int
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
+			return err
+		}
+		if name == column {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition))
+	return err
 }
 
 // Start begins consuming events from ch, writing them to disk.
@@ -102,7 +198,7 @@ func (s *Store) Start(ctx context.Context, ch <-chan *container.LogEvent) {
 				if !ok {
 					return
 				}
-				if err := s.write("unknown", ev); err != nil {
+				if err := s.write("unknown", ev, ""); err != nil {
 					log.Error().Err(err).Str("containerID", ev.ContainerID).Msg("log_storage: write failed")
 				}
 			case <-flushTicker.C:
@@ -131,7 +227,7 @@ func (s *Store) filePath(host, containerID string, day time.Time) string {
 	return filepath.Join(s.containerDir(host, containerID), day.UTC().Format("2006-01-02")+".ndjson")
 }
 
-func (s *Store) write(host string, ev *container.LogEvent) error {
+func (s *Store) write(host string, ev *container.LogEvent, identity string) error {
 	if ev.ContainerID == "" {
 		return nil
 	}
@@ -159,23 +255,24 @@ func (s *Store) write(host string, ev *container.LogEvent) error {
 	if err := json.NewEncoder(w).Encode(ev); err != nil {
 		return err
 	}
-	return s.upsertIndex(host, ev.ContainerID, day, path, ev.Timestamp)
+	return s.upsertIndex(host, ev.ContainerID, identity, day, path, ev.Timestamp)
 }
 
-func (s *Store) upsertIndex(host, containerID, day, path string, ts int64) error {
+func (s *Store) upsertIndex(host, containerID, identity, day, path string, ts int64) error {
 	if err := s.openDB(); err != nil {
 		return err
 	}
 	_, err := s.db.Exec(`
-INSERT INTO log_chunks(host, container_id, day, path, first_ts, last_ts, lines, updated_at)
-VALUES(?, ?, ?, ?, ?, ?, 1, ?)
+INSERT INTO log_chunks(host, container_id, identity, day, path, first_ts, last_ts, lines, updated_at)
+VALUES(?, ?, ?, ?, ?, ?, ?, 1, ?)
 ON CONFLICT(host, container_id, day) DO UPDATE SET
+  identity=excluded.identity,
   path=excluded.path,
   first_ts=MIN(log_chunks.first_ts, excluded.first_ts),
   last_ts=MAX(log_chunks.last_ts, excluded.last_ts),
   lines=log_chunks.lines+1,
   updated_at=excluded.updated_at
-`, host, containerID, day, path, ts, ts, time.Now().Unix())
+`, host, containerID, identity, day, path, ts, ts, time.Now().Unix())
 	return err
 }
 
@@ -195,13 +292,15 @@ func (s *Store) RecordContainer(c container.Container) error {
 	if err != nil {
 		return err
 	}
+	identity := c.LogIdentity()
 	_, err = s.db.Exec(`
-INSERT INTO cached_containers(host, container_id, payload, updated_at)
-VALUES(?, ?, ?, ?)
+INSERT INTO cached_containers(host, container_id, identity, payload, updated_at)
+VALUES(?, ?, ?, ?, ?)
 ON CONFLICT(host, container_id) DO UPDATE SET
+  identity=excluded.identity,
   payload=excluded.payload,
   updated_at=excluded.updated_at
-`, c.Host, c.ID, string(payload), time.Now().Unix())
+`, c.Host, c.ID, identity, string(payload), time.Now().Unix())
 	return err
 }
 
@@ -244,7 +343,10 @@ DELETE FROM cached_containers
 WHERE NOT EXISTS (
   SELECT 1 FROM log_chunks
   WHERE log_chunks.host = cached_containers.host
-    AND log_chunks.container_id = cached_containers.container_id
+    AND (
+      log_chunks.container_id = cached_containers.container_id
+      OR (cached_containers.identity != '' AND log_chunks.identity = cached_containers.identity)
+    )
 )
 `)
 		}
@@ -305,7 +407,10 @@ func (s *Store) CachedContainers(host string) ([]container.Container, error) {
 	query := `SELECT payload FROM cached_containers WHERE EXISTS (
   SELECT 1 FROM log_chunks
   WHERE log_chunks.host = cached_containers.host
-    AND log_chunks.container_id = cached_containers.container_id
+    AND (
+      log_chunks.container_id = cached_containers.container_id
+      OR (cached_containers.identity != '' AND log_chunks.identity = cached_containers.identity)
+    )
 )`
 	args := []any{}
 	if host != "" {
@@ -350,27 +455,89 @@ func (s *Store) HasLogs(host, containerID string) bool {
 	return true
 }
 
+// HasLogsForContainer returns true if cached logs exist for the concrete
+// container ID or for the stable Compose/Coolify service identity.
+func (s *Store) HasLogsForContainer(c container.Container) bool {
+	if c.ID == "" {
+		return false
+	}
+	identity := c.LogIdentity()
+	if identity == "" {
+		return s.HasLogs(c.Host, c.ID)
+	}
+	if err := s.openDB(); err != nil {
+		return s.HasLogs(c.Host, c.ID)
+	}
+	var exists int
+	err := s.db.QueryRow(`
+SELECT 1 FROM log_chunks
+WHERE host = ? AND (container_id = ? OR identity = ?)
+LIMIT 1`, c.Host, c.ID, identity).Scan(&exists)
+	return err == nil
+}
+
+// LastTimestampForContainer returns the newest cached log timestamp for the
+// concrete container ID or stable service identity.
+func (s *Store) LastTimestampForContainer(c container.Container) (time.Time, bool) {
+	if c.ID == "" {
+		return time.Time{}, false
+	}
+	if err := s.openDB(); err != nil {
+		return time.Time{}, false
+	}
+	identity := c.LogIdentity()
+	query := `SELECT MAX(last_ts) FROM log_chunks WHERE host = ? AND container_id = ?`
+	args := []any{c.Host, c.ID}
+	if identity != "" {
+		query += ` OR (host = ? AND identity = ?)`
+		args = append(args, c.Host, identity)
+	}
+	var ts sql.NullInt64
+	if err := s.db.QueryRow(query, args...).Scan(&ts); err != nil || !ts.Valid || ts.Int64 <= 0 {
+		return time.Time{}, false
+	}
+	return time.UnixMilli(ts.Int64).UTC(), true
+}
+
 // LogsBetweenDates returns a channel of stored log events for the container
 // between from and to (inclusive). The channel is closed when done.
 func (s *Store) LogsBetweenDates(ctx context.Context, host, containerID string, from, to time.Time) (<-chan *container.LogEvent, error) {
+	return s.logsBetweenDates(ctx, host, containerID, "", from, to)
+}
+
+// LogsBetweenDatesForContainer includes logs from previous container IDs that
+// belonged to the same stable Compose/Coolify service identity.
+func (s *Store) LogsBetweenDatesForContainer(ctx context.Context, c container.Container, from, to time.Time) (<-chan *container.LogEvent, error) {
+	return s.logsBetweenDates(ctx, c.Host, c.ID, c.LogIdentity(), from, to)
+}
+
+func (s *Store) logsBetweenDates(ctx context.Context, host, containerID, identity string, from, to time.Time) (<-chan *container.LogEvent, error) {
 	if err := s.openDB(); err != nil {
 		return nil, err
 	}
 	ch := make(chan *container.LogEvent, 100)
 	go func() {
 		defer close(ch)
-		rows, err := s.db.QueryContext(ctx, `
-SELECT path FROM log_chunks
-WHERE host = ? AND container_id = ? AND day >= ? AND day <= ?
-ORDER BY day ASC`,
-			host, containerID, from.UTC().Format("2006-01-02"), to.UTC().Format("2006-01-02"))
+		dayFrom := from.UTC().Format("2006-01-02")
+		dayTo := to.UTC().Format("2006-01-02")
+		query := `
+SELECT path, MIN(first_ts) AS first_ts FROM log_chunks
+WHERE (host = ? AND container_id = ? AND day >= ? AND day <= ?)`
+		args := []any{host, containerID, dayFrom, dayTo}
+		if identity != "" {
+			query += ` OR (host = ? AND identity = ? AND day >= ? AND day <= ?)`
+			args = append(args, host, identity, dayFrom, dayTo)
+		}
+		query += ` GROUP BY path ORDER BY first_ts ASC`
+		rows, err := s.db.QueryContext(ctx, query, args...)
 		if err != nil {
 			return
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var path string
-			if err := rows.Scan(&path); err != nil {
+			var firstTS int64
+			if err := rows.Scan(&path, &firstTS); err != nil {
 				continue
 			}
 			s.readFile(ctx, path, from, to, ch)
@@ -381,7 +548,13 @@ ORDER BY day ASC`,
 
 // Append stores one log event for the given host/container.
 func (s *Store) Append(host string, ev *container.LogEvent) error {
-	return s.write(host, ev)
+	return s.write(host, ev, "")
+}
+
+// AppendForContainer stores one log event and indexes it under a stable
+// service identity when the container comes from Compose/Coolify.
+func (s *Store) AppendForContainer(c container.Container, ev *container.LogEvent) error {
+	return s.write(c.Host, ev, c.LogIdentity())
 }
 
 func (s *Store) readFile(ctx context.Context, path string, from, to time.Time, ch chan<- *container.LogEvent) {
