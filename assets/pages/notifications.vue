@@ -180,20 +180,90 @@
         </div>
 
         <!-- Filter Tabs -->
-        <div class="tabs tabs-box mb-6">
-          <button class="tab" :class="{ 'tab-active': filter === 'all' }" @click="filter = 'all'">
-            {{ $t("notifications.filter.all", { count: alerts.length }) }}
-          </button>
-          <button class="tab" :class="{ 'tab-active': filter === 'enabled' }" @click="filter = 'enabled'">
-            {{ $t("notifications.filter.enabled", { count: enabledCount }) }}
-          </button>
-          <button class="tab" :class="{ 'tab-active': filter === 'paused' }" @click="filter = 'paused'">
-            {{ $t("notifications.filter.paused", { count: pausedCount }) }}
-          </button>
+        <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div class="tabs tabs-box">
+            <button class="tab" :class="{ 'tab-active': filter === 'all' }" @click="filter = 'all'">
+              {{ $t("notifications.filter.all", { count: alerts.length }) }}
+            </button>
+            <button class="tab" :class="{ 'tab-active': filter === 'enabled' }" @click="filter = 'enabled'">
+              {{ $t("notifications.filter.enabled", { count: enabledCount }) }}
+            </button>
+            <button class="tab" :class="{ 'tab-active': filter === 'paused' }" @click="filter = 'paused'">
+              {{ $t("notifications.filter.paused", { count: pausedCount }) }}
+            </button>
+          </div>
+          <div class="join">
+            <button
+              class="btn btn-sm join-item"
+              :class="{ 'btn-active': alertViewMode === 'list' }"
+              @click="alertViewMode = 'list'"
+            >
+              <mdi:view-list class="text-base" />
+              {{ $t("notifications.grouping.list") }}
+            </button>
+            <button
+              class="btn btn-sm join-item"
+              :class="{ 'btn-active': alertViewMode === 'grouped' }"
+              @click="alertViewMode = 'grouped'"
+            >
+              <mdi:folder-multiple-outline class="text-base" />
+              {{ $t("notifications.grouping.grouped") }}
+            </button>
+          </div>
         </div>
 
         <!-- Alerts List -->
-        <div class="space-y-4">
+        <div v-if="alertViewMode === 'grouped'" class="space-y-4">
+          <details
+            v-for="group in groupedAlerts"
+            :key="group.key"
+            class="collapse-arrow bg-base-100 rounded-box collapse shadow-sm"
+            open
+          >
+            <summary class="collapse-title px-5 py-4">
+              <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+                <div class="min-w-0">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <mdi:folder-multiple-outline class="text-info shrink-0" />
+                    <h4 class="truncate text-base font-semibold">{{ group.label }}</h4>
+                  </div>
+                  <code class="text-base-content/60 mt-1 block truncate font-mono text-xs">{{ group.expression }}</code>
+                </div>
+                <div class="ml-auto flex shrink-0 flex-wrap items-center gap-2 pr-6">
+                  <span class="badge badge-neutral badge-sm">
+                    {{ $t("notifications.grouping.alert-count", { count: group.alerts.length }) }}
+                  </span>
+                  <span v-if="group.pausedCount" class="badge badge-warning badge-sm">
+                    {{ $t("notifications.grouping.paused-count", { count: group.pausedCount }) }}
+                  </span>
+                  <span v-if="group.triggeredCount" class="badge badge-ghost badge-sm">
+                    {{ $t("notifications.grouping.triggered-count", { count: group.triggeredCount }) }}
+                  </span>
+                </div>
+              </div>
+            </summary>
+            <div class="collapse-content space-y-3 px-4 pb-4">
+              <AlertCard
+                v-for="alert in group.alerts"
+                :key="alert.id"
+                :alert="alert"
+                :on-updated="fetchAlerts"
+                :on-duplicated="placeDuplicatedAlert"
+                :highlight="alert.id === highlightId"
+              />
+            </div>
+          </details>
+          <button
+            class="card card-border border-base-content/30 hover:border-base-content/50 w-full cursor-pointer border-dashed transition-colors"
+            @click="openCreateAlert"
+          >
+            <div class="card-body items-center justify-center gap-1 p-4">
+              <mdi:plus class="text-2xl" />
+              <span class="text-base-content/60 text-sm">{{ $t("notifications.add-alert") }}</span>
+            </div>
+          </button>
+        </div>
+        <div v-else class="space-y-4">
           <AlertCard
             v-for="alert in filteredAlerts"
             :key="alert.id"
@@ -348,6 +418,7 @@ const quietHoursActiveLabel = computed(() => {
 
 // Local state
 const filter = ref<"all" | "enabled" | "paused">("all");
+const alertViewMode = useStorage<"list" | "grouped">("DOZZLE_ALERT_VIEW_MODE", "grouped");
 
 const enabledCount = computed(() => alerts.value.filter((a) => a.enabled).length);
 const pausedCount = computed(() => alerts.value.filter((a) => !a.enabled).length);
@@ -357,6 +428,61 @@ const filteredAlerts = computed(() => {
   if (filter.value === "paused") return alerts.value.filter((a) => !a.enabled);
   return alerts.value;
 });
+
+type AlertGroup = {
+  key: string;
+  label: string;
+  expression: string;
+  alerts: NotificationRule[];
+  pausedCount: number;
+  triggeredCount: number;
+};
+
+const groupedAlerts = computed<AlertGroup[]>(() => {
+  const groups = new Map<string, AlertGroup>();
+  for (const alert of filteredAlerts.value) {
+    const expression = normalizeContainerExpression(alert.containerExpression);
+    const key = expression.toLowerCase();
+    const group =
+      groups.get(key) ??
+      ({
+        key,
+        label: containerExpressionLabel(expression),
+        expression,
+        alerts: [],
+        pausedCount: 0,
+        triggeredCount: 0,
+      } satisfies AlertGroup);
+
+    group.alerts.push(alert);
+    if (!alert.enabled) group.pausedCount += 1;
+    group.triggeredCount += alert.triggerCount || 0;
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+});
+
+function normalizeContainerExpression(expression: string) {
+  const trimmed = expression.trim();
+  return trimmed || "true";
+}
+
+function containerExpressionLabel(expression: string) {
+  if (expression === "true") return t("notifications.grouping.all-containers");
+
+  const namedMatch = expression.match(/\b(?:name|service)\s*==\s*["']([^"']+)["']/i);
+  if (namedMatch?.[1]) return namedMatch[1];
+
+  const composeServiceMatch = expression.match(
+    /labels\[['"]com\.docker\.compose\.service['"]\]\s*==\s*["']([^"']+)["']/i,
+  );
+  if (composeServiceMatch?.[1]) return composeServiceMatch[1];
+
+  const coolifyServiceMatch = expression.match(/labels\[['"]coolify\.serviceName['"]\]\s*==\s*["']([^"']+)["']/i);
+  if (coolifyServiceMatch?.[1]) return coolifyServiceMatch[1];
+
+  return expression;
+}
 
 async function placeDuplicatedAlert(sourceId: number, duplicate: NotificationRule) {
   const currentOrder = alertOrder.value.filter((id) => id !== duplicate.id);

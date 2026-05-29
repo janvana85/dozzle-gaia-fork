@@ -144,6 +144,13 @@ notifications:
     all: Vše ({count})
     enabled: Zapnuté ({count})
     paused: Pozastavené ({count})
+  grouping:
+    list: Seznam
+    grouped: Skupiny
+    all-containers: Všechny kontejnery
+    alert-count: "{count} alertů"
+    paused-count: "{count} pozastaveno"
+    triggered-count: "{count} spuštění"
   no-alerts: Zatím nejsou nastavené žádné alerty. Začněte vytvořením prvního.
   alert:
     paused: Pozastaveno

@@ -256,6 +256,13 @@ notifications:
     all: All ({count})
     enabled: Enabled ({count})
     paused: Paused ({count})
+  grouping:
+    list: List
+    grouped: Grouped
+    all-containers: All containers
+    alert-count: "{count} alerts"
+    paused-count: "{count} paused"
+    triggered-count: "{count} triggered"
   no-alerts: No alerts configured yet. Create one to get started.
   alert:
     paused: Paused
