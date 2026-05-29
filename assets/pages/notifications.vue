@@ -27,20 +27,18 @@
               <div class="flex items-center gap-3">
                 <div>
                   <label class="label text-sm">{{ $t("notifications.settings.quiet-start") }}</label>
-                  <input
-                    type="time"
+                  <QuietTimeInput
                     v-model="quietHours.start"
-                    class="input input-sm focus:input-primary"
+                    :label="$t('notifications.settings.quiet-start')"
                     @change="saveQuietHours"
                   />
                 </div>
                 <span class="text-base-content/40 mt-5">→</span>
                 <div>
                   <label class="label text-sm">{{ $t("notifications.settings.quiet-end") }}</label>
-                  <input
-                    type="time"
+                  <QuietTimeInput
                     v-model="quietHours.end"
-                    class="input input-sm focus:input-primary"
+                    :label="$t('notifications.settings.quiet-end')"
                     @change="saveQuietHours"
                   />
                 </div>
@@ -291,6 +289,7 @@
 import type { NotificationRule, Dispatcher } from "@/types/notifications";
 import AlertForm from "@/components/Notification/AlertForm.vue";
 import DestinationForm from "@/components/Notification/DestinationForm.vue";
+import QuietTimeInput from "@/components/Notification/QuietTimeInput.vue";
 
 const { t } = useI18n();
 const showDrawer = useDrawer();
