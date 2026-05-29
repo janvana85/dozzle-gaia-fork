@@ -96,7 +96,7 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 			// Trigger: reset the watchdog timer if the trigger pattern matches
 			if sub.MatchesLog(notificationLog) {
 				if d, ok := m.getDispatcher(sub.DispatcherID); ok {
-					priority, burstEscalated := sub.DetectBurst(logEvent.ContainerID, sub.NtfyPriority)
+					priority, burstEscalated, burstCount := sub.DetectBurst(logEvent.ContainerID, sub.NtfyPriority)
 					detail := sub.WatchdogTriggerMessage
 					if detail == "" {
 						if sub.WatchdogPattern != "" {
@@ -128,6 +128,7 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 						},
 						Timestamp: time.Now(),
 					}
+					applyBurstModifier(&notif, sub, burstEscalated, burstCount)
 					sub.ResetWatchdogTimer(logEvent.ContainerID, func() {
 						if sub.IsWatchdogCooldownActive(logEvent.ContainerID) {
 							return
@@ -137,7 +138,7 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 						now := time.Now()
 						sub.LastTriggeredAt.Store(&now)
 						sub.AddTriggeredContainer(notificationContainer.ID)
-						m.sendOrQueue(d, notif, sub, burstEscalated)
+						m.sendOrQueue(d, notif, sub)
 					}, sub.WatchdogWindow)
 				}
 			}
@@ -146,6 +147,11 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 
 		// Normal mode: send immediately when trigger matches
 		if !sub.MatchesLog(notificationLog) {
+			return true
+		}
+
+		unique := m.evaluateUnique(sub, logEvent.ContainerID, formatLogMessage(notificationLog.Message))
+		if !unique.Allowed {
 			return true
 		}
 
@@ -164,7 +170,7 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 		if sub.Cooldown > 0 {
 			sub.SetLogCooldown(logEvent.ContainerID)
 			if m.queue != nil {
-				expiresAt := time.Now().Add(time.Duration(sub.Cooldown) * time.Second)
+				expiresAt := time.Now().Add(time.Duration(sub.GetCooldownSeconds()) * time.Second)
 				key := fmt.Sprintf("%d:%s:log", sub.ID, logEvent.ContainerID)
 				if err := m.queue.SetCooldown(key, expiresAt); err != nil {
 					log.Debug().Err(err).Msg("Failed to persist log cooldown")
@@ -191,7 +197,7 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 			Msg("Alert hit")
 
 		priority := sub.NtfyPriority
-		priority, burstEscalated := sub.DetectBurst(logEvent.ContainerID, priority)
+		priority, burstEscalated, burstCount := sub.DetectBurst(logEvent.ContainerID, priority)
 
 		notification := types.Notification{
 			ID:           notificationID,
@@ -216,9 +222,11 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 			},
 			Timestamp: time.Now(),
 		}
+		applyUniqueModifier(&notification, unique)
+		applyBurstModifier(&notification, sub, burstEscalated, burstCount)
 
 		if d, ok := m.getDispatcher(sub.DispatcherID); ok {
-			m.sendOrQueue(d, notification, sub, burstEscalated)
+			m.sendOrQueue(d, notification, sub)
 		}
 		return true
 	})
@@ -267,6 +275,12 @@ func (m *Manager) processStatEvent(event *ContainerStatEvent) {
 			return true
 		}
 
+		detail := fmt.Sprintf("CPU: %.1f%%, Memory: %.1f%%", notificationStat.CPUPercent, notificationStat.MemoryPercent)
+		unique := m.evaluateUnique(sub, event.Stat.ID, detail)
+		if !unique.Allowed {
+			return true
+		}
+
 		// Check per-container cooldown
 		if sub.IsMetricCooldownActive(event.Stat.ID) {
 			return true
@@ -275,7 +289,7 @@ func (m *Manager) processStatEvent(event *ContainerStatEvent) {
 		// Set cooldown and update stats
 		sub.SetMetricCooldown(event.Stat.ID)
 		if m.queue != nil && sub.Cooldown > 0 {
-			expiresAt := time.Now().Add(time.Duration(sub.Cooldown) * time.Second)
+			expiresAt := time.Now().Add(time.Duration(sub.GetCooldownSeconds()) * time.Second)
 			key := fmt.Sprintf("%d:%s:metric", sub.ID, event.Stat.ID)
 			if err := m.queue.SetCooldown(key, expiresAt); err != nil {
 				log.Debug().Err(err).Msg("Failed to persist metric cooldown")
@@ -293,12 +307,12 @@ func (m *Manager) processStatEvent(event *ContainerStatEvent) {
 			Str("subscription", sub.Name).
 			Msg("Metric alert triggered")
 
-		priority, burstEscalated := sub.DetectBurst(event.Stat.ID, sub.NtfyPriority)
+		priority, burstEscalated, burstCount := sub.DetectBurst(event.Stat.ID, sub.NtfyPriority)
 
 		notification := types.Notification{
 			ID:           fmt.Sprintf("%s-metric-%d", event.Stat.ID, time.Now().UnixNano()),
 			Type:         types.MetricNotification,
-			Detail:       fmt.Sprintf("CPU: %.1f%%, Memory: %.1f%%", notificationStat.CPUPercent, notificationStat.MemoryPercent),
+			Detail:       detail,
 			Container:    notificationContainer,
 			Stat:         &notificationStat,
 			NtfyTopic:    sub.NtfyTopic,
@@ -320,9 +334,11 @@ func (m *Manager) processStatEvent(event *ContainerStatEvent) {
 			},
 			Timestamp: time.Now(),
 		}
+		applyUniqueModifier(&notification, unique)
+		applyBurstModifier(&notification, sub, burstEscalated, burstCount)
 
 		if d, ok := m.getDispatcher(sub.DispatcherID); ok {
-			m.sendOrQueue(d, notification, sub, burstEscalated)
+			m.sendOrQueue(d, notification, sub)
 		}
 		return true
 	})
@@ -404,7 +420,7 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 			// Trigger: reset watchdog timer on matching event.
 			if d, ok := m.getDispatcher(sub.DispatcherID); ok {
 				triggerEvent := notificationEvent
-				priority, burstEscalated := sub.DetectBurst(event.Event.ActorID, sub.NtfyPriority)
+				priority, burstEscalated, burstCount := sub.DetectBurst(event.Event.ActorID, sub.NtfyPriority)
 				detail := sub.WatchdogTriggerMessage
 				if detail == "" {
 					detail = fmt.Sprintf("Watchdog: no follow-up received within %d seconds", sub.WatchdogWindow)
@@ -432,6 +448,7 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 					},
 					Timestamp: time.Now(),
 				}
+				applyBurstModifier(&notif, sub, burstEscalated, burstCount)
 				sub.ResetWatchdogTimer(event.Event.ActorID, func() {
 					if sub.IsWatchdogCooldownActive(event.Event.ActorID) {
 						return
@@ -441,7 +458,7 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 					now := time.Now()
 					sub.LastTriggeredAt.Store(&now)
 					sub.AddTriggeredContainer(notificationContainer.ID)
-					m.sendOrQueue(d, notif, sub, burstEscalated)
+					m.sendOrQueue(d, notif, sub)
 				}, sub.WatchdogWindow)
 				return true
 			}
@@ -452,6 +469,16 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 			return true
 		}
 
+		detail := fmt.Sprintf("Container event: %s", event.Event.Name)
+		if exitCode, ok := event.Event.ActorAttributes["exitCode"]; ok && event.Event.Name == "die" {
+			detail = fmt.Sprintf("Container event: %s (exit code %s)", event.Event.Name, exitCode)
+		}
+
+		unique := m.evaluateUnique(sub, event.Event.ActorID, detail)
+		if !unique.Allowed {
+			return true
+		}
+
 		if sub.IsEventCooldownActive(event.Event.ActorID) {
 			return true
 		}
@@ -459,7 +486,7 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 		if sub.Cooldown > 0 {
 			sub.SetEventCooldown(event.Event.ActorID)
 			if m.queue != nil {
-				expiresAt := time.Now().Add(time.Duration(sub.Cooldown) * time.Second)
+				expiresAt := time.Now().Add(time.Duration(sub.GetCooldownSeconds()) * time.Second)
 				key := fmt.Sprintf("%d:%s:event", sub.ID, event.Event.ActorID)
 				if err := m.queue.SetCooldown(key, expiresAt); err != nil {
 					log.Debug().Err(err).Msg("Failed to persist event cooldown")
@@ -485,12 +512,7 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 			Str("event", event.Event.Name).
 			Msg("Alert hit")
 
-		detail := fmt.Sprintf("Container event: %s", event.Event.Name)
-		if exitCode, ok := event.Event.ActorAttributes["exitCode"]; ok && event.Event.Name == "die" {
-			detail = fmt.Sprintf("Container event: %s (exit code %s)", event.Event.Name, exitCode)
-		}
-
-		priority, burstEscalated := sub.DetectBurst(event.Event.ActorID, sub.NtfyPriority)
+		priority, burstEscalated, burstCount := sub.DetectBurst(event.Event.ActorID, sub.NtfyPriority)
 
 		notification := types.Notification{
 			ID:           notificationID,
@@ -516,9 +538,11 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 			},
 			Timestamp: time.Now(),
 		}
+		applyUniqueModifier(&notification, unique)
+		applyBurstModifier(&notification, sub, burstEscalated, burstCount)
 
 		if d, ok := m.getDispatcher(sub.DispatcherID); ok {
-			m.sendOrQueue(d, notification, sub, burstEscalated)
+			m.sendOrQueue(d, notification, sub)
 		}
 		return true
 	})
@@ -590,7 +614,7 @@ func (m *Manager) fireRestartLoopAlert(sub *Subscription, containerID string, no
 	now := time.Now()
 	sub.LastTriggeredAt.Store(&now)
 
-	priority, burstEscalated := sub.DetectBurst(containerID, sub.NtfyPriority)
+	priority, burstEscalated, burstCount := sub.DetectBurst(containerID, sub.NtfyPriority)
 	notificationDetail := detail
 	if sub.RestartLoopTriggerMessage != "" {
 		notificationDetail = sub.RestartLoopTriggerMessage
@@ -625,6 +649,7 @@ func (m *Manager) fireRestartLoopAlert(sub *Subscription, containerID string, no
 		},
 		Timestamp: time.Now(),
 	}
+	applyBurstModifier(&notification, sub, burstEscalated, burstCount)
 
 	log.Info().
 		Str("alert_type", string(types.EventNotification)).
@@ -638,7 +663,7 @@ func (m *Manager) fireRestartLoopAlert(sub *Subscription, containerID string, no
 		Msg("Alert hit")
 
 	if d, ok := m.getDispatcher(sub.DispatcherID); ok {
-		m.sendOrQueue(d, notification, sub, burstEscalated)
+		m.sendOrQueue(d, notification, sub)
 	}
 }
 
@@ -694,7 +719,7 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 	}
 
 	if inQuiet {
-		notification.NtfyTags = appendUniqueTag(notification.NtfyTags, "quiet-hours")
+		addModifierTag(&notification, "quiet-hours")
 
 		if m.queue != nil {
 			if err := m.applyQuietHoursBurstEscalation(&notification, sub); err != nil {
@@ -706,6 +731,8 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 				pendingCount = 0
 			}
 			deliverAt := quietEnd.Add(time.Duration(pendingCount) * 2 * time.Second)
+			addContext(&notification, "Delivery", "held during quiet hours")
+			addContext(&notification, "Queued until", deliverAt.Format(time.RFC3339))
 			log.Info().
 				Str("alert_type", string(notification.Type)).
 				Str("action", "queued").
@@ -727,6 +754,7 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 		if sub.QuietPriority > 0 {
 			notification.NtfyPriority = sub.QuietPriority
 		}
+		addContext(&notification, "Delivery", "quiet hours active; sent without queue")
 		log.Info().
 			Str("alert_type", string(types.EventNotification)).
 			Str("action", "send_now").
@@ -743,6 +771,8 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 	// Hold window only applies after quiet-hours policy has allowed the alert.
 	if sub.HoldClearWindow > 0 && m.queue != nil {
 		deliverAt := time.Now().Add(time.Duration(sub.HoldClearWindow) * time.Second)
+		addContext(&notification, "Delivery", "legacy hold window")
+		addContext(&notification, "Queued until", deliverAt.Format(time.RFC3339))
 		log.Info().
 			Str("alert_type", string(types.LogNotification)).
 			Str("action", "queued").
@@ -816,6 +846,7 @@ func (m *Manager) applyQuietHoursBurstEscalation(notification *types.Notificatio
 		if qh.StackedUsesQuietTopic && qh.QuietTopic != "" {
 			notification.NtfyTopic = qh.QuietTopic
 		}
+		addContext(notification, "Quiet-hours stack", fmt.Sprintf("%d held alerts / %s", state.Count, formatDurationSeconds(stackWindowSec)))
 	}
 
 	if err := m.queue.UpsertAlertState(state); err != nil {

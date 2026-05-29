@@ -303,7 +303,13 @@ notifications:
     sample-window-hint: "Alert triggers when condition is met for {duration}"
     cooldown-label: Cooldown
     cooldown-hint: "{duration} between alerts per container"
+    cooldown-explanation: Cooldown is tracked per alert and per container. Unique thresholds are counted before cooldown, so cooldown does not hide hits needed for threshold alerts.
+    duration-seconds: seconds
+    duration-minutes: minutes
+    duration-hours: hours
+    duration-days: days
     no-cooldown: No cooldown
+    legacy-delivery-warning: This alert uses legacy delivery settings that are hidden in the simplified form. They will be preserved when saving.
     alert-type: Alert Type
     log-alert: Log Alert
     metric-alert: Metric Alert
@@ -320,6 +326,16 @@ notifications:
     burst-count: Trigger Count
     burst-window: Window (seconds)
     burst-priority: Escalated Priority
+    burst-topic: Burst topic
+    unique-title: Unique suppression
+    unique-enabled: Notify once per unique value
+    unique-hint: Extract a value from the matched log line and suppress repeats in the selected window. Add a threshold to notify only after enough hits.
+    unique-regex: Unique key regex
+    unique-window: Unique window
+    unique-window-value: "{duration} before the same unique key can notify again"
+    unique-window-hint: The same unique key can notify again after this window expires.
+    unique-threshold: Threshold (optional)
+    unique-threshold-hint: 0 or 1 sends the first unique value. Higher values send only when that key reaches the threshold.
     quiet-hours: Quiet Hours
     bypass-quiet-hours: Always send (bypass quiet hours)
     quiet-priority: Quiet Hours Priority
@@ -335,8 +351,9 @@ notifications:
     watchdog-pattern: Clear Filter
     watchdog-pattern-placeholder: e.g. message contains "backup completed"
     watchdog-pattern-hint: This expression must match the paired clear event or log message before the max delay expires.
-    watchdog-cooldown: Cooldown between alerts (min)
-    watchdog-cooldown-hint: Minimum minutes between repeated pair alerts. 0 = no cooldown.
+    watchdog-cooldown: Cooldown between alerts
+    watchdog-cooldown-value: "{duration} between repeated pair alerts"
+    watchdog-cooldown-hint: Minimum time between repeated pair alerts. 0 = no cooldown.
     watchdog-trigger-message: Trigger message (optional)
     watchdog-trigger-message-hint: Custom notification text when the trigger side times out. Leave blank for default.
     watchdog-clear-message: Clear message (optional)
@@ -351,6 +368,8 @@ notifications:
     restart-loop-trigger-message: Trigger message
     restart-loop-trigger-placeholder: Container is stuck restarting
     restart-loop-cooldown: Cooldown
+    restart-loop-cooldown-value: "{duration} between repeated restart-loop alerts"
+    restart-loop-cooldown-hint: Minimum time between repeated restart-loop alerts for one container. 0 = no cooldown.
     alert-quiet-title: Per-alert quiet hours override
     alert-quiet-enabled: Override global quiet hours for this alert
     alert-quiet-hint: Leave this off to use the global quiet hours setting for the destination.

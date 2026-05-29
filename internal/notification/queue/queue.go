@@ -45,6 +45,17 @@ CREATE TABLE IF NOT EXISTS cooldown_state (
     key        TEXT PRIMARY KEY,
     expires_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS unique_state (
+    fingerprint      TEXT PRIMARY KEY,
+    subscription_id  INTEGER NOT NULL,
+    unique_key       TEXT NOT NULL,
+    count            INTEGER NOT NULL DEFAULT 0,
+    window_start     INTEGER NOT NULL,
+    sent             INTEGER NOT NULL DEFAULT 0,
+    updated_at       INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_unique_state_updated ON unique_state(updated_at);
 `
 
 // QueuedNotification is a row from the notification_queue table.
@@ -68,6 +79,16 @@ type AlertState struct {
 	WindowStart    time.Time
 	QuietFirstSent bool
 	StackedSent    bool
+	UpdatedAt      time.Time
+}
+
+type UniqueState struct {
+	Fingerprint    string
+	SubscriptionID int
+	UniqueKey      string
+	Count          int
+	WindowStart    time.Time
+	Sent           bool
 	UpdatedAt      time.Time
 }
 
@@ -362,6 +383,59 @@ func (q *Queue) CleanupAlertState(retention time.Duration) {
 	cutoff := time.Now().Add(-retention).Unix()
 	if _, err := q.db.Exec(`DELETE FROM alert_state WHERE updated_at < ?`, cutoff); err != nil {
 		log.Warn().Err(err).Msg("Failed to clean alert_state")
+	}
+}
+
+func (q *Queue) GetOrCreateUniqueState(fp string, subscriptionID int, uniqueKey string) (*UniqueState, error) {
+	now := time.Now()
+	_, err := q.db.Exec(`
+		INSERT OR IGNORE INTO unique_state
+			(fingerprint, subscription_id, unique_key, count, window_start, sent, updated_at)
+		VALUES (?, ?, ?, 0, ?, 0, ?)`,
+		fp, subscriptionID, uniqueKey, now.Unix(), now.Unix(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("insert unique_state: %w", err)
+	}
+
+	row := q.db.QueryRow(`
+		SELECT subscription_id, unique_key, count, window_start, sent, updated_at
+		FROM unique_state WHERE fingerprint = ?`, fp)
+
+	var s UniqueState
+	s.Fingerprint = fp
+	var windowStartUnix, updatedAtUnix int64
+	var sentInt int
+	if err := row.Scan(&s.SubscriptionID, &s.UniqueKey, &s.Count, &windowStartUnix, &sentInt, &updatedAtUnix); err != nil {
+		return nil, fmt.Errorf("scan unique_state: %w", err)
+	}
+	s.WindowStart = time.Unix(windowStartUnix, 0)
+	s.UpdatedAt = time.Unix(updatedAtUnix, 0)
+	s.Sent = sentInt != 0
+	return &s, nil
+}
+
+func (q *Queue) UpsertUniqueState(s *UniqueState) error {
+	now := time.Now()
+	s.UpdatedAt = now
+	_, err := q.db.Exec(`
+		INSERT INTO unique_state
+			(fingerprint, subscription_id, unique_key, count, window_start, sent, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(fingerprint) DO UPDATE SET
+			count        = excluded.count,
+			window_start = excluded.window_start,
+			sent         = excluded.sent,
+			updated_at   = excluded.updated_at`,
+		s.Fingerprint, s.SubscriptionID, s.UniqueKey, s.Count, s.WindowStart.Unix(), boolToInt(s.Sent), now.Unix(),
+	)
+	return err
+}
+
+func (q *Queue) CleanupUniqueState(retention time.Duration) {
+	cutoff := time.Now().Add(-retention).Unix()
+	if _, err := q.db.Exec(`DELETE FROM unique_state WHERE updated_at < ?`, cutoff); err != nil {
+		log.Warn().Err(err).Msg("Failed to clean unique_state")
 	}
 }
 

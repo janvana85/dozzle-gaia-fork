@@ -2,6 +2,7 @@ package notification
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -144,9 +145,15 @@ type Subscription struct {
 	HoldClearWindow int `json:"holdClearWindow,omitempty" yaml:"holdClearWindow,omitempty"`
 
 	// Burst detection: escalate priority after N triggers in BurstWindow seconds
-	BurstCount    int `json:"burstCount,omitempty" yaml:"burstCount,omitempty"`
-	BurstWindow   int `json:"burstWindow,omitempty" yaml:"burstWindow,omitempty"`
-	BurstPriority int `json:"burstPriority,omitempty" yaml:"burstPriority,omitempty"`
+	BurstCount     int    `json:"burstCount,omitempty" yaml:"burstCount,omitempty"`
+	BurstWindow    int    `json:"burstWindow,omitempty" yaml:"burstWindow,omitempty"`
+	BurstPriority  int    `json:"burstPriority,omitempty" yaml:"burstPriority,omitempty"`
+	BurstNtfyTopic string `json:"burstNtfyTopic,omitempty" yaml:"burstNtfyTopic,omitempty"`
+
+	// Unique suppression: derive a key from the matched message and notify once per key/window.
+	UniqueKeyRegex  string `json:"uniqueKeyRegex,omitempty" yaml:"uniqueKeyRegex,omitempty"`
+	UniqueWindow    int    `json:"uniqueWindow,omitempty" yaml:"uniqueWindow,omitempty"`       // seconds; 0 = disabled
+	UniqueThreshold int    `json:"uniqueThreshold,omitempty" yaml:"uniqueThreshold,omitempty"` // 0/1 = first hit per key
 
 	// Watchdog / coupled-messages: fires if resolve pattern doesn't arrive within WatchdogWindow seconds
 	WatchdogPattern        string `json:"watchdogPattern,omitempty" yaml:"watchdogPattern,omitempty"`
@@ -170,12 +177,13 @@ type Subscription struct {
 	AlertQuietTimezone string `json:"alertQuietTimezone,omitempty" yaml:"alertQuietTimezone,omitempty"` // "Europe/Prague"
 
 	// Compiled filter expressions
-	LogProgram           *vm.Program `json:"-" yaml:"-"`
-	ContainerProgram     *vm.Program `json:"-" yaml:"-"`
-	MetricProgram        *vm.Program `json:"-" yaml:"-"`
-	EventProgram         *vm.Program `json:"-" yaml:"-"`
-	WatchdogProgram      *vm.Program `json:"-" yaml:"-"`
-	WatchdogEventProgram *vm.Program `json:"-" yaml:"-"`
+	LogProgram           *vm.Program    `json:"-" yaml:"-"`
+	ContainerProgram     *vm.Program    `json:"-" yaml:"-"`
+	MetricProgram        *vm.Program    `json:"-" yaml:"-"`
+	EventProgram         *vm.Program    `json:"-" yaml:"-"`
+	WatchdogProgram      *vm.Program    `json:"-" yaml:"-"`
+	WatchdogEventProgram *vm.Program    `json:"-" yaml:"-"`
+	UniqueRegex          *regexp.Regexp `json:"-" yaml:"-"`
 
 	// Runtime stats (not persisted)
 	TriggerCount          atomic.Int64                 `json:"-" yaml:"-"`
@@ -193,6 +201,9 @@ type Subscription struct {
 	// Per-container burst trigger timestamps (recent N triggers within BurstWindow)
 	BurstTrackers *xsync.Map[string, []time.Time] `json:"-" yaml:"-"`
 
+	// In-memory fallback for unique suppression when SQLite queue persistence is unavailable.
+	UniqueTrackers *xsync.Map[string, UniqueState] `json:"-" yaml:"-"`
+
 	// Per-container watchdog timers
 	WatchdogTimers *xsync.Map[string, *time.Timer] `json:"-" yaml:"-"`
 
@@ -208,6 +219,12 @@ type Subscription struct {
 	// Per-subscription quiet hours overrides (0 = use global)
 	QuietStackThreshold int `json:"quietStackThreshold,omitempty" yaml:"quietStackThreshold,omitempty"`
 	QuietStackWindow    int `json:"quietStackWindow,omitempty" yaml:"quietStackWindow,omitempty"`
+}
+
+type UniqueState struct {
+	Count       int
+	WindowStart time.Time
+	Sent        bool
 }
 
 // QuietHoursConfig defines a daily quiet window during which non-bypass alerts
@@ -310,6 +327,14 @@ func (s *Subscription) CompileExpressions() error {
 		if s.LogExpression == "" && s.EventExpression == "" && s.WatchdogProgram == nil && s.WatchdogEventProgram == nil {
 			return fmt.Errorf("failed to compile watchdog pattern: %w", logErr)
 		}
+	}
+
+	if s.UniqueKeyRegex != "" {
+		re, err := regexp.Compile(s.UniqueKeyRegex)
+		if err != nil {
+			return fmt.Errorf("failed to compile unique key regex: %w", err)
+		}
+		s.UniqueRegex = re
 	}
 
 	return nil
@@ -469,7 +494,7 @@ func (s *Subscription) IsEventCooldownActive(containerID string) bool {
 	if !ok {
 		return false
 	}
-	cooldown := time.Duration(s.Cooldown) * time.Second
+	cooldown := time.Duration(s.GetCooldownSeconds()) * time.Second
 	return time.Now().Before(lastTriggered.Add(cooldown))
 }
 
@@ -494,15 +519,21 @@ func (s *Subscription) MatchesMetric(stat types.NotificationStat) bool {
 	return ok && match
 }
 
-// GetCooldownSeconds returns the cooldown in seconds, clamped to [0, 3600]
+const maxCooldownSeconds = 48 * 60 * 60
+
+// GetCooldownSeconds returns the cooldown in seconds, clamped to [0, 48h].
 func (s *Subscription) GetCooldownSeconds() int {
-	if s.Cooldown <= 0 {
+	return clampCooldownSeconds(s.Cooldown)
+}
+
+func clampCooldownSeconds(seconds int) int {
+	if seconds <= 0 {
 		return 0
 	}
-	if s.Cooldown > 3600 {
-		return 3600
+	if seconds > maxCooldownSeconds {
+		return maxCooldownSeconds
 	}
-	return s.Cooldown
+	return seconds
 }
 
 // IsMetricCooldownActive checks if the cooldown is still active for a given container
@@ -576,7 +607,7 @@ func (s *Subscription) IsLogCooldownActive(containerID string) bool {
 	if !ok {
 		return false
 	}
-	cooldown := time.Duration(s.Cooldown) * time.Second
+	cooldown := time.Duration(s.GetCooldownSeconds()) * time.Second
 	return time.Now().Before(lastTriggered.Add(cooldown))
 }
 
@@ -587,11 +618,25 @@ func (s *Subscription) SetLogCooldown(containerID string) {
 	}
 }
 
-// DetectBurst records the trigger and returns the notification priority and
-// whether the burst threshold has been reached within BurstWindow seconds.
-func (s *Subscription) DetectBurst(containerID string, basePriority int) (int, bool) {
+func (s *Subscription) ExtractUniqueKey(message string) (string, bool) {
+	if s.UniqueWindow <= 0 || s.UniqueRegex == nil {
+		return "", false
+	}
+	matches := s.UniqueRegex.FindStringSubmatch(message)
+	if len(matches) == 0 {
+		return "", false
+	}
+	if len(matches) > 1 {
+		return strings.TrimSpace(matches[1]), strings.TrimSpace(matches[1]) != ""
+	}
+	return strings.TrimSpace(matches[0]), strings.TrimSpace(matches[0]) != ""
+}
+
+// DetectBurst records the eligible notification send and returns the notification
+// priority, whether the burst threshold has been reached, and the current count.
+func (s *Subscription) DetectBurst(containerID string, basePriority int) (int, bool, int) {
 	if s.BurstCount <= 0 || s.BurstWindow <= 0 || s.BurstTrackers == nil {
-		return basePriority, false
+		return basePriority, false, 0
 	}
 
 	now := time.Now()
@@ -613,9 +658,9 @@ func (s *Subscription) DetectBurst(containerID string, basePriority int) (int, b
 	s.BurstTrackers.Store(containerID, pruned)
 
 	if len(pruned) >= s.BurstCount && s.BurstPriority > 0 {
-		return s.BurstPriority, true
+		return s.BurstPriority, true, len(pruned)
 	}
-	return basePriority, false
+	return basePriority, false, len(pruned)
 }
 
 // IsWatchdogCooldownActive returns true if the watchdog alert is on cooldown for a container.
@@ -627,7 +672,7 @@ func (s *Subscription) IsWatchdogCooldownActive(containerID string) bool {
 	if !ok {
 		return false
 	}
-	return time.Now().Before(lastFired.Add(time.Duration(s.WatchdogCooldown) * time.Second))
+	return time.Now().Before(lastFired.Add(time.Duration(clampCooldownSeconds(s.WatchdogCooldown)) * time.Second))
 }
 
 // SetWatchdogCooldown records the current time as the last watchdog-fired time for a container.
@@ -646,7 +691,7 @@ func (s *Subscription) IsRestartLoopCooldownActive(containerID string) bool {
 	if !ok {
 		return false
 	}
-	return time.Now().Before(lastFired.Add(time.Duration(s.RestartLoopCooldown) * time.Second))
+	return time.Now().Before(lastFired.Add(time.Duration(clampCooldownSeconds(s.RestartLoopCooldown)) * time.Second))
 }
 
 func (s *Subscription) SetRestartLoopCooldown(containerID string) {

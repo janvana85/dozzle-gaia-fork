@@ -165,18 +165,22 @@ func TestSubscription_DetectBurstEscalatesAtThresholdPerContainer(t *testing.T) 
 		BurstTrackers: xsync.NewMap[string, []time.Time](),
 	}
 
-	priority, escalated := sub.DetectBurst("container-1", 2)
+	priority, escalated, count := sub.DetectBurst("container-1", 2)
 	assert.Equal(t, 2, priority)
 	assert.False(t, escalated)
-	priority, escalated = sub.DetectBurst("container-1", 2)
+	assert.Equal(t, 1, count)
+	priority, escalated, count = sub.DetectBurst("container-1", 2)
 	assert.Equal(t, 2, priority)
 	assert.False(t, escalated)
-	priority, escalated = sub.DetectBurst("container-1", 2)
+	assert.Equal(t, 2, count)
+	priority, escalated, count = sub.DetectBurst("container-1", 2)
 	assert.Equal(t, 5, priority)
 	assert.True(t, escalated)
-	priority, escalated = sub.DetectBurst("container-2", 2)
+	assert.Equal(t, 3, count)
+	priority, escalated, count = sub.DetectBurst("container-2", 2)
 	assert.Equal(t, 2, priority)
 	assert.False(t, escalated)
+	assert.Equal(t, 1, count)
 }
 
 func TestSubscription_DetectBurstIgnoresTriggersOutsideWindow(t *testing.T) {
@@ -188,10 +192,47 @@ func TestSubscription_DetectBurstIgnoresTriggersOutsideWindow(t *testing.T) {
 	}
 	sub.BurstTrackers.Store("container-1", []time.Time{time.Now().Add(-2 * time.Minute)})
 
-	priority, escalated := sub.DetectBurst("container-1", 2)
+	priority, escalated, count := sub.DetectBurst("container-1", 2)
 	assert.Equal(t, 2, priority)
 	assert.False(t, escalated)
+	assert.Equal(t, 1, count)
 	assert.Equal(t, 1, sub.BurstTrackers.Size())
+}
+
+func TestSubscription_ExtractUniqueKeyUsesFirstCaptureGroup(t *testing.T) {
+	sub := &Subscription{
+		UniqueKeyRegex: `(\d{1,3}(?:\.\d{1,3}){3})`,
+		UniqueWindow:   86400,
+	}
+	require.NoError(t, sub.CompileExpressions())
+
+	key, ok := sub.ExtractUniqueKey("WARNING 80.188.34.98 Unauthorized")
+
+	assert.True(t, ok)
+	assert.Equal(t, "80.188.34.98", key)
+}
+
+func TestAdvanceUniqueStateWaitsForThresholdThenSuppresses(t *testing.T) {
+	now := time.Now()
+	window := 24 * time.Hour
+
+	first := advanceUniqueState(0, now, false, "80.188.34.98", 3, 86400, now, window)
+	assert.False(t, first.Allowed)
+	assert.Equal(t, 1, first.Count)
+
+	second := advanceUniqueState(first.Count, first.WindowStart, first.Sent, "80.188.34.98", 3, 86400, now, window)
+	assert.False(t, second.Allowed)
+	assert.Equal(t, 2, second.Count)
+
+	third := advanceUniqueState(second.Count, second.WindowStart, second.Sent, "80.188.34.98", 3, 86400, now, window)
+	assert.True(t, third.Allowed)
+	assert.True(t, third.ThresholdReached)
+	assert.True(t, third.Sent)
+	assert.Equal(t, 3, third.Count)
+
+	fourth := advanceUniqueState(third.Count, third.WindowStart, third.Sent, "80.188.34.98", 3, 86400, now, window)
+	assert.False(t, fourth.Allowed)
+	assert.Equal(t, 4, fourth.Count)
 }
 
 func TestSubscription_MatchesLog_NilProgram(t *testing.T) {

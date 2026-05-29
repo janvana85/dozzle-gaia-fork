@@ -1072,19 +1072,50 @@ func (x *Host) GetGroup() string {
 }
 
 type NotificationSubscription struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	Id                  int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name                string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Enabled             bool                   `protobuf:"varint,3,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	DispatcherId        int32                  `protobuf:"varint,4,opt,name=dispatcherId,proto3" json:"dispatcherId,omitempty"`
-	LogExpression       string                 `protobuf:"bytes,5,opt,name=logExpression,proto3" json:"logExpression,omitempty"`
-	ContainerExpression string                 `protobuf:"bytes,6,opt,name=containerExpression,proto3" json:"containerExpression,omitempty"`
-	MetricExpression    string                 `protobuf:"bytes,7,opt,name=metricExpression,proto3" json:"metricExpression,omitempty"`
-	Cooldown            int32                  `protobuf:"varint,8,opt,name=cooldown,proto3" json:"cooldown,omitempty"`
-	SampleWindow        int32                  `protobuf:"varint,9,opt,name=sampleWindow,proto3" json:"sampleWindow,omitempty"`
-	EventExpression     string                 `protobuf:"bytes,10,opt,name=eventExpression,proto3" json:"eventExpression,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"open.v1"`
+	Id                        int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name                      string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Enabled                   bool                   `protobuf:"varint,3,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	DispatcherId              int32                  `protobuf:"varint,4,opt,name=dispatcherId,proto3" json:"dispatcherId,omitempty"`
+	LogExpression             string                 `protobuf:"bytes,5,opt,name=logExpression,proto3" json:"logExpression,omitempty"`
+	ContainerExpression       string                 `protobuf:"bytes,6,opt,name=containerExpression,proto3" json:"containerExpression,omitempty"`
+	MetricExpression          string                 `protobuf:"bytes,7,opt,name=metricExpression,proto3" json:"metricExpression,omitempty"`
+	Cooldown                  int32                  `protobuf:"varint,8,opt,name=cooldown,proto3" json:"cooldown,omitempty"`
+	SampleWindow              int32                  `protobuf:"varint,9,opt,name=sampleWindow,proto3" json:"sampleWindow,omitempty"`
+	EventExpression           string                 `protobuf:"bytes,10,opt,name=eventExpression,proto3" json:"eventExpression,omitempty"`
+	NtfyTopic                 string                 `protobuf:"bytes,11,opt,name=ntfyTopic,proto3" json:"ntfyTopic,omitempty"`
+	NtfyPriority              int32                  `protobuf:"varint,12,opt,name=ntfyPriority,proto3" json:"ntfyPriority,omitempty"`
+	NtfyTags                  []string               `protobuf:"bytes,13,rep,name=ntfyTags,proto3" json:"ntfyTags,omitempty"`
+	BypassQuietHours          bool                   `protobuf:"varint,14,opt,name=bypassQuietHours,proto3" json:"bypassQuietHours,omitempty"`
+	QuietPriority             int32                  `protobuf:"varint,15,opt,name=quietPriority,proto3" json:"quietPriority,omitempty"`
+	HoldDuringQuiet           bool                   `protobuf:"varint,16,opt,name=holdDuringQuiet,proto3" json:"holdDuringQuiet,omitempty"`
+	HoldClearWindow           int32                  `protobuf:"varint,17,opt,name=holdClearWindow,proto3" json:"holdClearWindow,omitempty"`
+	BurstCount                int32                  `protobuf:"varint,18,opt,name=burstCount,proto3" json:"burstCount,omitempty"`
+	BurstWindow               int32                  `protobuf:"varint,19,opt,name=burstWindow,proto3" json:"burstWindow,omitempty"`
+	BurstPriority             int32                  `protobuf:"varint,20,opt,name=burstPriority,proto3" json:"burstPriority,omitempty"`
+	WatchdogPattern           string                 `protobuf:"bytes,21,opt,name=watchdogPattern,proto3" json:"watchdogPattern,omitempty"`
+	WatchdogWindow            int32                  `protobuf:"varint,22,opt,name=watchdogWindow,proto3" json:"watchdogWindow,omitempty"`
+	WatchdogCooldown          int32                  `protobuf:"varint,23,opt,name=watchdogCooldown,proto3" json:"watchdogCooldown,omitempty"`
+	WatchdogTriggerMessage    string                 `protobuf:"bytes,24,opt,name=watchdogTriggerMessage,proto3" json:"watchdogTriggerMessage,omitempty"`
+	WatchdogClearMessage      string                 `protobuf:"bytes,25,opt,name=watchdogClearMessage,proto3" json:"watchdogClearMessage,omitempty"`
+	RestartLoopEnabled        bool                   `protobuf:"varint,26,opt,name=restartLoopEnabled,proto3" json:"restartLoopEnabled,omitempty"`
+	RestartLoopStateWindow    int32                  `protobuf:"varint,27,opt,name=restartLoopStateWindow,proto3" json:"restartLoopStateWindow,omitempty"`
+	RestartLoopEventCount     int32                  `protobuf:"varint,28,opt,name=restartLoopEventCount,proto3" json:"restartLoopEventCount,omitempty"`
+	RestartLoopEventWindow    int32                  `protobuf:"varint,29,opt,name=restartLoopEventWindow,proto3" json:"restartLoopEventWindow,omitempty"`
+	RestartLoopCooldown       int32                  `protobuf:"varint,30,opt,name=restartLoopCooldown,proto3" json:"restartLoopCooldown,omitempty"`
+	RestartLoopTriggerMessage string                 `protobuf:"bytes,31,opt,name=restartLoopTriggerMessage,proto3" json:"restartLoopTriggerMessage,omitempty"`
+	QuietStackThreshold       int32                  `protobuf:"varint,32,opt,name=quietStackThreshold,proto3" json:"quietStackThreshold,omitempty"`
+	QuietStackWindow          int32                  `protobuf:"varint,33,opt,name=quietStackWindow,proto3" json:"quietStackWindow,omitempty"`
+	AlertQuietEnabled         bool                   `protobuf:"varint,34,opt,name=alertQuietEnabled,proto3" json:"alertQuietEnabled,omitempty"`
+	AlertQuietStart           string                 `protobuf:"bytes,35,opt,name=alertQuietStart,proto3" json:"alertQuietStart,omitempty"`
+	AlertQuietEnd             string                 `protobuf:"bytes,36,opt,name=alertQuietEnd,proto3" json:"alertQuietEnd,omitempty"`
+	AlertQuietTimezone        string                 `protobuf:"bytes,37,opt,name=alertQuietTimezone,proto3" json:"alertQuietTimezone,omitempty"`
+	BurstNtfyTopic            string                 `protobuf:"bytes,38,opt,name=burstNtfyTopic,proto3" json:"burstNtfyTopic,omitempty"`
+	UniqueKeyRegex            string                 `protobuf:"bytes,39,opt,name=uniqueKeyRegex,proto3" json:"uniqueKeyRegex,omitempty"`
+	UniqueWindow              int32                  `protobuf:"varint,40,opt,name=uniqueWindow,proto3" json:"uniqueWindow,omitempty"`
+	UniqueThreshold           int32                  `protobuf:"varint,41,opt,name=uniqueThreshold,proto3" json:"uniqueThreshold,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *NotificationSubscription) Reset() {
@@ -1185,6 +1216,223 @@ func (x *NotificationSubscription) GetEventExpression() string {
 		return x.EventExpression
 	}
 	return ""
+}
+
+func (x *NotificationSubscription) GetNtfyTopic() string {
+	if x != nil {
+		return x.NtfyTopic
+	}
+	return ""
+}
+
+func (x *NotificationSubscription) GetNtfyPriority() int32 {
+	if x != nil {
+		return x.NtfyPriority
+	}
+	return 0
+}
+
+func (x *NotificationSubscription) GetNtfyTags() []string {
+	if x != nil {
+		return x.NtfyTags
+	}
+	return nil
+}
+
+func (x *NotificationSubscription) GetBypassQuietHours() bool {
+	if x != nil {
+		return x.BypassQuietHours
+	}
+	return false
+}
+
+func (x *NotificationSubscription) GetQuietPriority() int32 {
+	if x != nil {
+		return x.QuietPriority
+	}
+	return 0
+}
+
+func (x *NotificationSubscription) GetHoldDuringQuiet() bool {
+	if x != nil {
+		return x.HoldDuringQuiet
+	}
+	return false
+}
+
+func (x *NotificationSubscription) GetHoldClearWindow() int32 {
+	if x != nil {
+		return x.HoldClearWindow
+	}
+	return 0
+}
+
+func (x *NotificationSubscription) GetBurstCount() int32 {
+	if x != nil {
+		return x.BurstCount
+	}
+	return 0
+}
+
+func (x *NotificationSubscription) GetBurstWindow() int32 {
+	if x != nil {
+		return x.BurstWindow
+	}
+	return 0
+}
+
+func (x *NotificationSubscription) GetBurstPriority() int32 {
+	if x != nil {
+		return x.BurstPriority
+	}
+	return 0
+}
+
+func (x *NotificationSubscription) GetWatchdogPattern() string {
+	if x != nil {
+		return x.WatchdogPattern
+	}
+	return ""
+}
+
+func (x *NotificationSubscription) GetWatchdogWindow() int32 {
+	if x != nil {
+		return x.WatchdogWindow
+	}
+	return 0
+}
+
+func (x *NotificationSubscription) GetWatchdogCooldown() int32 {
+	if x != nil {
+		return x.WatchdogCooldown
+	}
+	return 0
+}
+
+func (x *NotificationSubscription) GetWatchdogTriggerMessage() string {
+	if x != nil {
+		return x.WatchdogTriggerMessage
+	}
+	return ""
+}
+
+func (x *NotificationSubscription) GetWatchdogClearMessage() string {
+	if x != nil {
+		return x.WatchdogClearMessage
+	}
+	return ""
+}
+
+func (x *NotificationSubscription) GetRestartLoopEnabled() bool {
+	if x != nil {
+		return x.RestartLoopEnabled
+	}
+	return false
+}
+
+func (x *NotificationSubscription) GetRestartLoopStateWindow() int32 {
+	if x != nil {
+		return x.RestartLoopStateWindow
+	}
+	return 0
+}
+
+func (x *NotificationSubscription) GetRestartLoopEventCount() int32 {
+	if x != nil {
+		return x.RestartLoopEventCount
+	}
+	return 0
+}
+
+func (x *NotificationSubscription) GetRestartLoopEventWindow() int32 {
+	if x != nil {
+		return x.RestartLoopEventWindow
+	}
+	return 0
+}
+
+func (x *NotificationSubscription) GetRestartLoopCooldown() int32 {
+	if x != nil {
+		return x.RestartLoopCooldown
+	}
+	return 0
+}
+
+func (x *NotificationSubscription) GetRestartLoopTriggerMessage() string {
+	if x != nil {
+		return x.RestartLoopTriggerMessage
+	}
+	return ""
+}
+
+func (x *NotificationSubscription) GetQuietStackThreshold() int32 {
+	if x != nil {
+		return x.QuietStackThreshold
+	}
+	return 0
+}
+
+func (x *NotificationSubscription) GetQuietStackWindow() int32 {
+	if x != nil {
+		return x.QuietStackWindow
+	}
+	return 0
+}
+
+func (x *NotificationSubscription) GetAlertQuietEnabled() bool {
+	if x != nil {
+		return x.AlertQuietEnabled
+	}
+	return false
+}
+
+func (x *NotificationSubscription) GetAlertQuietStart() string {
+	if x != nil {
+		return x.AlertQuietStart
+	}
+	return ""
+}
+
+func (x *NotificationSubscription) GetAlertQuietEnd() string {
+	if x != nil {
+		return x.AlertQuietEnd
+	}
+	return ""
+}
+
+func (x *NotificationSubscription) GetAlertQuietTimezone() string {
+	if x != nil {
+		return x.AlertQuietTimezone
+	}
+	return ""
+}
+
+func (x *NotificationSubscription) GetBurstNtfyTopic() string {
+	if x != nil {
+		return x.BurstNtfyTopic
+	}
+	return ""
+}
+
+func (x *NotificationSubscription) GetUniqueKeyRegex() string {
+	if x != nil {
+		return x.UniqueKeyRegex
+	}
+	return ""
+}
+
+func (x *NotificationSubscription) GetUniqueWindow() int32 {
+	if x != nil {
+		return x.UniqueWindow
+	}
+	return 0
+}
+
+func (x *NotificationSubscription) GetUniqueThreshold() int32 {
+	if x != nil {
+		return x.UniqueThreshold
+	}
+	return 0
 }
 
 type NotificationDispatcher struct {
@@ -1554,7 +1802,7 @@ const file_types_proto_rawDesc = "" +
 	"\x05group\x18\x0e \x01(\tR\x05group\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xea\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb0\r\n" +
 	"\x18NotificationSubscription\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
@@ -1566,7 +1814,40 @@ const file_types_proto_rawDesc = "" +
 	"\bcooldown\x18\b \x01(\x05R\bcooldown\x12\"\n" +
 	"\fsampleWindow\x18\t \x01(\x05R\fsampleWindow\x12(\n" +
 	"\x0feventExpression\x18\n" +
-	" \x01(\tR\x0feventExpression\"\xc1\x03\n" +
+	" \x01(\tR\x0feventExpression\x12\x1c\n" +
+	"\tntfyTopic\x18\v \x01(\tR\tntfyTopic\x12\"\n" +
+	"\fntfyPriority\x18\f \x01(\x05R\fntfyPriority\x12\x1a\n" +
+	"\bntfyTags\x18\r \x03(\tR\bntfyTags\x12*\n" +
+	"\x10bypassQuietHours\x18\x0e \x01(\bR\x10bypassQuietHours\x12$\n" +
+	"\rquietPriority\x18\x0f \x01(\x05R\rquietPriority\x12(\n" +
+	"\x0fholdDuringQuiet\x18\x10 \x01(\bR\x0fholdDuringQuiet\x12(\n" +
+	"\x0fholdClearWindow\x18\x11 \x01(\x05R\x0fholdClearWindow\x12\x1e\n" +
+	"\n" +
+	"burstCount\x18\x12 \x01(\x05R\n" +
+	"burstCount\x12 \n" +
+	"\vburstWindow\x18\x13 \x01(\x05R\vburstWindow\x12$\n" +
+	"\rburstPriority\x18\x14 \x01(\x05R\rburstPriority\x12(\n" +
+	"\x0fwatchdogPattern\x18\x15 \x01(\tR\x0fwatchdogPattern\x12&\n" +
+	"\x0ewatchdogWindow\x18\x16 \x01(\x05R\x0ewatchdogWindow\x12*\n" +
+	"\x10watchdogCooldown\x18\x17 \x01(\x05R\x10watchdogCooldown\x126\n" +
+	"\x16watchdogTriggerMessage\x18\x18 \x01(\tR\x16watchdogTriggerMessage\x122\n" +
+	"\x14watchdogClearMessage\x18\x19 \x01(\tR\x14watchdogClearMessage\x12.\n" +
+	"\x12restartLoopEnabled\x18\x1a \x01(\bR\x12restartLoopEnabled\x126\n" +
+	"\x16restartLoopStateWindow\x18\x1b \x01(\x05R\x16restartLoopStateWindow\x124\n" +
+	"\x15restartLoopEventCount\x18\x1c \x01(\x05R\x15restartLoopEventCount\x126\n" +
+	"\x16restartLoopEventWindow\x18\x1d \x01(\x05R\x16restartLoopEventWindow\x120\n" +
+	"\x13restartLoopCooldown\x18\x1e \x01(\x05R\x13restartLoopCooldown\x12<\n" +
+	"\x19restartLoopTriggerMessage\x18\x1f \x01(\tR\x19restartLoopTriggerMessage\x120\n" +
+	"\x13quietStackThreshold\x18  \x01(\x05R\x13quietStackThreshold\x12*\n" +
+	"\x10quietStackWindow\x18! \x01(\x05R\x10quietStackWindow\x12,\n" +
+	"\x11alertQuietEnabled\x18\" \x01(\bR\x11alertQuietEnabled\x12(\n" +
+	"\x0falertQuietStart\x18# \x01(\tR\x0falertQuietStart\x12$\n" +
+	"\ralertQuietEnd\x18$ \x01(\tR\ralertQuietEnd\x12.\n" +
+	"\x12alertQuietTimezone\x18% \x01(\tR\x12alertQuietTimezone\x12&\n" +
+	"\x0eburstNtfyTopic\x18& \x01(\tR\x0eburstNtfyTopic\x12&\n" +
+	"\x0euniqueKeyRegex\x18' \x01(\tR\x0euniqueKeyRegex\x12\"\n" +
+	"\funiqueWindow\x18( \x01(\x05R\funiqueWindow\x12(\n" +
+	"\x0funiqueThreshold\x18) \x01(\x05R\x0funiqueThreshold\"\xc1\x03\n" +
 	"\x16NotificationDispatcher\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +

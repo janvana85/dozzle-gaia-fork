@@ -137,6 +137,37 @@ message NotificationSubscription {
   int32 cooldown = 8;
   int32 sampleWindow = 9;
   string eventExpression = 10;
+  string ntfyTopic = 11;
+  int32 ntfyPriority = 12;
+  repeated string ntfyTags = 13;
+  bool bypassQuietHours = 14;
+  int32 quietPriority = 15;
+  bool holdDuringQuiet = 16;
+  int32 holdClearWindow = 17;
+  int32 burstCount = 18;
+  int32 burstWindow = 19;
+  int32 burstPriority = 20;
+  string watchdogPattern = 21;
+  int32 watchdogWindow = 22;
+  int32 watchdogCooldown = 23;
+  string watchdogTriggerMessage = 24;
+  string watchdogClearMessage = 25;
+  bool restartLoopEnabled = 26;
+  int32 restartLoopStateWindow = 27;
+  int32 restartLoopEventCount = 28;
+  int32 restartLoopEventWindow = 29;
+  int32 restartLoopCooldown = 30;
+  string restartLoopTriggerMessage = 31;
+  int32 quietStackThreshold = 32;
+  int32 quietStackWindow = 33;
+  bool alertQuietEnabled = 34;
+  string alertQuietStart = 35;
+  string alertQuietEnd = 36;
+  string alertQuietTimezone = 37;
+  string burstNtfyTopic = 38;
+  string uniqueKeyRegex = 39;
+  int32 uniqueWindow = 40;
+  int32 uniqueThreshold = 41;
 }
 
 message NotificationDispatcher {

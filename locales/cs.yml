@@ -191,7 +191,13 @@ notifications:
     sample-window-hint: "Alert se spustí, když podmínka platí po dobu {duration}"
     cooldown-label: Cooldown
     cooldown-hint: "{duration} mezi alerty pro jeden kontejner"
+    cooldown-explanation: Cooldown se počítá zvlášť pro alert a kontejner. Unique threshold se počítá před cooldownem, takže cooldown neschová hity potřebné pro threshold alert.
+    duration-seconds: sekundy
+    duration-minutes: minuty
+    duration-hours: hodiny
+    duration-days: dny
     no-cooldown: Bez cooldownu
+    legacy-delivery-warning: Tento alert používá starší delivery nastavení, která jsou ve zjednodušeném formuláři skrytá. Při uložení zůstanou zachovaná.
     alert-type: Typ alertu
     log-alert: Log alert
     metric-alert: Metrický alert
@@ -208,6 +214,16 @@ notifications:
     burst-count: Počet triggerů
     burst-window: Okno (sekundy)
     burst-priority: Eskalovaná priorita
+    burst-topic: Burst topic
+    unique-title: Unique potlačení
+    unique-enabled: Poslat jednou pro unikátní hodnotu
+    unique-hint: Z matching logu vytáhne hodnotu a v daném okně potlačí opakování. Volitelný threshold pošle alert až po dostatečném počtu hitů.
+    unique-regex: Regex pro unique klíč
+    unique-window: Unique okno
+    unique-window-value: "{duration}, než může stejný unique klíč znovu poslat notifikaci"
+    unique-window-hint: Stejný unique klíč může znovu poslat notifikaci až po vypršení tohoto okna.
+    unique-threshold: Threshold (volitelné)
+    unique-threshold-hint: 0 nebo 1 pošle první unikátní hodnotu. Vyšší hodnota pošle až po dosažení threshold pro daný klíč.
     quiet-hours: Tiché hodiny
     bypass-quiet-hours: Vždy poslat, ignorovat tiché hodiny
     quiet-priority: Priorita během tichých hodin
@@ -223,8 +239,9 @@ notifications:
     watchdog-pattern: Clear filtr
     watchdog-pattern-placeholder: např. message contains "backup completed"
     watchdog-pattern-hint: Tento výraz musí odpovídat clear eventu nebo logu před vypršením limitu.
-    watchdog-cooldown: Cooldown mezi alerty (min)
-    watchdog-cooldown-hint: Minimální počet minut mezi opakovanými Pair Alerty. 0 = bez cooldownu.
+    watchdog-cooldown: Cooldown mezi alerty
+    watchdog-cooldown-value: "{duration} mezi opakovanými Pair Alerty"
+    watchdog-cooldown-hint: Minimální čas mezi opakovanými Pair Alerty. 0 = bez cooldownu.
     watchdog-trigger-message: Trigger zpráva (volitelné)
     watchdog-trigger-message-hint: Vlastní text notifikace, když trigger vyprší bez clear logu. Prázdné = výchozí text.
     watchdog-clear-message: Clear zpráva (volitelné)
@@ -239,6 +256,8 @@ notifications:
     restart-loop-trigger-message: Trigger zpráva
     restart-loop-trigger-placeholder: Kontejner je zaseknutý v restartech
     restart-loop-cooldown: Cooldown
+    restart-loop-cooldown-value: "{duration} mezi opakovanými restart-loop alerty"
+    restart-loop-cooldown-hint: Minimální čas mezi opakovanými restart-loop alerty pro jeden kontejner. 0 = bez cooldownu.
     alert-quiet-title: Tiché hodiny jen pro tento alert
     alert-quiet-enabled: Přepsat globální tiché hodiny pro tento alert
     alert-quiet-hint: Když je vypnuto, použije se globální nastavení tichých hodin.

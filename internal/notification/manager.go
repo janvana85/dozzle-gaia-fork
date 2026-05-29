@@ -247,6 +247,7 @@ func (m *Manager) flushQueue() {
 
 	m.queue.Cleanup(7 * 24 * time.Hour)
 	m.queue.CleanupAlertState(25 * time.Hour)
+	m.queue.CleanupUniqueState(49 * time.Hour)
 	m.queue.CleanupCooldowns()
 }
 
@@ -417,6 +418,11 @@ func (m *Manager) UpdateSubscription(id int, updates map[string]any) error {
 			BurstCount:                sub.BurstCount,
 			BurstWindow:               sub.BurstWindow,
 			BurstPriority:             sub.BurstPriority,
+			BurstNtfyTopic:            sub.BurstNtfyTopic,
+			UniqueKeyRegex:            sub.UniqueKeyRegex,
+			UniqueWindow:              sub.UniqueWindow,
+			UniqueThreshold:           sub.UniqueThreshold,
+			UniqueRegex:               sub.UniqueRegex,
 			WatchdogPattern:           sub.WatchdogPattern,
 			WatchdogWindow:            sub.WatchdogWindow,
 			WatchdogCooldown:          sub.WatchdogCooldown,
@@ -441,6 +447,7 @@ func (m *Manager) UpdateSubscription(id int, updates map[string]any) error {
 			MetricSampleBuffers:       sub.MetricSampleBuffers,
 			LogCooldowns:              sub.LogCooldowns,
 			BurstTrackers:             sub.BurstTrackers,
+			UniqueTrackers:            sub.UniqueTrackers,
 			WatchdogTimers:            sub.WatchdogTimers,
 			WatchdogCooldowns:         sub.WatchdogCooldowns,
 			RestartLoopTimers:         sub.RestartLoopTimers,
@@ -573,6 +580,31 @@ func (m *Manager) UpdateSubscription(id int, updates map[string]any) error {
 			case "burstPriority":
 				if priority, ok := value.(int); ok {
 					updated.BurstPriority = priority
+				}
+			case "burstNtfyTopic":
+				if topic, ok := value.(string); ok {
+					updated.BurstNtfyTopic = topic
+				}
+			case "uniqueKeyRegex":
+				if exprStr, ok := value.(string); ok {
+					updated.UniqueKeyRegex = exprStr
+					if exprStr == "" {
+						updated.UniqueRegex = nil
+					} else if err := updated.CompileExpressions(); err != nil {
+						updateErr = err
+						return nil, xsync.CancelOp
+					}
+					updated.UniqueTrackers = xsync.NewMap[string, UniqueState]()
+				}
+			case "uniqueWindow":
+				if window, ok := value.(int); ok {
+					updated.UniqueWindow = window
+					updated.UniqueTrackers = xsync.NewMap[string, UniqueState]()
+				}
+			case "uniqueThreshold":
+				if threshold, ok := value.(int); ok {
+					updated.UniqueThreshold = threshold
+					updated.UniqueTrackers = xsync.NewMap[string, UniqueState]()
 				}
 			case "watchdogPattern":
 				if exprStr, ok := value.(string); ok {
@@ -900,7 +932,7 @@ func (m *Manager) RestorePersistentState() {
 		// The maps store time.Now() at trigger time; IsXCooldownActive checks
 		// time.Now().Before(lastTriggered.Add(cooldownDuration)).
 		// So we restore lastTriggered = expiresAt - cooldownDuration.
-		cooldownDur := time.Duration(sub.Cooldown) * time.Second
+		cooldownDur := time.Duration(sub.GetCooldownSeconds()) * time.Second
 		lastTriggered := expiresAt.Add(-cooldownDur)
 
 		switch cooldownType {

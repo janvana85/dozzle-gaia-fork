@@ -132,6 +132,7 @@ func (n *NtfyDispatcher) Send(ctx context.Context, notification types.Notificati
 		}
 		message = rendered
 	}
+	message = appendNotificationContext(message, notification.Context)
 
 	payload := ntfyPayload{
 		Topic:    topic,
@@ -172,6 +173,28 @@ func (n *NtfyDispatcher) Send(ctx context.Context, notification types.Notificati
 	}
 
 	return nil
+}
+
+func appendNotificationContext(message string, context []types.NotificationContext) string {
+	if len(context) == 0 {
+		return message
+	}
+	var b strings.Builder
+	b.WriteString(strings.TrimRight(message, "\n"))
+	if b.Len() > 0 {
+		b.WriteString("\n\n")
+	}
+	b.WriteString("Alert context:")
+	for _, item := range context {
+		if item.Label == "" || item.Value == "" {
+			continue
+		}
+		b.WriteString("\n")
+		b.WriteString(item.Label)
+		b.WriteString(": ")
+		b.WriteString(item.Value)
+	}
+	return b.String()
 }
 
 func executeNtfyTemplate(tmpl *template.Template, notification types.Notification) (string, error) {

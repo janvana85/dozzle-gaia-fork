@@ -23,9 +23,17 @@ type Notification struct {
 	Subscription SubscriptionConfig    `json:"subscription"`
 	Timestamp    time.Time             `json:"timestamp"`
 	// ntfy routing hints (set by processing layer, used by NtfyDispatcher)
-	NtfyTopic    string   `json:"ntfyTopic,omitempty"`
-	NtfyPriority int      `json:"ntfyPriority,omitempty"`
-	NtfyTags     []string `json:"ntfyTags,omitempty"`
+	NtfyTopic    string                `json:"ntfyTopic,omitempty"`
+	NtfyPriority int                   `json:"ntfyPriority,omitempty"`
+	NtfyTags     []string              `json:"ntfyTags,omitempty"`
+	Context      []NotificationContext `json:"context,omitempty"`
+}
+
+// NotificationContext is extra delivery metadata rendered into notifications
+// when alert modifiers such as unique, burst, or quiet hours affected delivery.
+type NotificationContext struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
 }
 
 // NotificationContainer represents a simplified container structure for notifications
@@ -103,6 +111,10 @@ type SubscriptionConfig struct {
 	BurstCount                int      `json:"burstCount,omitempty"`
 	BurstWindow               int      `json:"burstWindow,omitempty"`
 	BurstPriority             int      `json:"burstPriority,omitempty"`
+	BurstNtfyTopic            string   `json:"burstNtfyTopic,omitempty"`
+	UniqueKeyRegex            string   `json:"uniqueKeyRegex,omitempty"`
+	UniqueWindow              int      `json:"uniqueWindow,omitempty"`
+	UniqueThreshold           int      `json:"uniqueThreshold,omitempty"`
 	WatchdogPattern           string   `json:"watchdogPattern,omitempty"`
 	WatchdogWindow            int      `json:"watchdogWindow,omitempty"` // seconds
 	WatchdogCooldown          int      `json:"watchdogCooldown,omitempty"`

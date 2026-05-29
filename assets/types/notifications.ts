@@ -23,6 +23,10 @@ export interface NotificationRule {
   burstCount?: number;
   burstWindow?: number;
   burstPriority?: number;
+  burstNtfyTopic?: string;
+  uniqueKeyRegex?: string;
+  uniqueWindow?: number;
+  uniqueThreshold?: number;
   // watchdog / coupled messages
   watchdogPattern?: string;
   watchdogWindow?: number; // seconds
@@ -80,6 +84,10 @@ export interface NotificationRuleInput {
   burstCount?: number;
   burstWindow?: number;
   burstPriority?: number;
+  burstNtfyTopic?: string;
+  uniqueKeyRegex?: string;
+  uniqueWindow?: number;
+  uniqueThreshold?: number;
   watchdogPattern?: string;
   watchdogWindow?: number;
   watchdogCooldown?: number;

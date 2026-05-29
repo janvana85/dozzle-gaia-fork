@@ -7,6 +7,11 @@
       <p class="text-base-content/60">{{ $t("notifications.alert-form.description") }}</p>
     </div>
 
+    <div v-if="hasLegacyDeliverySettings" class="alert alert-warning">
+      <mdi:alert class="shrink-0" />
+      <span>{{ $t("notifications.alert-form.legacy-delivery-warning") }}</span>
+    </div>
+
     <!-- Alert Name -->
     <fieldset class="fieldset">
       <legend class="fieldset-legend text-lg">{{ $t("notifications.alert-form.alert-name") }}</legend>
@@ -201,7 +206,7 @@
       <!-- Burst Detection -->
       <fieldset class="fieldset">
         <legend class="fieldset-legend text-lg">{{ $t("notifications.alert-form.burst-detection") }}</legend>
-        <div class="grid grid-cols-3 gap-2">
+        <div class="grid grid-cols-4 gap-2">
           <div>
             <label class="label text-sm">{{ $t("notifications.alert-form.burst-count") }}</label>
             <input
@@ -230,6 +235,15 @@
               <option :value="5">{{ $t("notifications.destination-form.ntfy-priority-5") }}</option>
             </select>
           </div>
+          <div>
+            <label class="label text-sm">{{ $t("notifications.alert-form.burst-topic") }}</label>
+            <input
+              v-model="burstNtfyTopic"
+              type="text"
+              class="input focus:input-primary w-full"
+              :placeholder="ntfyTopic || selectedDestination.topic || 'alerts-burst'"
+            />
+          </div>
         </div>
       </fieldset>
 
@@ -243,22 +257,45 @@
           </label>
         </div>
       </fieldset>
+    </template>
 
-      <!-- Hold Window -->
+    <!-- Unique suppression -->
+    <template v-if="alertType === 'log'">
       <fieldset class="fieldset">
-        <legend class="fieldset-legend text-lg">
-          {{ $t("notifications.alert-form.hold-clear-window") }}
-          <span class="text-base-content/50 ml-2 text-xs font-normal">{{
-            $t("notifications.alert-form.hold-clear-hint")
-          }}</span>
-        </legend>
-        <input
-          v-model.number="holdClearWindow"
-          type="number"
-          min="0"
-          class="input focus:input-primary w-full"
-          placeholder="0"
-        />
+        <legend class="fieldset-legend text-lg">{{ $t("notifications.alert-form.unique-title") }}</legend>
+        <label class="flex cursor-pointer items-center gap-2">
+          <input type="checkbox" v-model="uniqueEnabled" class="checkbox checkbox-primary" />
+          <span class="text-sm">{{ $t("notifications.alert-form.unique-enabled") }}</span>
+        </label>
+        <p class="text-base-content/50 mt-1 text-xs">{{ $t("notifications.alert-form.unique-hint") }}</p>
+        <div v-show="uniqueEnabled" class="mt-3 space-y-3">
+          <div>
+            <label class="label text-sm">{{ $t("notifications.alert-form.unique-regex") }}</label>
+            <input
+              v-model="uniqueKeyRegex"
+              type="text"
+              class="input focus:input-primary w-full text-base"
+              placeholder="(\\d{1,3}(?:\\.\\d{1,3}){3})"
+            />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <CooldownField
+                v-model="uniqueWindow"
+                label-key="notifications.alert-form.unique-window"
+                hint-key="notifications.alert-form.unique-window-value"
+                explanation-key="notifications.alert-form.unique-window-hint"
+              />
+            </div>
+            <div>
+              <label class="label text-sm">{{ $t("notifications.alert-form.unique-threshold") }}</label>
+              <input v-model.number="uniqueThreshold" type="number" min="0" class="input focus:input-primary w-full" />
+              <p class="text-base-content/50 mt-1 text-xs">
+                {{ $t("notifications.alert-form.unique-threshold-hint") }}
+              </p>
+            </div>
+          </div>
+        </div>
       </fieldset>
     </template>
 
@@ -296,15 +333,12 @@
             <p class="text-base-content/50 mt-1 text-xs">{{ $t("notifications.alert-form.watchdog-pattern-hint") }}</p>
           </div>
           <div v-show="watchdogWindowMins > 0">
-            <label class="label text-sm">{{ $t("notifications.alert-form.watchdog-cooldown") }}</label>
-            <input
-              v-model.number="watchdogCooldownMins"
-              type="number"
-              min="0"
-              class="input focus:input-primary w-32"
-              placeholder="0"
+            <CooldownField
+              v-model="watchdogCooldown"
+              label-key="notifications.alert-form.watchdog-cooldown"
+              hint-key="notifications.alert-form.watchdog-cooldown-value"
+              explanation-key="notifications.alert-form.watchdog-cooldown-hint"
             />
-            <p class="text-base-content/50 mt-1 text-xs">{{ $t("notifications.alert-form.watchdog-cooldown-hint") }}</p>
           </div>
           <div v-show="watchdogWindowMins > 0">
             <label class="label text-sm">{{ $t("notifications.alert-form.watchdog-trigger-message") }}</label>
@@ -394,54 +428,16 @@
             />
           </div>
           <div>
-            <label class="label text-sm">{{ $t("notifications.alert-form.restart-loop-cooldown") }}</label>
-            <input
-              v-model.number="restartLoopCooldownMins"
-              type="number"
-              min="0"
-              class="input focus:input-primary w-32"
-              placeholder="0"
+            <CooldownField
+              v-model="restartLoopCooldown"
+              label-key="notifications.alert-form.restart-loop-cooldown"
+              hint-key="notifications.alert-form.restart-loop-cooldown-value"
+              explanation-key="notifications.alert-form.restart-loop-cooldown-hint"
             />
           </div>
         </div>
       </fieldset>
     </template>
-
-    <!-- Per-alert quiet hours override -->
-    <fieldset class="fieldset">
-      <legend class="fieldset-legend text-lg">{{ $t("notifications.alert-form.alert-quiet-title") }}</legend>
-      <div class="space-y-3">
-        <label class="flex cursor-pointer items-center gap-2">
-          <input type="checkbox" v-model="alertQuietEnabled" class="checkbox checkbox-primary" />
-          <span class="text-sm">{{ $t("notifications.alert-form.alert-quiet-enabled") }}</span>
-        </label>
-        <p class="text-base-content/50 mt-1 text-xs">{{ $t("notifications.alert-form.alert-quiet-hint") }}</p>
-        <template v-if="alertQuietEnabled">
-          <div class="flex items-center gap-3">
-            <div>
-              <label class="label text-sm">{{ $t("notifications.alert-form.alert-quiet-start") }}</label>
-              <input type="time" v-model="alertQuietStart" class="input input-sm focus:input-primary" />
-            </div>
-            <span class="text-base-content/40 mt-5">→</span>
-            <div>
-              <label class="label text-sm">{{ $t("notifications.alert-form.alert-quiet-end") }}</label>
-              <input type="time" v-model="alertQuietEnd" class="input input-sm focus:input-primary" />
-            </div>
-          </div>
-          <div>
-            <label class="label text-sm">{{ $t("notifications.alert-form.alert-quiet-timezone") }}</label>
-            <input
-              type="text"
-              v-model="alertQuietTimezone"
-              class="input input-sm focus:input-primary w-full"
-              :placeholder="$t('notifications.alert-form.alert-quiet-timezone-placeholder')"
-            />
-          </div>
-          <p class="text-base-content/50 text-xs">{{ $t("notifications.alert-form.alert-quiet-help") }}</p>
-        </template>
-      </div>
-    </fieldset>
-
     <!-- Error -->
     <div v-if="saveError" class="alert alert-error">
       <span>{{ saveError }}</span>
@@ -517,12 +513,15 @@ const ntfyTopic = ref(props.alert?.ntfyTopic ?? "");
 const ntfyPriority = ref(props.alert?.ntfyPriority ?? 0);
 const ntfyTagsInput = ref((props.alert?.ntfyTags ?? []).join(", "));
 const bypassQuietHours = ref(props.alert?.bypassQuietHours ?? false);
-const quietPriority = ref(props.alert?.quietPriority ?? 0);
-const holdDuringQuiet = ref(props.alert?.holdDuringQuiet ?? false);
-const holdClearWindow = ref(props.alert?.holdClearWindow ?? 0);
 const burstCount = ref(props.alert?.burstCount ?? 0);
 const burstWindow = ref(props.alert?.burstWindow ?? 0);
 const burstPriority = ref(props.alert?.burstPriority ?? 0);
+const burstNtfyTopic = ref(props.alert?.burstNtfyTopic ?? "");
+
+const uniqueEnabled = ref(!!(props.alert?.uniqueKeyRegex && props.alert?.uniqueWindow));
+const uniqueKeyRegex = ref(props.alert?.uniqueKeyRegex ?? "");
+const uniqueWindow = ref(props.alert?.uniqueWindow ?? 24 * 60 * 60);
+const uniqueThreshold = ref(props.alert?.uniqueThreshold ?? 0);
 
 // watchdog / coupled messages
 const pairAlertEnabled = ref(
@@ -535,7 +534,7 @@ const pairAlertEnabled = ref(
 );
 const watchdogPattern = ref(props.alert?.watchdogPattern ?? "");
 const watchdogWindowMins = ref(props.alert?.watchdogWindow ? Math.round(props.alert.watchdogWindow / 60) : 0);
-const watchdogCooldownMins = ref(props.alert?.watchdogCooldown ? Math.round(props.alert.watchdogCooldown / 60) : 0);
+const watchdogCooldown = ref(props.alert?.watchdogCooldown ?? 0);
 const watchdogTriggerMessage = ref(props.alert?.watchdogTriggerMessage ?? "");
 const watchdogClearMessage = ref(props.alert?.watchdogClearMessage ?? "");
 const restartLoopEnabled = ref(props.alert?.restartLoopEnabled ?? false);
@@ -546,16 +545,32 @@ const restartLoopEventCount = ref(props.alert?.restartLoopEventCount ?? 0);
 const restartLoopEventWindowMins = ref(
   props.alert?.restartLoopEventWindow ? Math.round(props.alert.restartLoopEventWindow / 60) : 0,
 );
-const restartLoopCooldownMins = ref(
-  props.alert?.restartLoopCooldown ? Math.round(props.alert.restartLoopCooldown / 60) : 0,
-);
+const restartLoopCooldown = ref(props.alert?.restartLoopCooldown ?? 0);
 const restartLoopTriggerMessage = ref(props.alert?.restartLoopTriggerMessage ?? "");
 
-// per-alert quiet hours override
-const alertQuietEnabled = ref(props.alert?.alertQuietEnabled ?? false);
-const alertQuietStart = ref(props.alert?.alertQuietStart ?? "22:00");
-const alertQuietEnd = ref(props.alert?.alertQuietEnd ?? "07:00");
-const alertQuietTimezone = ref(props.alert?.alertQuietTimezone ?? "");
+const hasLegacyDeliverySettings = computed(() =>
+  Boolean(
+    props.alert &&
+    ((props.alert.holdClearWindow ?? 0) > 0 ||
+      props.alert.holdDuringQuiet ||
+      (props.alert.quietPriority ?? 0) > 0 ||
+      props.alert.alertQuietEnabled),
+  ),
+);
+
+const legacyDeliveryFields = computed(() =>
+  props.alert
+    ? {
+        quietPriority: props.alert.quietPriority || undefined,
+        holdDuringQuiet: props.alert.holdDuringQuiet || undefined,
+        holdClearWindow: props.alert.holdClearWindow || undefined,
+        alertQuietEnabled: props.alert.alertQuietEnabled || undefined,
+        alertQuietStart: props.alert.alertQuietStart || undefined,
+        alertQuietEnd: props.alert.alertQuietEnd || undefined,
+        alertQuietTimezone: props.alert.alertQuietTimezone || undefined,
+      }
+    : {},
+);
 
 const ntfyFields = computed(() => ({
   ntfyTopic: ntfyTopic.value.trim() || undefined,
@@ -567,13 +582,21 @@ const ntfyFields = computed(() => ({
         .filter(Boolean)
     : undefined,
   bypassQuietHours: bypassQuietHours.value || undefined,
-  quietPriority: quietPriority.value || undefined,
-  holdDuringQuiet: holdDuringQuiet.value || undefined,
-  holdClearWindow: holdClearWindow.value || undefined,
   burstCount: burstCount.value || undefined,
   burstWindow: burstWindow.value || undefined,
   burstPriority: burstPriority.value || undefined,
+  burstNtfyTopic: burstNtfyTopic.value.trim() || undefined,
 }));
+
+const uniqueFields = computed(() =>
+  alertType.value === "log" && uniqueEnabled.value && uniqueKeyRegex.value.trim() && uniqueWindow.value > 0
+    ? {
+        uniqueKeyRegex: uniqueKeyRegex.value.trim(),
+        uniqueWindow: uniqueWindow.value,
+        uniqueThreshold: uniqueThreshold.value > 1 ? uniqueThreshold.value : undefined,
+      }
+    : {},
+);
 
 const hasValidPairAlert = computed(() => {
   if (!["log", "event"].includes(alertType.value) || !pairAlertEnabled.value || watchdogWindowMins.value <= 0) {
@@ -593,7 +616,7 @@ async function save() {
       ? {
           watchdogPattern: watchdogPattern.value.trim() || undefined,
           watchdogWindow: watchdogWindowMins.value * 60,
-          watchdogCooldown: watchdogCooldownMins.value > 0 ? watchdogCooldownMins.value * 60 : undefined,
+          watchdogCooldown: watchdogCooldown.value > 0 ? watchdogCooldown.value : undefined,
           watchdogTriggerMessage: watchdogTriggerMessage.value.trim() || undefined,
           watchdogClearMessage: watchdogClearMessage.value.trim() || undefined,
         }
@@ -607,19 +630,18 @@ async function save() {
           restartLoopEventCount: restartLoopEventCount.value > 0 ? restartLoopEventCount.value : undefined,
           restartLoopEventWindow:
             restartLoopEventWindowMins.value > 0 ? restartLoopEventWindowMins.value * 60 : undefined,
-          restartLoopCooldown: restartLoopCooldownMins.value > 0 ? restartLoopCooldownMins.value * 60 : undefined,
+          restartLoopCooldown: restartLoopCooldown.value > 0 ? restartLoopCooldown.value : undefined,
           restartLoopTriggerMessage: restartLoopTriggerMessage.value.trim() || undefined,
         }
       : {};
-  const alertQuiet = alertQuietEnabled.value
-    ? {
-        alertQuietEnabled: true,
-        alertQuietStart: alertQuietStart.value,
-        alertQuietEnd: alertQuietEnd.value,
-        alertQuietTimezone: alertQuietTimezone.value.trim() || undefined,
-      }
-    : { alertQuietEnabled: false };
-  await saveAlert({ ...fieldsRef.value.typeFields, ...extra, ...watchdog, ...restartLoop, ...alertQuiet });
+  await saveAlert({
+    ...legacyDeliveryFields.value,
+    ...fieldsRef.value.typeFields,
+    ...extra,
+    ...uniqueFields.value,
+    ...watchdog,
+    ...restartLoop,
+  });
 }
 
 // Container editor

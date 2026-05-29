@@ -46,6 +46,10 @@ type NotificationRuleResponse struct {
 	BurstCount                int                 `json:"burstCount,omitempty"`
 	BurstWindow               int                 `json:"burstWindow,omitempty"`
 	BurstPriority             int                 `json:"burstPriority,omitempty"`
+	BurstNtfyTopic            string              `json:"burstNtfyTopic,omitempty"`
+	UniqueKeyRegex            string              `json:"uniqueKeyRegex,omitempty"`
+	UniqueWindow              int                 `json:"uniqueWindow,omitempty"`
+	UniqueThreshold           int                 `json:"uniqueThreshold,omitempty"`
 	WatchdogPattern           string              `json:"watchdogPattern,omitempty"`
 	WatchdogWindow            int                 `json:"watchdogWindow,omitempty"`
 	WatchdogCooldown          int                 `json:"watchdogCooldown,omitempty"`
@@ -107,6 +111,10 @@ type NotificationRuleInput struct {
 	BurstCount                int      `json:"burstCount,omitempty"`
 	BurstWindow               int      `json:"burstWindow,omitempty"`
 	BurstPriority             int      `json:"burstPriority,omitempty"`
+	BurstNtfyTopic            string   `json:"burstNtfyTopic,omitempty"`
+	UniqueKeyRegex            string   `json:"uniqueKeyRegex,omitempty"`
+	UniqueWindow              int      `json:"uniqueWindow,omitempty"`
+	UniqueThreshold           int      `json:"uniqueThreshold,omitempty"`
 	WatchdogPattern           string   `json:"watchdogPattern,omitempty"`
 	WatchdogWindow            int      `json:"watchdogWindow,omitempty"`
 	WatchdogCooldown          int      `json:"watchdogCooldown,omitempty"`
@@ -144,6 +152,10 @@ type NotificationRuleUpdateInput struct {
 	BurstCount                *int     `json:"burstCount,omitempty"`
 	BurstWindow               *int     `json:"burstWindow,omitempty"`
 	BurstPriority             *int     `json:"burstPriority,omitempty"`
+	BurstNtfyTopic            *string  `json:"burstNtfyTopic,omitempty"`
+	UniqueKeyRegex            *string  `json:"uniqueKeyRegex,omitempty"`
+	UniqueWindow              *int     `json:"uniqueWindow,omitempty"`
+	UniqueThreshold           *int     `json:"uniqueThreshold,omitempty"`
 	WatchdogPattern           *string  `json:"watchdogPattern,omitempty"`
 	WatchdogWindow            *int     `json:"watchdogWindow,omitempty"`
 	WatchdogCooldown          *int     `json:"watchdogCooldown,omitempty"`
@@ -280,6 +292,10 @@ func subscriptionToResponse(sub *notification.Subscription, dispatchers []notifi
 		BurstCount:                sub.BurstCount,
 		BurstWindow:               sub.BurstWindow,
 		BurstPriority:             sub.BurstPriority,
+		BurstNtfyTopic:            sub.BurstNtfyTopic,
+		UniqueKeyRegex:            sub.UniqueKeyRegex,
+		UniqueWindow:              sub.UniqueWindow,
+		UniqueThreshold:           sub.UniqueThreshold,
 		WatchdogPattern:           sub.WatchdogPattern,
 		WatchdogWindow:            sub.WatchdogWindow,
 		WatchdogCooldown:          sub.WatchdogCooldown,
@@ -416,6 +432,10 @@ func (h *handler) createNotificationRule(w http.ResponseWriter, r *http.Request)
 		BurstCount:                input.BurstCount,
 		BurstWindow:               input.BurstWindow,
 		BurstPriority:             input.BurstPriority,
+		BurstNtfyTopic:            input.BurstNtfyTopic,
+		UniqueKeyRegex:            input.UniqueKeyRegex,
+		UniqueWindow:              input.UniqueWindow,
+		UniqueThreshold:           input.UniqueThreshold,
 		WatchdogPattern:           input.WatchdogPattern,
 		WatchdogWindow:            input.WatchdogWindow,
 		WatchdogCooldown:          input.WatchdogCooldown,
@@ -475,6 +495,10 @@ func (h *handler) replaceNotificationRule(w http.ResponseWriter, r *http.Request
 		BurstCount:                input.BurstCount,
 		BurstWindow:               input.BurstWindow,
 		BurstPriority:             input.BurstPriority,
+		BurstNtfyTopic:            input.BurstNtfyTopic,
+		UniqueKeyRegex:            input.UniqueKeyRegex,
+		UniqueWindow:              input.UniqueWindow,
+		UniqueThreshold:           input.UniqueThreshold,
 		WatchdogPattern:           input.WatchdogPattern,
 		WatchdogWindow:            input.WatchdogWindow,
 		WatchdogCooldown:          input.WatchdogCooldown,
@@ -570,6 +594,18 @@ func (h *handler) updateNotificationRule(w http.ResponseWriter, r *http.Request)
 	}
 	if input.BurstPriority != nil {
 		updates["burstPriority"] = *input.BurstPriority
+	}
+	if input.BurstNtfyTopic != nil {
+		updates["burstNtfyTopic"] = *input.BurstNtfyTopic
+	}
+	if input.UniqueKeyRegex != nil {
+		updates["uniqueKeyRegex"] = *input.UniqueKeyRegex
+	}
+	if input.UniqueWindow != nil {
+		updates["uniqueWindow"] = *input.UniqueWindow
+	}
+	if input.UniqueThreshold != nil {
+		updates["uniqueThreshold"] = *input.UniqueThreshold
 	}
 	if input.WatchdogPattern != nil {
 		updates["watchdogPattern"] = *input.WatchdogPattern
