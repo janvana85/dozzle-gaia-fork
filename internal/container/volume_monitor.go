@@ -137,7 +137,7 @@ func (v *volumeMonitor) refresh(id string) {
 			key := c.ID + ":" + m.Source + "->" + m.Destination
 			if errors.Is(err, os.ErrNotExist) {
 				if _, loaded := v.missing.LoadOrStore(key, struct{}{}); !loaded {
-					log.Info().
+					log.Debug().
 						Str("id", c.ID).
 						Str("source", m.Source).
 						Str("dest", m.Destination).
