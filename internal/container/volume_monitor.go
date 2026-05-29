@@ -36,7 +36,6 @@ type volumeMonitor struct {
 	queue    chan string
 	pending  *xsync.Map[string, struct{}]
 	trackers *xsync.Map[string, *volumeTracker]
-	missing  *xsync.Map[string, struct{}]
 }
 
 func newVolumeMonitor(store *ContainerStore) *volumeMonitor {
@@ -45,7 +44,6 @@ func newVolumeMonitor(store *ContainerStore) *volumeMonitor {
 		queue:    make(chan string, volumeQueueSize),
 		pending:  xsync.NewMap[string, struct{}](),
 		trackers: xsync.NewMap[string, *volumeTracker](),
-		missing:  xsync.NewMap[string, struct{}](),
 	}
 }
 
@@ -134,16 +132,7 @@ func (v *volumeMonitor) refresh(id string) {
 		}
 		total, free, err := statfs(m.Source)
 		if err != nil {
-			key := c.ID + ":" + m.Source + "->" + m.Destination
-			if errors.Is(err, os.ErrNotExist) {
-				if _, loaded := v.missing.LoadOrStore(key, struct{}{}); !loaded {
-					log.Debug().
-						Str("id", c.ID).
-						Str("source", m.Source).
-						Str("dest", m.Destination).
-						Msg("volume source missing; skipping statfs")
-				}
-			} else {
+			if !errors.Is(err, os.ErrNotExist) {
 				log.Debug().Err(err).Str("id", c.ID).Str("source", m.Source).Str("dest", m.Destination).Msg("statfs failed")
 			}
 			stats[m.Destination] = ms
