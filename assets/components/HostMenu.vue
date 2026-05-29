@@ -54,10 +54,11 @@
           <li v-for="host in hosts" :key="host.id">
             <a
               @click.prevent="setHost(host.id)"
+              class="auto-cols-[max-content_minmax(0,1fr)_max-content]"
               :class="{ 'text-base-content/50 pointer-events-none': !host.available }"
             >
               <HostIcon :type="host.type" />
-              {{ host.name }}
+              <span class="truncate">{{ host.name }}</span>
               <span class="badge badge-warning badge-xs p-1.5" v-if="hasVersionMismatch(host)">version mismatch</span>
               <span class="badge badge-error badge-xs p-1.5" v-else-if="!host.available">offline</span>
             </a>
@@ -90,10 +91,11 @@
                 <li v-for="host in groupHosts" :key="host.id">
                   <a
                     @click.prevent="setHost(host.id)"
+                    class="auto-cols-[max-content_minmax(0,1fr)_max-content]"
                     :class="{ 'text-base-content/50 pointer-events-none': !host.available }"
                   >
                     <HostIcon :type="host.type" />
-                    {{ host.name }}
+                    <span class="truncate">{{ host.name }}</span>
                     <span class="badge badge-warning badge-xs p-1.5" v-if="hasVersionMismatch(host)"
                       >version mismatch</span
                     >
@@ -107,10 +109,11 @@
             <li v-for="host in groupHosts" :key="host.id">
               <a
                 @click.prevent="setHost(host.id)"
+                class="auto-cols-[max-content_minmax(0,1fr)_max-content]"
                 :class="{ 'text-base-content/50 pointer-events-none': !host.available }"
               >
                 <HostIcon :type="host.type" />
-                {{ host.name }}
+                <span class="truncate">{{ host.name }}</span>
                 <span class="badge badge-warning badge-xs p-1.5" v-if="hasVersionMismatch(host)">version mismatch</span>
                 <span class="badge badge-error badge-xs p-1.5" v-else-if="!host.available">offline</span>
               </a>
@@ -152,7 +155,7 @@
                     active-class="menu-active"
                     @click.alt.stop.prevent="pinnedStore.pinContainer(item)"
                     :title="item.name"
-                    class="group auto-cols-[content_max_auto_max-content_max-content]"
+                    class="group auto-cols-[max-content_minmax(0,1fr)_max-content_max-content]"
                   >
                     <svg-spinners:ring-resize v-if="item.isNew" class="text-secondary w-2" />
                     <div
