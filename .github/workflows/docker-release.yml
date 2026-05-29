@@ -45,6 +45,12 @@ jobs:
           tags: |
             type=raw,value=${{ inputs.tag }}
 
+      - name: Build version
+        id: build-version
+        run: |
+          short_sha="${GITHUB_SHA::12}"
+          echo "version=${{ inputs.tag }}-${short_sha}" >> "$GITHUB_OUTPUT"
+
       - name: Build and push
         uses: docker/build-push-action@v7.2.0
         with:
@@ -54,6 +60,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            TAG=${{ inputs.tag }}
+            TAG=${{ steps.build-version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
