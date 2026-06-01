@@ -3,7 +3,9 @@ package docker_support
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,12 +22,24 @@ import (
 
 type RetriableClientManager struct {
 	clients      map[string]container_support.ClientService
-	failedAgents []string
+	failedAgents map[string]failedAgentState
 	certs        tls.Certificate
 	mu           sync.RWMutex
 	subscribers  *xsync.Map[context.Context, chan<- container.Host]
 	timeout      time.Duration
 }
+
+type failedAgentState struct {
+	nextRetry  time.Time
+	lastLogged time.Time
+	lastErr    string
+}
+
+const (
+	failedAgentRetryDefault    = time.Minute
+	failedAgentRetrySlow       = 10 * time.Minute
+	failedAgentLogThrottle     = 10 * time.Minute
+)
 
 func NewRetriableClientManager(agents []string, timeout time.Duration, certs tls.Certificate, clients ...container_support.ClientService) *RetriableClientManager {
 	type entry struct {
@@ -75,10 +89,10 @@ func NewRetriableClientManager(agents []string, timeout time.Duration, certs tls
 	wg.Wait()
 
 	clientMap := make(map[string]container_support.ClientService)
-	failedList := make([]string, 0)
+	failedList := make(map[string]failedAgentState)
 	for _, r := range results {
 		if r.failed != "" {
-			failedList = append(failedList, r.failed)
+			failedList[r.failed] = failedAgentState{}
 			continue
 		}
 		if !r.ok {
@@ -124,13 +138,24 @@ func (m *RetriableClientManager) RetryAndList() ([]container_support.ClientServi
 		err      error
 	}
 
-	results := make([]retryResult, len(m.failedAgents))
+	now := time.Now()
+	endpoints := make([]string, 0, len(m.failedAgents))
+	for endpoint, state := range m.failedAgents {
+		if !state.nextRetry.IsZero() && now.Before(state.nextRetry) {
+			continue
+		}
+		endpoints = append(endpoints, endpoint)
+	}
+	if len(endpoints) == 0 {
+		return lo.Values(m.clients), nil
+	}
+
+	results := make([]retryResult, len(endpoints))
 	var wg sync.WaitGroup
-	for i, endpoint := range m.failedAgents {
+	for i, endpoint := range endpoints {
 		wg.Go(func() {
 			a, err := agent.NewClient(endpoint, m.certs)
 			if err != nil {
-				log.Warn().Err(err).Str("endpoint", endpoint).Msg("error creating agent client")
 				results[i] = retryResult{endpoint: endpoint, err: err}
 				return
 			}
@@ -138,7 +163,6 @@ func (m *RetriableClientManager) RetryAndList() ([]container_support.ClientServi
 			defer cancel()
 			h, err := a.Host(ctx)
 			if err != nil {
-				log.Warn().Err(err).Str("endpoint", endpoint).Msg("error fetching host info for agent")
 				results[i] = retryResult{endpoint: endpoint, err: err}
 				return
 			}
@@ -152,11 +176,26 @@ func (m *RetriableClientManager) RetryAndList() ([]container_support.ClientServi
 	wg.Wait()
 
 	var errs []error
-	newFailed := make([]string, 0)
+	newFailed := make(map[string]failedAgentState, len(m.failedAgents))
+	for endpoint, state := range m.failedAgents {
+		newFailed[endpoint] = state
+	}
+
 	for _, r := range results {
 		if r.err != nil {
 			errs = append(errs, r.err)
-			newFailed = append(newFailed, r.endpoint)
+			state := newFailed[r.endpoint]
+			state.lastErr = r.err.Error()
+			state.nextRetry = time.Now().Add(retryDelayForAgentErr(r.err))
+			if shouldLogFailedAgent(now, state.lastLogged) {
+				log.Warn().
+					Err(r.err).
+					Str("endpoint", r.endpoint).
+					Time("nextRetryAt", state.nextRetry).
+					Msg("error fetching host info for agent (throttled)")
+				state.lastLogged = now
+			}
+			newFailed[r.endpoint] = state
 			continue
 		}
 		if _, ok := m.clients[r.host.ID]; ok {
@@ -176,6 +215,7 @@ func (m *RetriableClientManager) RetryAndList() ([]container_support.ClientServi
 			}()
 			return true
 		})
+		delete(newFailed, r.endpoint)
 	}
 	m.failedAgents = newFailed
 
@@ -216,7 +256,7 @@ func (m *RetriableClientManager) Hosts(ctx context.Context) []container.Host {
 		return host
 	})
 
-	for _, endpoint := range m.failedAgents {
+	for endpoint := range m.failedAgents {
 		addr, name, group, err := agent.ParseEndpoint(endpoint)
 		if err != nil {
 			log.Warn().Err(err).Str("endpoint", endpoint).Msg("skipping malformed agent endpoint")
@@ -236,6 +276,27 @@ func (m *RetriableClientManager) Hosts(ctx context.Context) []container.Host {
 	}
 
 	return hosts
+}
+
+func shouldLogFailedAgent(now time.Time, lastLogged time.Time) bool {
+	if lastLogged.IsZero() {
+		return true
+	}
+	return now.Sub(lastLogged) >= failedAgentLogThrottle
+}
+
+func retryDelayForAgentErr(err error) time.Duration {
+	if err == nil {
+		return failedAgentRetryDefault
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return failedAgentRetrySlow
+	}
+	message := err.Error()
+	if strings.Contains(message, "unknown certificate authority") || strings.Contains(message, "tls:") {
+		return failedAgentRetrySlow
+	}
+	return failedAgentRetryDefault
 }
 
 func (m *RetriableClientManager) LocalClients() []container.Client {

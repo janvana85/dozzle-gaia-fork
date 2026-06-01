@@ -43,6 +43,9 @@ export function useGroupedStream(group: Ref<GroupedContainers>): LogStreamSource
 
 export function useMergedStream(containers: Ref<Container[]>): LogStreamSource {
   const url = computed(() => {
+    if (containers.value.length === 0) {
+      return undefined;
+    }
     const ids = containers.value.map((c) => c.id).join(",");
     return `/api/hosts/${containers.value[0].host}/logs/mergedStream/${ids}`;
   });
@@ -67,7 +70,7 @@ export function useOwnerStream(owner: Ref<{ name: string; kind: string }>): LogS
 
 export type LogStreamSource = ReturnType<typeof useLogStream>;
 
-function useLogStream(url: Ref<string>, container?: Ref<Container>) {
+function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) {
   const messages: ShallowRef<LogEntry<LogMessage>[]> = shallowRef([]);
   const buffer: ShallowRef<LogEntry<LogMessage>[]> = shallowRef([]);
   const opened = ref(false);
@@ -157,11 +160,24 @@ function useLogStream(url: Ref<string>, container?: Ref<Container>) {
     buffer.value = [];
   }
 
-  const urlWithParams = computed(() => withBase(`${url.value}?${params.value.toString()}`));
+  const urlWithParams = computed(() => {
+    if (!url.value) {
+      return undefined;
+    }
+    return withBase(`${url.value}?${params.value.toString()}`);
+  });
 
   function connect({ clear } = { clear: true }) {
     if (isSearching.value) {
       void loadSearch();
+      return;
+    }
+    if (!urlWithParams.value) {
+      close();
+      clearMessages();
+      opened.value = false;
+      loading.value = false;
+      error.value = false;
       return;
     }
     close();
@@ -207,7 +223,17 @@ function useLogStream(url: Ref<string>, container?: Ref<Container>) {
       }
     };
     es.onerror = () => {
+      const state = es?.readyState;
+      if (state === EventSource.CONNECTING) {
+        // Keep UI in loading state while browser performs SSE auto-reconnect.
+        loading.value = true;
+        error.value = false;
+        opened.value = false;
+        return;
+      }
       error.value = true;
+      loading.value = false;
+      opened.value = false;
     };
     es.onopen = () => {
       loading.value = false;

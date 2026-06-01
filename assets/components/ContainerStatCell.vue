@@ -34,7 +34,7 @@ const {
 } = defineProps<{
   container: Container;
   type: "cpu" | "mem";
-  host: Host;
+  host?: Host;
   mode?: "chart" | "progress";
 }>();
 
@@ -42,7 +42,7 @@ function totalCores(): number {
   if (container.cpuLimit && container.cpuLimit > 0) {
     return container.cpuLimit;
   }
-  return host.nCPU ?? 1;
+  return host?.nCPU ?? 1;
 }
 
 const chartData = computed(() => {

@@ -108,10 +108,24 @@
               <RelativeTime :date="container.created" />
             </td>
             <td v-if="isVisible('cpu')">
-              <ContainerStatCell :container="container" type="cpu" :host="hosts[container.host]" :mode="statMode" />
+              <ContainerStatCell
+                v-if="hosts[container.host]"
+                :container="container"
+                type="cpu"
+                :host="hosts[container.host]"
+                :mode="statMode"
+              />
+              <span v-else class="text-base-content/50 text-sm">-</span>
             </td>
             <td v-if="isVisible('mem')">
-              <ContainerStatCell :container="container" type="mem" :host="hosts[container.host]" :mode="statMode" />
+              <ContainerStatCell
+                v-if="hosts[container.host]"
+                :container="container"
+                type="mem"
+                :host="hosts[container.host]"
+                :mode="statMode"
+              />
+              <span v-else class="text-base-content/50 text-sm">-</span>
             </td>
           </tr>
         </tbody>
