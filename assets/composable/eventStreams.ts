@@ -135,8 +135,7 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
         buffer.value.sort((a, b) => a.date.getTime() - b.date.getTime());
 
         if (container || containers.value.length > 0) {
-          const loadMoreItem = new LoadMoreLogEntry(new Date(), loadOlderLogs);
-          messages.value = [loadMoreItem];
+          ensureLoadMoreAtTop();
         }
         initial = false;
       }
@@ -212,7 +211,7 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
       const logs = data.map((e) => asLogEntry(e));
       cached.value = true;
       cacheMode.value = "mixed";
-      messages.value = [...logs, ...messages.value];
+      prependOlderLogs(logs);
     });
 
     es.onmessage = (e) => {
@@ -240,6 +239,25 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
       opened.value = true;
       error.value = false;
     };
+  }
+
+  function ensureLoadMoreAtTop() {
+    if (messages.value[0] instanceof LoadMoreLogEntry) return;
+    messages.value = [new LoadMoreLogEntry(new Date(), loadOlderLogs), ...messages.value];
+  }
+
+  function prependOlderLogs(logs: LogEntry<LogMessage>[]) {
+    if (logs.length === 0) return;
+    if (container || containers.value.length > 0) {
+      ensureLoadMoreAtTop();
+    }
+    if (messages.value[0] instanceof LoadMoreLogEntry) {
+      const loader = messages.value[0];
+      const rest = messages.value.slice(1);
+      messages.value = [loader, ...logs, ...rest];
+      return;
+    }
+    messages.value = [...logs, ...messages.value];
   }
 
   let searchToken = 0;

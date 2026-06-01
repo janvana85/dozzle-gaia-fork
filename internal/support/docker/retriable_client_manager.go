@@ -54,7 +54,7 @@ func NewRetriableClientManager(agents []string, timeout time.Duration, certs tls
 
 	for i, c := range clients {
 		wg.Go(func() {
-			ctx, cancel := context.WithTimeout(context.Background(), dashboardClientTimeout(timeout))
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
 			host, err := c.Host(ctx)
 			if err != nil {
@@ -74,7 +74,7 @@ func NewRetriableClientManager(agents []string, timeout time.Duration, certs tls
 				results[idx] = entry{failed: endpoint}
 				return
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), dashboardClientTimeout(timeout))
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
 			host, err := a.Host(ctx)
 			if err != nil {
@@ -159,7 +159,7 @@ func (m *RetriableClientManager) RetryAndList() ([]container_support.ClientServi
 				results[i] = retryResult{endpoint: endpoint, err: err}
 				return
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), dashboardClientTimeout(m.timeout))
+			ctx, cancel := context.WithTimeout(context.Background(), m.timeout)
 			defer cancel()
 			h, err := a.Host(ctx)
 			if err != nil {

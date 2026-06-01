@@ -11,7 +11,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import { default as Component } from "./EventSource.vue";
 import LogViewer from "@/components/LogViewer/LogViewer.vue";
 import { Container } from "@/models/Container";
-import { Level } from "@/models/LogEntry";
+import { Level, LoadMoreLogEntry } from "@/models/LogEntry";
 
 vi.mock("@/stores/config", () => ({
   __esModule: true,
@@ -170,6 +170,51 @@ describe("<ContainerEventSource />", () => {
     // @ts-ignore
     const [message, _] = wrapper.vm.messages;
     expect(message).toMatchSnapshot();
+  });
+
+  test("keeps load-more sentinel above cache backfill", async () => {
+    const wrapper = createLogEventSource();
+    sources[sourceUrl].emitOpen();
+    sources[sourceUrl].emitMessage({
+      data: `{"ts":1560336942459, "m":"Live message.", "id":2, "rm": "Live message.", "c": "abc"}`,
+    });
+
+    vi.runAllTimers();
+    await nextTick();
+
+    sources[sourceUrl].emit("logs-backfill", {
+      data: `[{"ts":1560336882459, "m":"Cached message.", "id":1, "rm": "Cached message.", "c": "abc"}]`,
+    });
+    await nextTick();
+
+    // @ts-ignore
+    expect(wrapper.vm.messages[0]).toBeInstanceOf(LoadMoreLogEntry);
+    // @ts-ignore
+    expect(wrapper.vm.messages[1].message).toBe("Cached message.");
+    // @ts-ignore
+    expect(wrapper.vm.messages[2].message).toBe("Live message.");
+  });
+
+  test("does not lose early cache backfill before first live message", async () => {
+    const wrapper = createLogEventSource();
+    sources[sourceUrl].emitOpen();
+    sources[sourceUrl].emit("logs-backfill", {
+      data: `[{"ts":1560336882459, "m":"Cached message.", "id":1, "rm": "Cached message.", "c": "abc"}]`,
+    });
+    await nextTick();
+
+    sources[sourceUrl].emitMessage({
+      data: `{"ts":1560336942459, "m":"Live message.", "id":2, "rm": "Live message.", "c": "abc"}`,
+    });
+    vi.runAllTimers();
+    await nextTick();
+
+    // @ts-ignore
+    expect(wrapper.vm.messages[0]).toBeInstanceOf(LoadMoreLogEntry);
+    // @ts-ignore
+    expect(wrapper.vm.messages[1].message).toBe("Cached message.");
+    // @ts-ignore
+    expect(wrapper.vm.messages[2].message).toBe("Live message.");
   });
 
   describe("render html correctly", () => {
