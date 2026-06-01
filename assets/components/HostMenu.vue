@@ -55,7 +55,7 @@
             <a
               @click.prevent="setHost(host.id)"
               class="auto-cols-[max-content_minmax(0,1fr)_max-content]"
-              :class="{ 'text-base-content/50 pointer-events-none': !host.available }"
+              :class="{ 'text-base-content/50': !host.available }"
             >
               <HostIcon :type="host.type" />
               <span class="truncate">{{ host.name }}</span>
@@ -92,7 +92,7 @@
                   <a
                     @click.prevent="setHost(host.id)"
                     class="auto-cols-[max-content_minmax(0,1fr)_max-content]"
-                    :class="{ 'text-base-content/50 pointer-events-none': !host.available }"
+                    :class="{ 'text-base-content/50': !host.available }"
                   >
                     <HostIcon :type="host.type" />
                     <span class="truncate">{{ host.name }}</span>
@@ -110,7 +110,7 @@
               <a
                 @click.prevent="setHost(host.id)"
                 class="auto-cols-[max-content_minmax(0,1fr)_max-content]"
-                :class="{ 'text-base-content/50 pointer-events-none': !host.available }"
+                :class="{ 'text-base-content/50': !host.available }"
               >
                 <HostIcon :type="host.type" />
                 <span class="truncate">{{ host.name }}</span>
