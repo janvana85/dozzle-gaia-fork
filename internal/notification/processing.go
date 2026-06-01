@@ -911,6 +911,16 @@ func (m *Manager) sendWithRetry(d dispatcher.Dispatcher, notification types.Noti
 		err := d.Send(ctx, notification)
 		cancel()
 		if err == nil {
+			log.Info().
+				Str("alert_type", string(notification.Type)).
+				Str("action", "sent").
+				Int("dispatcher_id", dispatcherID).
+				Str("notification_id", notification.ID).
+				Int("subscription_id", notification.Subscription.ID).
+				Str("subscription", notification.Subscription.Name).
+				Str("container_id", notification.Container.ID).
+				Str("container", notification.Container.Name).
+				Msg("Notification sent")
 			return
 		}
 		if attempt < 3 {
