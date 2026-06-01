@@ -101,9 +101,12 @@ func (m *MultiHostService) ListAllContainers(labels container.ContainerLabels) (
 
 		list, err := client.ListContainers(ctx, labels)
 		if err != nil {
-			host, _ := client.Host(ctx)
+			host, hostErr := client.Host(ctx)
 			log.Debug().Err(err).Str("host", host.Name).Msg("error listing containers")
-			host.Available = false
+			// A host can be reachable even when listing containers fails
+			// (for example, temporary API/version mismatch). Mark offline only
+			// when host metadata itself cannot be fetched.
+			host.Available = hostErr == nil
 			return result{nil, &HostUnavailableError{Host: host, Err: err}}
 		}
 
