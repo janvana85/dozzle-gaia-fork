@@ -28,6 +28,10 @@ func (h *HostUnavailableError) Error() string {
 	return fmt.Sprintf("host %s unavailable: %v", h.Host.ID, h.Err)
 }
 
+func (h *HostUnavailableError) Unwrap() error {
+	return h.Err
+}
+
 type ClientManager interface {
 	Find(id string) (container_support.ClientService, bool)
 	List() []container_support.ClientService
@@ -77,7 +81,7 @@ func (m *MultiHostService) ListContainersForHost(host string, labels container.C
 	if !ok {
 		return m.cachedContainersForHost(host, labels), fmt.Errorf("host %s not found", host)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), m.timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), dashboardClientTimeout(m.timeout))
 	defer cancel()
 
 	containers, err := client.ListContainers(ctx, labels)
@@ -96,7 +100,7 @@ func (m *MultiHostService) ListAllContainers(labels container.ContainerLabels) (
 	}
 
 	results := lop.Map(clients, func(client container_support.ClientService, _ int) result {
-		ctx, cancel := context.WithTimeout(context.Background(), m.timeout)
+		ctx, cancel := context.WithTimeout(context.Background(), dashboardClientTimeout(m.timeout))
 		defer cancel()
 
 		list, err := client.ListContainers(ctx, labels)
@@ -261,7 +265,7 @@ func (m *MultiHostService) SubscribeContainersStarted(ctx context.Context, conta
 }
 
 func (m *MultiHostService) Hosts() []container.Host {
-	ctx, cancel := context.WithTimeout(context.Background(), m.timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), dashboardClientTimeout(m.timeout))
 	defer cancel()
 	return m.manager.Hosts(ctx)
 }
