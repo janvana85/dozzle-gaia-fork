@@ -74,7 +74,10 @@ function useLogStream(url: Ref<string>, container?: Ref<Container>) {
   const loading = ref(true);
   const error = ref(false);
   const { paused: scrollingPaused } = useScrollContext();
-  const { streamConfig, hasComplexLogs, levels, loadingMore, containers, cached, cacheMode } = useLoggingContext();
+  const loggingContext = useLoggingContext();
+  const { streamConfig, hasComplexLogs, levels, loadingMore, containers } = loggingContext;
+  const cached = loggingContext.cached ?? ref(false);
+  const cacheMode = loggingContext.cacheMode ?? ref<"live" | "cache" | "mixed">("live");
   let initial = true;
 
   const params = computed(() => {
@@ -92,7 +95,12 @@ function useLogStream(url: Ref<string>, container?: Ref<Container>) {
   });
 
   const allContainers = computed(() => (container ? [container.value] : containers.value));
-  const { loadOlderLogs, loadSkippedLogs } = useLogLoader(messages, allContainers, params, loadingMore);
+  const { loadOlderLogs, loadSkippedLogs, loadSearchResults } = useLogLoader(
+    messages,
+    allContainers,
+    params,
+    loadingMore,
+  );
 
   function flushNow() {
     if (messages.value.length + buffer.value.length > config.maxLogs) {
@@ -152,6 +160,10 @@ function useLogStream(url: Ref<string>, container?: Ref<Container>) {
   const urlWithParams = computed(() => withBase(`${url.value}?${params.value.toString()}`));
 
   function connect({ clear } = { clear: true }) {
+    if (isSearching.value) {
+      void loadSearch();
+      return;
+    }
     close();
     if (clear) clearMessages();
     cached.value = false;
@@ -204,7 +216,36 @@ function useLogStream(url: Ref<string>, container?: Ref<Container>) {
     };
   }
 
+  let searchToken = 0;
+  async function loadSearch() {
+    const token = ++searchToken;
+    close();
+    clearMessages();
+    cached.value = true;
+    cacheMode.value = "cache";
+    opened.value = false;
+    loading.value = true;
+    error.value = false;
+    initial = true;
+    try {
+      await loadSearchResults();
+      if (token !== searchToken) return;
+      opened.value = true;
+      loading.value = false;
+    } catch (err) {
+      if (token !== searchToken) return;
+      console.error(err);
+      error.value = true;
+      loading.value = false;
+    }
+  }
+
+  const searchContainersKey = computed(() => allContainers.value.map((c) => `${c.host}:${c.id}`).join(","));
+
   watch(urlWithParams, () => connect(), { immediate: true });
+  watch(searchContainersKey, () => {
+    if (isSearching.value) void loadSearch();
+  });
 
   onScopeDispose(() => close());
 

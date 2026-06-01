@@ -95,13 +95,22 @@ func (m *Manager) ShouldListenToContainer(c container.Container, host container.
 
 	shouldListen := false
 	m.subscriptions.Range(func(_ int, sub *Subscription) bool {
-		if sub.Enabled && sub.LogExpression != "" && sub.MatchesContainer(notificationContainer) {
+		if sub.LogExpression != "" && m.isSubscriptionProcessable(sub) && sub.MatchesContainer(notificationContainer) {
 			shouldListen = true
 			return false
 		}
 		return true
 	})
 	return shouldListen
+}
+
+func (m *Manager) isSubscriptionProcessable(sub *Subscription) bool {
+	now := time.Now()
+	if sub.IsPaused(now) {
+		return false
+	}
+	loc := m.resolveLocation(sub.AlertQuietTimezone)
+	return sub.IsDeliveryDay(now, loc)
 }
 
 // SetQuietHours updates the global quiet hours configuration.
@@ -328,6 +337,7 @@ func (m *Manager) AddSubscription(sub *Subscription) error {
 	sub.RestartLoopCooldowns = xsync.NewMap[string, time.Time]()
 	sub.RestartLoopFirstSeenAt = xsync.NewMap[string, time.Time]()
 	sub.RestartLoopRestartStreaks = xsync.NewMap[string, []time.Time]()
+	sub.NormalizeDeliverySchedule()
 
 	if err := sub.CompileExpressions(); err != nil {
 		return err
@@ -362,6 +372,7 @@ func (m *Manager) ReplaceSubscription(sub *Subscription) error {
 	sub.RestartLoopCooldowns = xsync.NewMap[string, time.Time]()
 	sub.RestartLoopFirstSeenAt = xsync.NewMap[string, time.Time]()
 	sub.RestartLoopRestartStreaks = xsync.NewMap[string, []time.Time]()
+	sub.NormalizeDeliverySchedule()
 
 	if err := sub.CompileExpressions(); err != nil {
 		return err
@@ -370,6 +381,7 @@ func (m *Manager) ReplaceSubscription(sub *Subscription) error {
 	// Preserve enabled state from existing subscription if it exists
 	if existing, ok := m.subscriptions.Load(sub.ID); ok {
 		sub.Enabled = existing.Enabled
+		sub.PausedUntil = existing.PausedUntil
 		existing.StopRuntime()
 	} else {
 		sub.Enabled = true
@@ -408,6 +420,8 @@ func (m *Manager) UpdateSubscription(id int, updates map[string]any) error {
 			EventProgram:              sub.EventProgram,
 			Cooldown:                  sub.Cooldown,
 			SampleWindow:              sub.SampleWindow,
+			PausedUntil:               sub.PausedUntil,
+			DeliveryDays:              sub.DeliveryDays,
 			NtfyTopic:                 sub.NtfyTopic,
 			NtfyPriority:              sub.NtfyPriority,
 			NtfyTags:                  sub.NtfyTags,
@@ -472,6 +486,17 @@ func (m *Manager) UpdateSubscription(id int, updates map[string]any) error {
 			case "enabled":
 				if enabled, ok := value.(bool); ok {
 					updated.Enabled = enabled
+					if enabled {
+						updated.PausedUntil = nil
+					}
+				}
+			case "pausedUntil":
+				if pausedUntil, ok := value.(*time.Time); ok {
+					updated.PausedUntil = pausedUntil
+				}
+			case "deliveryDays":
+				if days, ok := value.([]string); ok {
+					updated.DeliveryDays = normalizeDeliveryDays(days)
 				}
 			case "dispatcherId":
 				if dispatcherID, ok := value.(int); ok {
@@ -797,7 +822,7 @@ func (m *Manager) isSubscriptionActive(id int) bool {
 		return true
 	}
 	sub, ok := m.subscriptions.Load(id)
-	return ok && sub.Enabled
+	return ok && m.isSubscriptionProcessable(sub)
 }
 
 // Subscriptions returns all subscriptions sorted by ID

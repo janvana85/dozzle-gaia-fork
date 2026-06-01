@@ -59,6 +59,8 @@ func (m *Manager) LoadConfig(r io.Reader) error {
 			EventExpression:           sub.EventExpression,
 			Cooldown:                  sub.Cooldown,
 			SampleWindow:              sub.SampleWindow,
+			PausedUntil:               sub.PausedUntil,
+			DeliveryDays:              sub.DeliveryDays,
 			NtfyTopic:                 sub.NtfyTopic,
 			NtfyPriority:              sub.NtfyPriority,
 			NtfyTags:                  sub.NtfyTags,
@@ -170,6 +172,8 @@ func (m *Manager) HandleNotificationConfig(subscriptions []types.SubscriptionCon
 			EventExpression:           sub.EventExpression,
 			Cooldown:                  sub.Cooldown,
 			SampleWindow:              sub.SampleWindow,
+			PausedUntil:               sub.PausedUntil,
+			DeliveryDays:              sub.DeliveryDays,
 			NtfyTopic:                 sub.NtfyTopic,
 			NtfyPriority:              sub.NtfyPriority,
 			NtfyTags:                  sub.NtfyTags,
@@ -291,6 +295,7 @@ func createDispatcher(config DispatcherConfig) (dispatcher.Dispatcher, error) {
 
 // loadSubscription loads a subscription with its existing ID (used when loading from config)
 func (m *Manager) loadSubscription(sub *Subscription) error {
+	sub.NormalizeDeliverySchedule()
 	if err := sub.CompileExpressions(); err != nil {
 		return err
 	}

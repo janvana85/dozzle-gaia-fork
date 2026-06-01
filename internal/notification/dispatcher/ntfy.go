@@ -199,8 +199,21 @@ func appendNotificationContext(message string, context []types.NotificationConte
 
 func executeNtfyTemplate(tmpl *template.Template, notification types.Notification) (string, error) {
 	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, notification); err != nil {
+	if err := tmpl.Execute(&buf, safeNotificationTemplateData(notification)); err != nil {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+func safeNotificationTemplateData(notification types.Notification) types.Notification {
+	if notification.Log == nil {
+		notification.Log = &types.NotificationLog{}
+	}
+	if notification.Stat == nil {
+		notification.Stat = &types.NotificationStat{}
+	}
+	if notification.Event == nil {
+		notification.Event = &types.NotificationEvent{}
+	}
+	return notification
 }

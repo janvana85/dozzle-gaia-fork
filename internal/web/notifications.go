@@ -32,6 +32,8 @@ type NotificationRuleResponse struct {
 	EventExpression           string              `json:"eventExpression,omitempty"`
 	Cooldown                  int                 `json:"cooldown,omitempty"`
 	SampleWindow              int                 `json:"sampleWindow,omitempty"`
+	PausedUntil               *time.Time          `json:"pausedUntil,omitempty"`
+	DeliveryDays              []string            `json:"deliveryDays,omitempty"`
 	TriggerCount              int64               `json:"triggerCount"`
 	TriggeredContainers       int                 `json:"triggeredContainers"`
 	LastTriggeredAt           *time.Time          `json:"lastTriggeredAt"`
@@ -101,6 +103,8 @@ type NotificationRuleInput struct {
 	EventExpression           string   `json:"eventExpression,omitempty"`
 	Cooldown                  int      `json:"cooldown,omitempty"`
 	SampleWindow              int      `json:"sampleWindow,omitempty"`
+	PausedUntil               string   `json:"pausedUntil,omitempty"`
+	DeliveryDays              []string `json:"deliveryDays,omitempty"`
 	NtfyTopic                 string   `json:"ntfyTopic,omitempty"`
 	NtfyPriority              int      `json:"ntfyPriority,omitempty"`
 	NtfyTags                  []string `json:"ntfyTags,omitempty"`
@@ -142,6 +146,8 @@ type NotificationRuleUpdateInput struct {
 	EventExpression           *string  `json:"eventExpression,omitempty"`
 	Cooldown                  *int     `json:"cooldown,omitempty"`
 	SampleWindow              *int     `json:"sampleWindow,omitempty"`
+	PausedUntil               *string  `json:"pausedUntil,omitempty"`
+	DeliveryDays              []string `json:"deliveryDays,omitempty"`
 	NtfyTopic                 *string  `json:"ntfyTopic,omitempty"`
 	NtfyPriority              *int     `json:"ntfyPriority,omitempty"`
 	NtfyTags                  []string `json:"ntfyTags,omitempty"`
@@ -279,6 +285,8 @@ func subscriptionToResponse(sub *notification.Subscription, dispatchers []notifi
 		EventExpression:           sub.EventExpression,
 		Cooldown:                  sub.Cooldown,
 		SampleWindow:              sub.SampleWindow,
+		PausedUntil:               sub.PausedUntil,
+		DeliveryDays:              sub.DeliveryDays,
 		TriggerCount:              triggerCount,
 		LastTriggeredAt:           lastTriggeredAt,
 		TriggeredContainers:       triggeredContainers,
@@ -375,6 +383,41 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
+func parseOptionalTime(value string) (*time.Time, error) {
+	if value == "" {
+		return nil, nil
+	}
+	t, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+func validateDeliveryDays(days []string) error {
+	if days == nil {
+		return nil
+	}
+	if len(days) == 0 {
+		return fmt.Errorf("delivery schedule must include at least one day")
+	}
+	valid := map[string]struct{}{
+		"sun": {},
+		"mon": {},
+		"tue": {},
+		"wed": {},
+		"thu": {},
+		"fri": {},
+		"sat": {},
+	}
+	for _, day := range days {
+		if _, ok := valid[day]; !ok {
+			return fmt.Errorf("invalid delivery day: %s", day)
+		}
+	}
+	return nil
+}
+
 // Notification Rules handlers
 func (h *handler) listNotificationRules(w http.ResponseWriter, r *http.Request) {
 	subscriptions := h.hostService.Subscriptions()
@@ -411,6 +454,15 @@ func (h *handler) createNotificationRule(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	pausedUntil, err := parseOptionalTime(input.PausedUntil)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid pausedUntil")
+		return
+	}
+	if err := validateDeliveryDays(input.DeliveryDays); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	sub := &notification.Subscription{
 		Name:                      input.Name,
@@ -422,6 +474,8 @@ func (h *handler) createNotificationRule(w http.ResponseWriter, r *http.Request)
 		EventExpression:           input.EventExpression,
 		Cooldown:                  input.Cooldown,
 		SampleWindow:              input.SampleWindow,
+		PausedUntil:               pausedUntil,
+		DeliveryDays:              input.DeliveryDays,
 		NtfyTopic:                 input.NtfyTopic,
 		NtfyPriority:              input.NtfyPriority,
 		NtfyTags:                  input.NtfyTags,
@@ -473,6 +527,15 @@ func (h *handler) replaceNotificationRule(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	pausedUntil, err := parseOptionalTime(input.PausedUntil)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid pausedUntil")
+		return
+	}
+	if err := validateDeliveryDays(input.DeliveryDays); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	sub := &notification.Subscription{
 		ID:                        id,
@@ -485,6 +548,8 @@ func (h *handler) replaceNotificationRule(w http.ResponseWriter, r *http.Request
 		EventExpression:           input.EventExpression,
 		Cooldown:                  input.Cooldown,
 		SampleWindow:              input.SampleWindow,
+		PausedUntil:               pausedUntil,
+		DeliveryDays:              input.DeliveryDays,
 		NtfyTopic:                 input.NtfyTopic,
 		NtfyPriority:              input.NtfyPriority,
 		NtfyTags:                  input.NtfyTags,
@@ -564,6 +629,21 @@ func (h *handler) updateNotificationRule(w http.ResponseWriter, r *http.Request)
 	}
 	if input.SampleWindow != nil {
 		updates["sampleWindow"] = *input.SampleWindow
+	}
+	if input.PausedUntil != nil {
+		pausedUntil, err := parseOptionalTime(*input.PausedUntil)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid pausedUntil")
+			return
+		}
+		updates["pausedUntil"] = pausedUntil
+	}
+	if input.DeliveryDays != nil {
+		if err := validateDeliveryDays(input.DeliveryDays); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		updates["deliveryDays"] = input.DeliveryDays
 	}
 	if input.NtfyTopic != nil {
 		updates["ntfyTopic"] = *input.NtfyTopic

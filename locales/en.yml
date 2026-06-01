@@ -266,6 +266,11 @@ notifications:
   no-alerts: No alerts configured yet. Create one to get started.
   alert:
     paused: Paused
+    paused-until: "Paused until {time}"
+    pause-title: Pause alert
+    pause-permanent: Permanent
+    all-days: All days
+    weekdays: Weekdays
     containers: Containers
     log-filter: Log filter
     metric-filter: Metric
@@ -321,6 +326,8 @@ notifications:
     log-alert: Log Alert
     metric-alert: Metric Alert
     event-alert: Event Alert
+    delivery-schedule: Send on
+    delivery-schedule-hint: Select the weekdays when this alert can send notifications.
     event-filter: Event Expression
     event-fields-hint: "Available fields: {fields}"
     ntfy-options: ntfy Routing
@@ -385,6 +392,14 @@ notifications:
     alert-quiet-timezone: Timezone
     alert-quiet-timezone-placeholder: Europe/Prague (blank = server/container local)
     alert-quiet-help: When enabled, these quiet hours apply only to this alert. Burst escalation rules still use the global config.
+  weekdays:
+    mon: Mon
+    tue: Tue
+    wed: Wed
+    thu: Thu
+    fri: Fri
+    sat: Sat
+    sun: Sun
   settings:
     title: Settings
     quiet-hours-enabled: Enable Quiet Hours

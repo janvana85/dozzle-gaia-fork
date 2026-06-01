@@ -222,8 +222,16 @@ export class LoadMoreLogEntry extends LogEntry<string> {
     date: Date,
     private readonly loader: (i: LoadMoreLogEntry) => Promise<void>,
     public readonly rememberScrollPosition: boolean = true,
+    label = "",
   ) {
     super("", "", date.getTime(), date, "stderr", "info");
+    if (label) {
+      (this as { __label?: string }).__label = label;
+    }
+  }
+
+  public get label(): string | undefined {
+    return (this as { __label?: string }).__label;
   }
 
   getComponent(): Component {

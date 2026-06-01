@@ -8,6 +8,8 @@ export interface NotificationRule {
   eventExpression?: string;
   cooldown?: number;
   sampleWindow?: number;
+  pausedUntil?: string;
+  deliveryDays?: string[];
   triggerCount: number;
   triggeredContainers: number;
   lastTriggeredAt: string | null;
@@ -74,6 +76,8 @@ export interface NotificationRuleInput {
   eventExpression?: string;
   cooldown?: number;
   sampleWindow?: number;
+  pausedUntil?: string;
+  deliveryDays?: string[];
   ntfyTopic?: string;
   ntfyPriority?: number;
   ntfyTags?: string[];

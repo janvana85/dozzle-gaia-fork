@@ -1114,6 +1114,8 @@ type NotificationSubscription struct {
 	UniqueKeyRegex            string                 `protobuf:"bytes,39,opt,name=uniqueKeyRegex,proto3" json:"uniqueKeyRegex,omitempty"`
 	UniqueWindow              int32                  `protobuf:"varint,40,opt,name=uniqueWindow,proto3" json:"uniqueWindow,omitempty"`
 	UniqueThreshold           int32                  `protobuf:"varint,41,opt,name=uniqueThreshold,proto3" json:"uniqueThreshold,omitempty"`
+	PausedUntil               *timestamppb.Timestamp `protobuf:"bytes,42,opt,name=pausedUntil,proto3" json:"pausedUntil,omitempty"`
+	DeliveryDays              []string               `protobuf:"bytes,43,rep,name=deliveryDays,proto3" json:"deliveryDays,omitempty"`
 	unknownFields             protoimpl.UnknownFields
 	sizeCache                 protoimpl.SizeCache
 }
@@ -1433,6 +1435,20 @@ func (x *NotificationSubscription) GetUniqueThreshold() int32 {
 		return x.UniqueThreshold
 	}
 	return 0
+}
+
+func (x *NotificationSubscription) GetPausedUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PausedUntil
+	}
+	return nil
+}
+
+func (x *NotificationSubscription) GetDeliveryDays() []string {
+	if x != nil {
+		return x.DeliveryDays
+	}
+	return nil
 }
 
 type NotificationDispatcher struct {
@@ -1802,7 +1818,7 @@ const file_types_proto_rawDesc = "" +
 	"\x05group\x18\x0e \x01(\tR\x05group\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb0\r\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x92\x0e\n" +
 	"\x18NotificationSubscription\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
@@ -1847,7 +1863,9 @@ const file_types_proto_rawDesc = "" +
 	"\x0eburstNtfyTopic\x18& \x01(\tR\x0eburstNtfyTopic\x12&\n" +
 	"\x0euniqueKeyRegex\x18' \x01(\tR\x0euniqueKeyRegex\x12\"\n" +
 	"\funiqueWindow\x18( \x01(\x05R\funiqueWindow\x12(\n" +
-	"\x0funiqueThreshold\x18) \x01(\x05R\x0funiqueThreshold\"\xc1\x03\n" +
+	"\x0funiqueThreshold\x18) \x01(\x05R\x0funiqueThreshold\x12<\n" +
+	"\vpausedUntil\x18* \x01(\v2\x1a.google.protobuf.TimestampR\vpausedUntil\x12\"\n" +
+	"\fdeliveryDays\x18+ \x03(\tR\fdeliveryDays\"\xc1\x03\n" +
 	"\x16NotificationDispatcher\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -1936,14 +1954,15 @@ var file_types_proto_depIdxs = []int32{
 	17, // 12: protobuf.ContainerEvent.actorAttributes:type_name -> protobuf.ContainerEvent.ActorAttributesEntry
 	1,  // 13: protobuf.ContainerEvent.container:type_name -> protobuf.Container
 	18, // 14: protobuf.Host.labels:type_name -> protobuf.Host.LabelsEntry
-	19, // 15: protobuf.NotificationDispatcher.headers:type_name -> protobuf.NotificationDispatcher.HeadersEntry
-	20, // 16: protobuf.NotificationCloudConfig.expiresAt:type_name -> google.protobuf.Timestamp
-	20, // 17: protobuf.NotificationSubscriptionStats.lastTriggeredAt:type_name -> google.protobuf.Timestamp
-	18, // [18:18] is the sub-list for method output_type
-	18, // [18:18] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	20, // 15: protobuf.NotificationSubscription.pausedUntil:type_name -> google.protobuf.Timestamp
+	19, // 16: protobuf.NotificationDispatcher.headers:type_name -> protobuf.NotificationDispatcher.HeadersEntry
+	20, // 17: protobuf.NotificationCloudConfig.expiresAt:type_name -> google.protobuf.Timestamp
+	20, // 18: protobuf.NotificationSubscriptionStats.lastTriggeredAt:type_name -> google.protobuf.Timestamp
+	19, // [19:19] is the sub-list for method output_type
+	19, // [19:19] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_types_proto_init() }

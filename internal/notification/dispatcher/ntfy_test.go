@@ -53,6 +53,41 @@ func TestNtfyDispatcher_RendersContentTemplates(t *testing.T) {
 	assert.Equal(t, 5, payload.Priority)
 }
 
+func TestNtfyDispatcher_TemplatesCanReferenceMissingNotificationKinds(t *testing.T) {
+	var payload ntfyPayload
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+		rw.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	ntfy, err := NewNtfyDispatcher(
+		"test",
+		srv.URL,
+		"alerts",
+		0,
+		"",
+		"",
+		"Level: {{ .Log.Level }}\nCPU: {{ .Stat.CPUPercent }}\nEvent: {{ .Event.Name }}\n{{ .Detail }}",
+	)
+	require.NoError(t, err)
+	ntfy.client = srv.Client()
+
+	err = ntfy.Send(context.Background(), types.Notification{
+		Type:   types.EventNotification,
+		Detail: "Container event: die",
+		Container: types.NotificationContainer{
+			Name: "api",
+		},
+		Event: &types.NotificationEvent{
+			Name: "die",
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "Level: \nCPU: 0\nEvent: die\nContainer event: die", payload.Message)
+}
+
 func TestNtfyDispatcher_DefaultContentWhenTemplatesEmpty(t *testing.T) {
 	var payload ntfyPayload
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {

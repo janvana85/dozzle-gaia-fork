@@ -419,12 +419,16 @@ const quietHoursActiveLabel = computed(() => {
 const filter = ref<"all" | "enabled" | "paused">("all");
 const alertViewMode = useStorage<"list" | "grouped">("DOZZLE_ALERT_VIEW_MODE", "grouped");
 
-const enabledCount = computed(() => alerts.value.filter((a) => a.enabled).length);
-const pausedCount = computed(() => alerts.value.filter((a) => !a.enabled).length);
+function isAlertPaused(alert: NotificationRule) {
+  return !alert.enabled || Boolean(alert.pausedUntil && new Date(alert.pausedUntil) > new Date());
+}
+
+const enabledCount = computed(() => alerts.value.filter((a) => !isAlertPaused(a)).length);
+const pausedCount = computed(() => alerts.value.filter(isAlertPaused).length);
 
 const filteredAlerts = computed(() => {
-  if (filter.value === "enabled") return alerts.value.filter((a) => a.enabled);
-  if (filter.value === "paused") return alerts.value.filter((a) => !a.enabled);
+  if (filter.value === "enabled") return alerts.value.filter((a) => !isAlertPaused(a));
+  if (filter.value === "paused") return alerts.value.filter(isAlertPaused);
   return alerts.value;
 });
 
@@ -454,7 +458,7 @@ const groupedAlerts = computed<AlertGroup[]>(() => {
       } satisfies AlertGroup);
 
     group.alerts.push(alert);
-    if (!alert.enabled) group.pausedCount += 1;
+    if (isAlertPaused(alert)) group.pausedCount += 1;
     group.triggeredCount += alert.triggerCount || 0;
     groups.set(key, group);
   }

@@ -120,16 +120,18 @@ func extractMessage(l container.LogEvent) any {
 
 // Subscription represents a subscription to log streams with filtering
 type Subscription struct {
-	ID                  int    `json:"id" yaml:"id"`
-	Name                string `json:"name" yaml:"name"`
-	Enabled             bool   `json:"enabled" yaml:"enabled"`
-	DispatcherID        int    `json:"dispatcherId" yaml:"dispatcherId"`
-	LogExpression       string `json:"logExpression" yaml:"logExpression"`
-	ContainerExpression string `json:"containerExpression" yaml:"containerExpression"`
-	MetricExpression    string `json:"metricExpression,omitempty" yaml:"metricExpression,omitempty"`
-	EventExpression     string `json:"eventExpression,omitempty" yaml:"eventExpression,omitempty"`
-	Cooldown            int    `json:"cooldown,omitempty" yaml:"cooldown,omitempty"`
-	SampleWindow        int    `json:"sampleWindow,omitempty" yaml:"sampleWindow,omitempty"`
+	ID                  int        `json:"id" yaml:"id"`
+	Name                string     `json:"name" yaml:"name"`
+	Enabled             bool       `json:"enabled" yaml:"enabled"`
+	DispatcherID        int        `json:"dispatcherId" yaml:"dispatcherId"`
+	LogExpression       string     `json:"logExpression" yaml:"logExpression"`
+	ContainerExpression string     `json:"containerExpression" yaml:"containerExpression"`
+	MetricExpression    string     `json:"metricExpression,omitempty" yaml:"metricExpression,omitempty"`
+	EventExpression     string     `json:"eventExpression,omitempty" yaml:"eventExpression,omitempty"`
+	Cooldown            int        `json:"cooldown,omitempty" yaml:"cooldown,omitempty"`
+	SampleWindow        int        `json:"sampleWindow,omitempty" yaml:"sampleWindow,omitempty"`
+	PausedUntil         *time.Time `json:"pausedUntil,omitempty" yaml:"pausedUntil,omitempty"`
+	DeliveryDays        []string   `json:"deliveryDays,omitempty" yaml:"deliveryDays,omitempty"`
 
 	// ntfy per-rule routing overrides
 	NtfyTopic    string   `json:"ntfyTopic,omitempty" yaml:"ntfyTopic,omitempty"`
@@ -225,6 +227,60 @@ type UniqueState struct {
 	Count       int
 	WindowStart time.Time
 	Sent        bool
+}
+
+var validDeliveryDays = map[string]time.Weekday{
+	"sun": time.Sunday,
+	"mon": time.Monday,
+	"tue": time.Tuesday,
+	"wed": time.Wednesday,
+	"thu": time.Thursday,
+	"fri": time.Friday,
+	"sat": time.Saturday,
+}
+
+func normalizeDeliveryDays(days []string) []string {
+	if len(days) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(days))
+	normalized := make([]string, 0, len(days))
+	for _, day := range days {
+		key := strings.ToLower(strings.TrimSpace(day))
+		if _, ok := validDeliveryDays[key]; !ok {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		normalized = append(normalized, key)
+	}
+	return normalized
+}
+
+func (s *Subscription) NormalizeDeliverySchedule() {
+	s.DeliveryDays = normalizeDeliveryDays(s.DeliveryDays)
+}
+
+func (s *Subscription) IsPaused(now time.Time) bool {
+	if !s.Enabled {
+		return true
+	}
+	return s.PausedUntil != nil && now.Before(*s.PausedUntil)
+}
+
+func (s *Subscription) IsDeliveryDay(now time.Time, loc *time.Location) bool {
+	if len(s.DeliveryDays) == 0 {
+		return true
+	}
+	weekday := now.In(loc).Weekday()
+	for _, day := range s.DeliveryDays {
+		if validDeliveryDays[day] == weekday {
+			return true
+		}
+	}
+	return false
 }
 
 // QuietHoursConfig defines a daily quiet window during which non-bypass alerts

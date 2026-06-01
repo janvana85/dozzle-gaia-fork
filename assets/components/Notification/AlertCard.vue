@@ -1,7 +1,7 @@
 <template>
   <div
     class="card bg-base-100 shadow-sm"
-    :class="{ 'opacity-60': !alert.enabled, 'highlight-new': isHighlighted }"
+    :class="{ 'opacity-60': isPaused, 'highlight-new': isHighlighted }"
     @animationend="isHighlighted = false"
   >
     <div class="card-body gap-4 p-5">
@@ -46,12 +46,13 @@
               </ul>
             </div>
           </h4>
-          <span v-if="!alert.enabled" class="badge badge-warning badge-sm">{{ $t("notifications.alert.paused") }}</span>
+          <span v-if="isPaused" class="badge badge-warning badge-sm">{{ pauseLabel }}</span>
+          <span class="badge badge-ghost badge-sm">{{ deliveryScheduleLabel }}</span>
         </div>
         <input
           type="checkbox"
           class="toggle toggle-primary shrink-0"
-          :checked="alert.enabled"
+          :checked="isAlertActive"
           @change="toggleEnabled"
         />
       </div>
@@ -112,6 +113,27 @@
         </div>
       </div>
     </div>
+    <dialog ref="pauseDialog" class="modal">
+      <div class="modal-box max-w-sm">
+        <h3 class="text-lg font-semibold">{{ $t("notifications.alert.pause-title") }}</h3>
+        <div class="mt-4 grid grid-cols-2 gap-2">
+          <button
+            v-for="option in pauseOptions"
+            :key="option.value"
+            class="btn btn-outline btn-sm"
+            @click="pauseAlert(option.hours)"
+          >
+            {{ option.label }}
+          </button>
+          <button class="btn btn-warning btn-sm col-span-2" @click="pauseAlert(null)">
+            {{ $t("notifications.alert.pause-permanent") }}
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button>{{ $t("notifications.alert-form.cancel") }}</button>
+      </form>
+    </dialog>
   </div>
 </template>
 
@@ -138,6 +160,45 @@ const showDrawer = useDrawer();
 const isDeleting = ref(false);
 const isDuplicating = ref(false);
 const dispatchers = ref<Dispatcher[]>([]);
+const pauseDialog = ref<HTMLDialogElement>();
+const { t } = useI18n();
+const pauseOptions = [
+  { value: "1h", label: "1h", hours: 1 },
+  { value: "3h", label: "3h", hours: 3 },
+  { value: "6h", label: "6h", hours: 6 },
+  { value: "12h", label: "12h", hours: 12 },
+  { value: "24h", label: "24h", hours: 24 },
+  { value: "48h", label: "48h", hours: 48 },
+  { value: "72h", label: "72h", hours: 72 },
+];
+
+const isTemporarilyPaused = computed(() => Boolean(alert.pausedUntil && new Date(alert.pausedUntil) > new Date()));
+const isPaused = computed(() => !alert.enabled || isTemporarilyPaused.value);
+const isAlertActive = computed(() => alert.enabled && !isTemporarilyPaused.value);
+const pauseLabel = computed(() =>
+  isTemporarilyPaused.value && alert.pausedUntil
+    ? t("notifications.alert.paused-until", { time: formatTimeAgo(alert.pausedUntil) })
+    : t("notifications.alert.paused"),
+);
+const weekdayOrder = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const weekdayLabels = {
+  mon: "notifications.weekdays.mon",
+  tue: "notifications.weekdays.tue",
+  wed: "notifications.weekdays.wed",
+  thu: "notifications.weekdays.thu",
+  fri: "notifications.weekdays.fri",
+  sat: "notifications.weekdays.sat",
+  sun: "notifications.weekdays.sun",
+} as const;
+const deliveryScheduleLabel = computed(() => {
+  const days = alert.deliveryDays?.length ? alert.deliveryDays : weekdayOrder;
+  if (days.length === 7) return t("notifications.alert.all-days");
+  if (days.join(",") === "mon,tue,wed,thu,fri") return t("notifications.alert.weekdays");
+  return weekdayOrder
+    .filter((day) => days.includes(day))
+    .map((day) => t(weekdayLabels[day as keyof typeof weekdayLabels]))
+    .join(", ");
+});
 
 onMounted(async () => {
   const res = await fetch(withBase("/api/notifications/dispatchers"));
@@ -160,10 +221,28 @@ function formatTimeAgo(dateStr: string): string {
 }
 
 async function toggleEnabled() {
+  if (isAlertActive.value) {
+    pauseDialog.value?.showModal();
+    return;
+  }
   await fetch(withBase(`/api/notifications/rules/${alert.id}`), {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled: !alert.enabled }),
+    body: JSON.stringify({ enabled: true, pausedUntil: "" }),
+  });
+  onUpdated?.();
+}
+
+async function pauseAlert(hours: number | null) {
+  pauseDialog.value?.close();
+  const body =
+    hours == null
+      ? { enabled: false, pausedUntil: "" }
+      : { pausedUntil: new Date(Date.now() + hours * 60 * 60 * 1000).toISOString() };
+  await fetch(withBase(`/api/notifications/rules/${alert.id}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
   onUpdated?.();
 }
@@ -183,6 +262,7 @@ function duplicateAlertPayload(alert: NotificationRule) {
     eventExpression: alert.eventExpression ?? "",
     cooldown: alert.cooldown ?? 0,
     sampleWindow: alert.sampleWindow ?? 0,
+    deliveryDays: alert.deliveryDays?.length ? alert.deliveryDays : undefined,
     ntfyTopic: alert.ntfyTopic ?? "",
     ntfyPriority: alert.ntfyPriority ?? 0,
     ntfyTags: alert.ntfyTags ?? [],

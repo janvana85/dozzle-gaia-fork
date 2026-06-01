@@ -157,6 +157,32 @@ func TestSubscription_MatchesLog(t *testing.T) {
 	}
 }
 
+func TestSubscription_IsPaused(t *testing.T) {
+	now := time.Date(2026, time.May, 29, 12, 0, 0, 0, time.UTC)
+	future := now.Add(time.Hour)
+	past := now.Add(-time.Hour)
+
+	assert.True(t, (&Subscription{Enabled: false}).IsPaused(now))
+	assert.True(t, (&Subscription{Enabled: true, PausedUntil: &future}).IsPaused(now))
+	assert.False(t, (&Subscription{Enabled: true, PausedUntil: &past}).IsPaused(now))
+	assert.False(t, (&Subscription{Enabled: true}).IsPaused(now))
+}
+
+func TestSubscription_IsDeliveryDay(t *testing.T) {
+	friday := time.Date(2026, time.May, 29, 12, 0, 0, 0, time.UTC)
+
+	assert.True(t, (&Subscription{}).IsDeliveryDay(friday, time.UTC))
+	assert.True(t, (&Subscription{DeliveryDays: []string{"fri"}}).IsDeliveryDay(friday, time.UTC))
+	assert.False(t, (&Subscription{DeliveryDays: []string{"mon", "tue"}}).IsDeliveryDay(friday, time.UTC))
+}
+
+func TestSubscription_NormalizeDeliverySchedule(t *testing.T) {
+	sub := &Subscription{DeliveryDays: []string{" Mon ", "bad", "mon", "FRI"}}
+	sub.NormalizeDeliverySchedule()
+
+	assert.Equal(t, []string{"mon", "fri"}, sub.DeliveryDays)
+}
+
 func TestSubscription_DetectBurstEscalatesAtThresholdPerContainer(t *testing.T) {
 	sub := &Subscription{
 		BurstCount:    3,

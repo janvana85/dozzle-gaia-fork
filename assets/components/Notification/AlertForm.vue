@@ -119,6 +119,25 @@
       />
     </KeepAlive>
 
+    <!-- Delivery Schedule -->
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend text-lg">{{ $t("notifications.alert-form.delivery-schedule") }}</legend>
+      <div class="join flex flex-wrap">
+        <button
+          v-for="day in weekdayOptions"
+          :key="day.value"
+          type="button"
+          class="btn join-item btn-sm"
+          :class="deliveryDays.includes(day.value) ? 'btn-primary' : 'btn-outline'"
+          :disabled="deliveryDays.length === 1 && deliveryDays.includes(day.value)"
+          @click="toggleDeliveryDay(day.value)"
+        >
+          {{ $t(day.labelKey) }}
+        </button>
+      </div>
+      <p class="text-base-content/50 mt-1 text-xs">{{ $t("notifications.alert-form.delivery-schedule-hint") }}</p>
+    </fieldset>
+
     <!-- Destination -->
     <fieldset class="fieldset">
       <legend class="fieldset-legend text-lg">{{ $t("notifications.alert-form.destination") }}</legend>
@@ -547,6 +566,18 @@ const restartLoopEventWindowMins = ref(
 );
 const restartLoopCooldown = ref(props.alert?.restartLoopCooldown ?? 0);
 const restartLoopTriggerMessage = ref(props.alert?.restartLoopTriggerMessage ?? "");
+const weekdayOptions = [
+  { value: "mon", labelKey: "notifications.weekdays.mon" },
+  { value: "tue", labelKey: "notifications.weekdays.tue" },
+  { value: "wed", labelKey: "notifications.weekdays.wed" },
+  { value: "thu", labelKey: "notifications.weekdays.thu" },
+  { value: "fri", labelKey: "notifications.weekdays.fri" },
+  { value: "sat", labelKey: "notifications.weekdays.sat" },
+  { value: "sun", labelKey: "notifications.weekdays.sun" },
+] as const;
+const deliveryDays = ref<string[]>(
+  props.alert?.deliveryDays?.length ? [...props.alert.deliveryDays] : weekdayOptions.map((day) => day.value),
+);
 
 const hasLegacyDeliverySettings = computed(() =>
   Boolean(
@@ -606,7 +637,24 @@ const hasValidPairAlert = computed(() => {
   const triggerExpression = alertType.value === "event" ? typeFields?.eventExpression : typeFields?.logExpression;
   return Boolean(triggerExpression?.trim() && watchdogPattern.value.trim());
 });
-const canSave = computed(() => baseCanSave.value && (fieldsRef.value?.canSave ?? false) && hasValidPairAlert.value);
+const canSave = computed(
+  () =>
+    baseCanSave.value &&
+    (fieldsRef.value?.canSave ?? false) &&
+    hasValidPairAlert.value &&
+    deliveryDays.value.length > 0,
+);
+
+function toggleDeliveryDay(day: string) {
+  if (deliveryDays.value.includes(day)) {
+    if (deliveryDays.value.length === 1) return;
+    deliveryDays.value = deliveryDays.value.filter((d) => d !== day);
+    return;
+  }
+  deliveryDays.value = weekdayOptions
+    .map((option) => option.value)
+    .filter((value) => value === day || deliveryDays.value.includes(value));
+}
 
 async function save() {
   if (!canSave.value || !fieldsRef.value) return;
@@ -637,6 +685,7 @@ async function save() {
   await saveAlert({
     ...legacyDeliveryFields.value,
     ...fieldsRef.value.typeFields,
+    deliveryDays: deliveryDays.value,
     ...extra,
     ...uniqueFields.value,
     ...watchdog,

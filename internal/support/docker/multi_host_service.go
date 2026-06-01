@@ -413,6 +413,8 @@ func (m *MultiHostService) broadcastNotificationConfig() {
 			EventExpression:           sub.EventExpression,
 			Cooldown:                  sub.Cooldown,
 			SampleWindow:              sub.SampleWindow,
+			PausedUntil:               sub.PausedUntil,
+			DeliveryDays:              sub.DeliveryDays,
 			NtfyTopic:                 sub.NtfyTopic,
 			NtfyPriority:              sub.NtfyPriority,
 			NtfyTags:                  sub.NtfyTags,

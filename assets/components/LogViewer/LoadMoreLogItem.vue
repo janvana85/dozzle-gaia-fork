@@ -1,6 +1,14 @@
 <template>
   <div ref="root" class="flex min-h-[1px] flex-1 content-center justify-center">
-    <span class="loading loading-bars loading-md text-primary m-2" v-show="isLoading"></span>
+    <span
+      :class="
+        !isLoading && logEntry.label
+          ? 'text-base-content/50 py-2 text-xs'
+          : 'loading loading-bars loading-md text-primary m-2'
+      "
+      v-show="isLoading || logEntry.label"
+      >{{ isLoading ? "" : logEntry.label }}</span
+    >
   </div>
 </template>
 <script lang="ts" setup>

@@ -176,6 +176,7 @@ declare module 'vue' {
     'Ph:stack': typeof import('~icons/ph/stack')['default']
     'Ph:stackSimple': typeof import('~icons/ph/stack-simple')['default']
     Popup: typeof import('./components/Popup.vue')['default']
+    QuietTimeInput: typeof import('./components/Notification/QuietTimeInput.vue')['default']
     RandomColorTag: typeof import('./components/LogViewer/RandomColorTag.vue')['default']
     RelativeTime: typeof import('./components/common/RelativeTime.vue')['default']
     'Ri:terminalWindowFill': typeof import('~icons/ri/terminal-window-fill')['default']

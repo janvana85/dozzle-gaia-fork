@@ -85,6 +85,7 @@ declare global {
   const isShallow: typeof import('vue').isShallow
   const lightTheme: typeof import('./stores/settings').lightTheme
   const loadBetween: typeof import('./composable/loadBetween').loadBetween
+  const loadCachedSearch: typeof import('./composable/loadBetween').loadCachedSearch
   const locale: typeof import('./stores/settings').locale
   const loggingContextKey: typeof import('./composable/logContext').loggingContextKey
   const makeDestructurable: typeof import('@vueuse/core').makeDestructurable
@@ -524,6 +525,7 @@ declare module 'vue' {
     readonly isShallow: UnwrapRef<typeof import('vue')['isShallow']>
     readonly lightTheme: UnwrapRef<typeof import('./stores/settings')['lightTheme']>
     readonly loadBetween: UnwrapRef<typeof import('./composable/loadBetween')['loadBetween']>
+    readonly loadCachedSearch: UnwrapRef<typeof import('./composable/loadBetween')['loadCachedSearch']>
     readonly locale: UnwrapRef<typeof import('./stores/settings')['locale']>
     readonly loggingContextKey: UnwrapRef<typeof import('./composable/logContext')['loggingContextKey']>
     readonly makeDestructurable: UnwrapRef<typeof import('@vueuse/core')['makeDestructurable']>

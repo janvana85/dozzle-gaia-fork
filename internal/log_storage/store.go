@@ -2,6 +2,7 @@ package log_storage
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -511,6 +512,19 @@ func (s *Store) LogsBetweenDatesForContainer(ctx context.Context, c container.Co
 	return s.logsBetweenDates(ctx, c.Host, c.ID, c.LogIdentity(), from, to)
 }
 
+// SearchBeforeForContainer returns matching cached log events before the given
+// time, newest first. It reads files backwards so recent searches can stop as
+// soon as the bounded result set is full.
+func (s *Store) SearchBeforeForContainer(ctx context.Context, c container.Container, before time.Time, limit int, match func(*container.LogEvent) bool) ([]*container.LogEvent, bool, error) {
+	return s.searchBefore(ctx, c.Host, c.ID, c.LogIdentity(), before, limit, match)
+}
+
+// SearchBefore returns matching cached log events for a concrete host and
+// container ID before the given time, newest first.
+func (s *Store) SearchBefore(ctx context.Context, host, containerID string, before time.Time, limit int, match func(*container.LogEvent) bool) ([]*container.LogEvent, bool, error) {
+	return s.searchBefore(ctx, host, containerID, "", before, limit, match)
+}
+
 func (s *Store) logsBetweenDates(ctx context.Context, host, containerID, identity string, from, to time.Time) (<-chan *container.LogEvent, error) {
 	if err := s.openDB(); err != nil {
 		return nil, err
@@ -544,6 +558,58 @@ WHERE (host = ? AND container_id = ? AND day >= ? AND day <= ?)`
 		}
 	}()
 	return ch, nil
+}
+
+func (s *Store) searchBefore(ctx context.Context, host, containerID, identity string, before time.Time, limit int, match func(*container.LogEvent) bool) ([]*container.LogEvent, bool, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	if before.IsZero() {
+		before = time.Now()
+	}
+	if err := s.openDB(); err != nil {
+		return nil, false, err
+	}
+	from := before.UTC().AddDate(0, 0, -retentionDays)
+	dayFrom := from.Format("2006-01-02")
+	dayTo := before.UTC().Format("2006-01-02")
+	query := `
+SELECT path FROM log_chunks
+WHERE ((host = ? AND container_id = ?)`
+	args := []any{host, containerID}
+	if identity != "" {
+		query += ` OR (host = ? AND identity = ?)`
+		args = append(args, host, identity)
+	}
+	query += `) AND day >= ? AND day <= ? AND first_ts < ?
+GROUP BY path
+ORDER BY MAX(last_ts) DESC`
+	args = append(args, dayFrom, dayTo, before.UnixMilli())
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+
+	result := make([]*container.LogEvent, 0, limit)
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			continue
+		}
+		more, err := s.readFileReverse(ctx, path, from, before, limit+1, match, &result)
+		if err != nil {
+			continue
+		}
+		if more || len(result) > limit {
+			return result[:limit], true, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	return result, false, nil
 }
 
 // Append stores one log event for the given host/container.
@@ -580,4 +646,70 @@ func (s *Store) readFile(ctx context.Context, path string, from, to time.Time, c
 		case ch <- &ev:
 		}
 	}
+}
+
+func (s *Store) readFileReverse(ctx context.Context, path string, from, to time.Time, stopAfter int, match func(*container.LogEvent) bool, result *[]*container.LogEvent) (bool, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return false, err
+	}
+
+	const chunkSize int64 = 64 * 1024
+	pos := info.Size()
+	pending := make([]byte, 0)
+	for pos > 0 {
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		default:
+		}
+
+		n := chunkSize
+		if pos < n {
+			n = pos
+		}
+		pos -= n
+		buf := make([]byte, n)
+		if _, err := f.ReadAt(buf, pos); err != nil {
+			return false, err
+		}
+		data := append(buf, pending...)
+		parts := bytes.Split(data, []byte{'\n'})
+		pending = append(pending[:0], parts[0]...)
+		for i := len(parts) - 1; i >= 1; i-- {
+			if s.decodeReverseLine(parts[i], from, to, match, result) && len(*result) >= stopAfter {
+				return true, nil
+			}
+		}
+	}
+	if len(pending) > 0 && s.decodeReverseLine(pending, from, to, match, result) && len(*result) >= stopAfter {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (s *Store) decodeReverseLine(line []byte, from, to time.Time, match func(*container.LogEvent) bool, result *[]*container.LogEvent) bool {
+	line = bytes.TrimSpace(line)
+	if len(line) == 0 {
+		return false
+	}
+	var ev container.LogEvent
+	if err := json.Unmarshal(line, &ev); err != nil {
+		return false
+	}
+	ts := time.UnixMilli(ev.Timestamp)
+	if ts.Before(from) || !ts.Before(to) {
+		return false
+	}
+	if match != nil && !match(&ev) {
+		return false
+	}
+	*result = append(*result, &ev)
+	return true
 }

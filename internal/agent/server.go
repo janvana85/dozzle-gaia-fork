@@ -36,6 +36,14 @@ type NotificationConfigHandler interface {
 	GetNotificationStats() []types.SubscriptionStats
 }
 
+func protoToTime(ts *timestamppb.Timestamp) *time.Time {
+	if ts == nil {
+		return nil
+	}
+	t := ts.AsTime()
+	return &t
+}
+
 // ClientService is the interface for container operations used by the agent server
 type ClientService interface {
 	FindContainer(ctx context.Context, id string, labels container.ContainerLabels) (container.Container, error)
@@ -463,6 +471,8 @@ func (s *server) UpdateNotificationConfig(ctx context.Context, req *pb.UpdateNot
 			SampleWindow:              int(sub.SampleWindow),
 			EventExpression:           sub.EventExpression,
 			NtfyTopic:                 sub.NtfyTopic,
+			PausedUntil:               protoToTime(sub.PausedUntil),
+			DeliveryDays:              sub.DeliveryDays,
 			NtfyPriority:              int(sub.NtfyPriority),
 			NtfyTags:                  sub.NtfyTags,
 			BypassQuietHours:          sub.BypassQuietHours,

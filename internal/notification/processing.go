@@ -52,7 +52,7 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 	notificationLog := FromLogEvent(*logEvent)
 
 	m.subscriptions.Range(func(_ int, sub *Subscription) bool {
-		if !sub.Enabled || !sub.IsLogAlert() {
+		if !m.isSubscriptionProcessable(sub) || !sub.IsLogAlert() {
 			return true
 		}
 		if !sub.MatchesContainer(notificationContainer) {
@@ -270,7 +270,7 @@ func (m *Manager) processStatEvent(event *ContainerStatEvent) {
 
 	m.subscriptions.Range(func(_ int, sub *Subscription) bool {
 		// Skip disabled or non-metric subscriptions
-		if !sub.Enabled || !sub.IsMetricAlert() {
+		if !m.isSubscriptionProcessable(sub) || !sub.IsMetricAlert() {
 			return true
 		}
 
@@ -380,7 +380,7 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 	}
 
 	m.subscriptions.Range(func(_ int, sub *Subscription) bool {
-		if !sub.Enabled || !sub.IsEventAlert() {
+		if !m.isSubscriptionProcessable(sub) || !sub.IsEventAlert() {
 			return true
 		}
 
@@ -615,6 +615,9 @@ func (m *Manager) processRestartLoop(sub *Subscription, event *ContainerEventEnt
 }
 
 func (m *Manager) fireRestartLoopAlert(sub *Subscription, containerID string, notificationContainer types.NotificationContainer, notificationEvent types.NotificationEvent, detail string) {
+	if !m.isSubscriptionProcessable(sub) {
+		return
+	}
 	if sub.IsRestartLoopCooldownActive(containerID) {
 		return
 	}

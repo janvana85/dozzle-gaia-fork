@@ -14,10 +14,11 @@
         <span class="badge badge-outline" :class="cacheModeClass">
           {{ cacheModeLabel }}
         </span>
-        <span class="text-base-content/60" v-if="!followLogs">paused at history</span>
+        <span class="text-base-content/60" v-if="isSearching">search snapshot</span>
+        <span class="text-base-content/60" v-else-if="!followLogs">paused at history</span>
         <span class="text-base-content/60" v-else>following live for {{ followRemainingLabel }}</span>
       </div>
-      <button class="btn btn-primary btn-sm" @click="toggleFollowLogs">
+      <button class="btn btn-primary btn-sm" @click="toggleFollowLogs" v-if="!isSearching">
         {{ followLogs ? "Pause follow" : "Follow logs for 5m" }}
       </button>
     </div>
@@ -68,6 +69,7 @@ const scrollableContent = ref<HTMLElement>();
 
 const scrollContext = provideScrollContext();
 const { cached, loadingMore, historical, cacheMode } = useLoggingContext();
+const { isSearching } = useSearchFilter();
 
 const cacheModeLabel = computed(() => {
   if (cacheMode.value === "mixed") return "live + cache";

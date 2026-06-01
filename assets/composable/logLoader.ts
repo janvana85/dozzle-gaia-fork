@@ -1,7 +1,7 @@
 import { ShallowRef, type Ref } from "vue";
 import { type LogMessage, LogEntry, LoadMoreLogEntry, SkippedLogsEntry } from "@/models/LogEntry";
 import { Container } from "@/models/Container";
-import { loadBetween } from "@/composable/loadBetween";
+import { loadBetween, loadCachedSearch } from "@/composable/loadBetween";
 
 // Matches the rolling window size used for stats history
 const LOG_WINDOW_FOR_DELTA = 300;
@@ -12,7 +12,64 @@ export function useLogLoader(
   params: Ref<URLSearchParams>,
   loadingMore: Ref<boolean>,
 ) {
-  const { cached, cacheMode } = useLoggingContext();
+  const loggingContext = useLoggingContext();
+  const cached = loggingContext.cached ?? ref(false);
+  const cacheMode = loggingContext.cacheMode ?? ref<"live" | "cache" | "mixed">("live");
+  let searchLoadToken = 0;
+
+  async function loadSearchResults(before = new Date()) {
+    if (containers.value.length === 0) return;
+    const token = ++searchLoadToken;
+    loadingMore.value = true;
+    try {
+      const results = await Promise.all(containers.value.map((c) => loadCachedSearch(c, params, before, 200)));
+      if (token !== searchLoadToken) return;
+      const candidates = results
+        .filter(({ signal }) => !signal.aborted)
+        .flatMap(({ logs }) => logs)
+        .sort((a, b) => b.date.getTime() - a.date.getTime());
+      const page = candidates.slice(0, 200).sort((a, b) => a.date.getTime() - b.date.getTime());
+      const hasMore = results.some((result) => result.hasMore) || candidates.length > 200;
+      cached.value = true;
+      cacheMode.value = "cache";
+      messages.value = hasMore
+        ? [new LoadMoreLogEntry(new Date(), loadOlderSearchResults, true, "Scroll to see more"), ...page]
+        : page;
+    } catch (err) {
+      console.error(err);
+      throw err;
+    } finally {
+      loadingMore.value = false;
+    }
+  }
+
+  async function loadOlderSearchResults(entry: LoadMoreLogEntry) {
+    if (containers.value.length === 0) return;
+    const existingLogs = messages.value.filter((log) => !(log instanceof LoadMoreLogEntry));
+    if (existingLogs.length === 0) return;
+    const token = ++searchLoadToken;
+    loadingMore.value = true;
+    try {
+      const before = existingLogs[0].date;
+      const results = await Promise.all(containers.value.map((c) => loadCachedSearch(c, params, before, 200)));
+      if (token !== searchLoadToken) return;
+      const candidates = results
+        .filter(({ signal }) => !signal.aborted)
+        .flatMap(({ logs }) => logs)
+        .sort((a, b) => b.date.getTime() - a.date.getTime());
+      const page = candidates.slice(0, 200).sort((a, b) => a.date.getTime() - b.date.getTime());
+      const hasMore = results.some((result) => result.hasMore) || candidates.length > 200;
+      if (page.length === 0) {
+        messages.value = existingLogs;
+        return;
+      }
+      messages.value = hasMore ? [entry, ...page, ...existingLogs] : [...page, ...existingLogs];
+    } catch (err) {
+      console.error(err);
+    } finally {
+      loadingMore.value = false;
+    }
+  }
 
   async function loadOlderLogs(entry: LoadMoreLogEntry) {
     if (!(messages.value[0] instanceof LoadMoreLogEntry)) throw new Error("No loadMoreLogEntry on first item");
@@ -106,5 +163,5 @@ export function useLogLoader(
     }
   }
 
-  return { loadOlderLogs, loadSkippedLogs };
+  return { loadOlderLogs, loadSkippedLogs, loadSearchResults };
 }

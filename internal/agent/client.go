@@ -36,6 +36,13 @@ type Client struct {
 	group        string
 }
 
+func timeToProto(t *time.Time) *timestamppb.Timestamp {
+	if t == nil {
+		return nil
+	}
+	return timestamppb.New(*t)
+}
+
 func NewClient(endpoint string, certificates tls.Certificate, opts ...grpc.DialOption) (*Client, error) {
 	endpoint, nameOverride, group, err := ParseEndpoint(endpoint)
 	if err != nil {
@@ -611,6 +618,8 @@ func (c *Client) UpdateNotificationConfig(ctx context.Context, subscriptions []t
 			SampleWindow:              int32(sub.SampleWindow),
 			EventExpression:           sub.EventExpression,
 			NtfyTopic:                 sub.NtfyTopic,
+			PausedUntil:               timeToProto(sub.PausedUntil),
+			DeliveryDays:              sub.DeliveryDays,
 			NtfyPriority:              int32(sub.NtfyPriority),
 			NtfyTags:                  sub.NtfyTags,
 			BypassQuietHours:          sub.BypassQuietHours,

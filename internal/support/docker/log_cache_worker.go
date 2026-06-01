@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	defaultLogCacheInitialBackfill = 10 * time.Minute
+	maxLogCacheBackfill            = 4 * 24 * time.Hour
+	defaultLogCacheInitialBackfill = maxLogCacheBackfill
 	defaultLogCachePollInterval    = time.Minute
-	defaultLogCacheMaxCatchup      = 6 * time.Hour
+	defaultLogCacheMaxCatchup      = maxLogCacheBackfill
 	defaultLogCacheMaxBackfills    = 2
 )
 
@@ -62,9 +63,9 @@ func (m *MultiHostService) startLogCacheWorker(ctx context.Context) {
 
 func loadLogCacheConfig() logCacheConfig {
 	return logCacheConfig{
-		initialBackfill: durationEnv("DOZZLE_LOG_CACHE_INITIAL_BACKFILL", defaultLogCacheInitialBackfill),
+		initialBackfill: boundedDurationEnv("DOZZLE_LOG_CACHE_INITIAL_BACKFILL", defaultLogCacheInitialBackfill, maxLogCacheBackfill),
 		pollInterval:    durationEnv("DOZZLE_LOG_CACHE_POLL_INTERVAL", defaultLogCachePollInterval),
-		maxCatchup:      durationEnv("DOZZLE_LOG_CACHE_MAX_CATCHUP", defaultLogCacheMaxCatchup),
+		maxCatchup:      boundedDurationEnv("DOZZLE_LOG_CACHE_MAX_CATCHUP", defaultLogCacheMaxCatchup, maxLogCacheBackfill),
 		maxBackfills:    intEnv("DOZZLE_LOG_CACHE_MAX_BACKFILLS", defaultLogCacheMaxBackfills),
 	}
 }
@@ -78,6 +79,15 @@ func durationEnv(name string, fallback time.Duration) time.Duration {
 	if err != nil || d <= 0 {
 		log.Warn().Str("env", name).Str("value", value).Dur("fallback", fallback).Msg("invalid log cache duration")
 		return fallback
+	}
+	return d
+}
+
+func boundedDurationEnv(name string, fallback time.Duration, maxValue time.Duration) time.Duration {
+	d := durationEnv(name, fallback)
+	if d > maxValue {
+		log.Warn().Str("env", name).Dur("value", d).Dur("max", maxValue).Msg("log cache duration exceeds maximum")
+		return maxValue
 	}
 	return d
 }

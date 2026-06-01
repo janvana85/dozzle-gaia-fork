@@ -6,17 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
+	"net/http"
+	"net/url"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
-
-	"io"
-	"net/http"
-	"net/url"
-	"runtime"
-
 	"time"
 
 	"github.com/amir20/dozzle/internal/auth"
@@ -45,8 +43,22 @@ func matchesFilter(event *container.LogEvent, regex *regexp.Regexp, levels map[s
 	if regex != nil && inverse == support_web.Search(regex, event) {
 		return false
 	}
+	if len(levels) == 0 {
+		return true
+	}
 	_, ok := levels[event.Level]
 	return ok
+}
+
+func matchesStdType(event *container.LogEvent, stdTypes container.StdType) bool {
+	switch event.Stream {
+	case "stdout":
+		return stdTypes&container.STDOUT != 0
+	case "stderr":
+		return stdTypes&container.STDERR != 0
+	default:
+		return true
+	}
 }
 
 func (h *handler) resolveLabels(r *http.Request) container.ContainerLabels {
@@ -176,6 +188,54 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 		writer = gzWriter
 	}
 	encoder := json.NewEncoder(writer)
+
+	if r.URL.Query().Has("cachedSearch") {
+		if h.logStore == nil {
+			http.Error(w, "log cache is not enabled", http.StatusNotFound)
+			return
+		}
+		limit := 200
+		if r.URL.Query().Has("limit") {
+			limit, err = strconv.Atoi(r.URL.Query().Get("limit"))
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if limit < 1 || limit > 500 {
+				http.Error(w, "limit must be between 1 and 500", http.StatusBadRequest)
+				return
+			}
+		}
+		before := to
+		if before.IsZero() {
+			before = time.Now()
+		}
+		match := func(event *container.LogEvent) bool {
+			return matchesStdType(event, stdTypes) && matchesFilter(event, regex, levels, inverse)
+		}
+		var events []*container.LogEvent
+		var hasMore bool
+		if containerService != nil {
+			events, hasMore, err = h.logStore.SearchBeforeForContainer(r.Context(), containerService.Container, before, limit, match)
+		} else {
+			events, hasMore, err = h.logStore.SearchBefore(r.Context(), hostKey(r), id, before, limit, match)
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if hasMore {
+			w.Header().Set("X-Has-More", "true")
+		}
+		for i := len(events) - 1; i >= 0; i-- {
+			support_web.EscapeHTMLValues(events[i])
+			if err := encoder.Encode(events[i]); err != nil {
+				log.Error().Err(err).Msg("error encoding cached search event")
+				return
+			}
+		}
+		return
+	}
 
 	// Serve from local log store when the agent is offline
 	if usingStore {

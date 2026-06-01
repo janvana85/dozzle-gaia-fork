@@ -51,3 +51,41 @@ func TestLogsBetweenDatesForContainerUsesComposeIdentity(t *testing.T) {
 	}
 	assert.Equal(t, []string{"old deploy", "new deploy"}, messages)
 }
+
+func TestSearchBeforeForContainerReturnsNewestMatchesWithMore(t *testing.T) {
+	store := NewStore(t.TempDir())
+	now := time.Now().UTC()
+	c := container.Container{ID: "abc123456789", Name: "api", Host: "earth"}
+
+	require.NoError(t, store.RecordContainer(c))
+	for i, message := range []string{"ignore", "needle old", "needle middle", "needle newest"} {
+		require.NoError(t, store.AppendForContainer(c, &container.LogEvent{
+			ContainerID: c.ID,
+			Timestamp:   now.Add(time.Duration(i) * time.Minute).UnixMilli(),
+			Message:     message,
+			RawMessage:  message,
+			Stream:      "stdout",
+			Level:       "info",
+		}))
+	}
+	store.flush()
+
+	events, hasMore, err := store.SearchBeforeForContainer(t.Context(), c, now.Add(10*time.Minute), 2, func(ev *container.LogEvent) bool {
+		message, _ := ev.Message.(string)
+		return message != "" && message != "ignore"
+	})
+	require.NoError(t, err)
+	require.True(t, hasMore)
+	require.Len(t, events, 2)
+	assert.Equal(t, "needle newest", events[0].Message)
+	assert.Equal(t, "needle middle", events[1].Message)
+
+	older, hasMore, err := store.SearchBeforeForContainer(t.Context(), c, time.UnixMilli(events[1].Timestamp), 2, func(ev *container.LogEvent) bool {
+		message, _ := ev.Message.(string)
+		return message != "" && message != "ignore"
+	})
+	require.NoError(t, err)
+	require.False(t, hasMore)
+	require.Len(t, older, 1)
+	assert.Equal(t, "needle old", older[0].Message)
+}

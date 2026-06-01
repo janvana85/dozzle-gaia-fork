@@ -58,3 +58,41 @@ export async function loadBetween(
     signal,
   };
 }
+
+export async function loadCachedSearch(
+  container: Container | Ref<Container>,
+  params: Ref<URLSearchParams>,
+  before: Date,
+  limit = 200,
+) {
+  const c = toValue(container);
+  const searchParams = new URLSearchParams(params.value);
+  searchParams.append("cachedSearch", "1");
+  searchParams.append("limit", String(limit));
+  searchParams.append("from", new Date(before.getTime() - 1).toISOString());
+  searchParams.append("to", before.toISOString());
+
+  const abortController = new AbortController();
+  const signal = abortController.signal;
+  const stopWatcher = watchOnce(params, () => abortController.abort("search changed"));
+  const response = await fetch(withBase(`/api/hosts/${c.host}/containers/${c.id}/logs?${searchParams.toString()}`), {
+    signal,
+  });
+  stopWatcher();
+  if (!response.ok) throw new Error(`cached search failed: ${response.status}`);
+
+  const text = await response.text();
+  const logs = text
+    ? text
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => parseMessage(line))
+    : [];
+
+  return {
+    logs,
+    hasMore: response.headers.get("X-Has-More") === "true",
+    signal,
+  };
+}

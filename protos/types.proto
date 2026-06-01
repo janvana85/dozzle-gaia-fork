@@ -168,6 +168,8 @@ message NotificationSubscription {
   string uniqueKeyRegex = 39;
   int32 uniqueWindow = 40;
   int32 uniqueThreshold = 41;
+  google.protobuf.Timestamp pausedUntil = 42;
+  repeated string deliveryDays = 43;
 }
 
 message NotificationDispatcher {
