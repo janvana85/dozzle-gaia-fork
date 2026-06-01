@@ -406,10 +406,49 @@ type NotificationConfigUpdater interface {
 func (m *MultiHostService) broadcastNotificationConfig() {
 	notifSubs := m.notificationManager.Subscriptions()
 	notifDispatchers := m.notificationManager.Dispatchers()
+	subscriptions := subscriptionConfigsForAgents(notifSubs, m.notificationManager.GetQuietHours())
 
+	// Cloud dispatchers are excluded; cloud config is broadcast separately.
+	dispatchers := make([]types.DispatcherConfig, 0, len(notifDispatchers))
+	for _, d := range notifDispatchers {
+		if d.Type == "cloud" {
+			continue
+		}
+		dispatchers = append(dispatchers, types.DispatcherConfig{
+			ID:              d.ID,
+			Name:            d.Name,
+			Type:            d.Type,
+			URL:             d.URL,
+			Template:        d.Template,
+			Headers:         d.Headers,
+			Topic:           d.Topic,
+			Priority:        d.Priority,
+			Tags:            d.Tags,
+			Token:           d.Token,
+			TitleTemplate:   d.TitleTemplate,
+			MessageTemplate: d.MessageTemplate,
+		})
+	}
+
+	var wg sync.WaitGroup
+	for _, client := range m.manager.List() {
+		if updater, ok := client.(NotificationConfigUpdater); ok {
+			wg.Go(func() {
+				ctx, cancel := context.WithTimeout(context.Background(), m.timeout)
+				defer cancel()
+				if err := updater.UpdateNotificationConfig(ctx, subscriptions, dispatchers); err != nil {
+					log.Error().Err(err).Msg("Failed to broadcast notification config to agent")
+				}
+			})
+		}
+	}
+	wg.Wait()
+}
+
+func subscriptionConfigsForAgents(notifSubs []*notification.Subscription, quietHours notification.QuietHoursConfig) []types.SubscriptionConfig {
 	subscriptions := make([]types.SubscriptionConfig, len(notifSubs))
 	for i, sub := range notifSubs {
-		subscriptions[i] = types.SubscriptionConfig{
+		cfg := types.SubscriptionConfig{
 			ID:                        sub.ID,
 			Name:                      sub.Name,
 			AlertGroup:                sub.AlertGroup,
@@ -455,43 +494,21 @@ func (m *MultiHostService) broadcastNotificationConfig() {
 			AlertQuietEnd:             sub.AlertQuietEnd,
 			AlertQuietTimezone:        sub.AlertQuietTimezone,
 		}
-	}
-
-	// Cloud dispatchers are excluded; cloud config is broadcast separately.
-	dispatchers := make([]types.DispatcherConfig, 0, len(notifDispatchers))
-	for _, d := range notifDispatchers {
-		if d.Type == "cloud" {
-			continue
+		if quietHours.Enabled && !sub.AlertQuietEnabled {
+			cfg.AlertQuietEnabled = true
+			cfg.AlertQuietStart = quietHours.Start
+			cfg.AlertQuietEnd = quietHours.End
+			cfg.AlertQuietTimezone = quietHours.Timezone
+			if cfg.QuietStackThreshold <= 0 {
+				cfg.QuietStackThreshold = quietHours.StackThreshold
+			}
+			if cfg.QuietStackWindow <= 0 {
+				cfg.QuietStackWindow = quietHours.StackWindow
+			}
 		}
-		dispatchers = append(dispatchers, types.DispatcherConfig{
-			ID:              d.ID,
-			Name:            d.Name,
-			Type:            d.Type,
-			URL:             d.URL,
-			Template:        d.Template,
-			Headers:         d.Headers,
-			Topic:           d.Topic,
-			Priority:        d.Priority,
-			Tags:            d.Tags,
-			Token:           d.Token,
-			TitleTemplate:   d.TitleTemplate,
-			MessageTemplate: d.MessageTemplate,
-		})
+		subscriptions[i] = cfg
 	}
-
-	var wg sync.WaitGroup
-	for _, client := range m.manager.List() {
-		if updater, ok := client.(NotificationConfigUpdater); ok {
-			wg.Go(func() {
-				ctx, cancel := context.WithTimeout(context.Background(), m.timeout)
-				defer cancel()
-				if err := updater.UpdateNotificationConfig(ctx, subscriptions, dispatchers); err != nil {
-					log.Error().Err(err).Msg("Failed to broadcast notification config to agent")
-				}
-			})
-		}
-	}
-	wg.Wait()
+	return subscriptions
 }
 
 // broadcastCloudConfig sends current cloud config to all agent clients
@@ -661,6 +678,7 @@ func (m *MultiHostService) GetQuietHours() notification.QuietHoursConfig {
 // SetQuietHours updates the quiet hours configuration and persists it.
 func (m *MultiHostService) SetQuietHours(cfg notification.QuietHoursConfig) {
 	m.notificationManager.SetQuietHours(cfg)
+	m.broadcastNotificationConfig()
 	m.persister.SaveNotifications()
 }
 

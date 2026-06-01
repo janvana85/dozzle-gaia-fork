@@ -265,6 +265,74 @@ func TestUpdateNotificationConfigPreservesNtfyDispatcherFields(t *testing.T) {
 	assert.Equal(t, dispatchers, handler.dispatchers)
 }
 
+func TestUpdateNotificationConfigPreservesAlertSubscriptionFields(t *testing.T) {
+	listener := bufconn.Listen(bufSize)
+	handler := &captureNotificationHandler{}
+	server, err := NewServer(mockService, certs, "test", handler)
+	assert.NoError(t, err)
+	go server.Serve(listener)
+	defer server.Stop()
+
+	rpc, err := NewClient("passthrough://subscription-config", certs, grpc.WithContextDialer(func(ctx context.Context, address string) (net.Conn, error) {
+		return listener.Dial()
+	}))
+	assert.NoError(t, err)
+
+	pausedUntil := time.Date(2026, time.June, 1, 10, 30, 0, 0, time.UTC)
+	subscriptions := []types.SubscriptionConfig{
+		{
+			ID:                        42,
+			Name:                      "Agent alert",
+			Enabled:                   true,
+			DispatcherID:              7,
+			LogExpression:             "message contains 'error'",
+			ContainerExpression:       "name == 'api'",
+			MetricExpression:          "cpu > 90",
+			EventExpression:           "event == 'die'",
+			Cooldown:                  120,
+			SampleWindow:              30,
+			PausedUntil:               &pausedUntil,
+			DeliveryDays:              []string{"mon", "fri"},
+			NtfyTopic:                 "ops",
+			NtfyPriority:              5,
+			NtfyTags:                  []string{"docker", "agent"},
+			BypassQuietHours:          true,
+			QuietPriority:             1,
+			HoldDuringQuiet:           true,
+			HoldClearWindow:           60,
+			BurstCount:                3,
+			BurstWindow:               300,
+			BurstPriority:             5,
+			BurstNtfyTopic:            "ops-burst",
+			UniqueKeyRegex:            `request_id=(\w+)`,
+			UniqueWindow:              3600,
+			UniqueThreshold:           2,
+			WatchdogPattern:           "message contains 'ok'",
+			WatchdogWindow:            600,
+			WatchdogCooldown:          900,
+			WatchdogTriggerMessage:    "service did not recover",
+			WatchdogClearMessage:      "service recovered",
+			RestartLoopEnabled:        true,
+			RestartLoopStateWindow:    120,
+			RestartLoopEventCount:     4,
+			RestartLoopEventWindow:    300,
+			RestartLoopCooldown:       600,
+			RestartLoopTriggerMessage: "restart loop detected",
+			QuietStackThreshold:       5,
+			QuietStackWindow:          1800,
+			AlertQuietEnabled:         true,
+			AlertQuietStart:           "22:00",
+			AlertQuietEnd:             "07:00",
+			AlertQuietTimezone:        "Europe/Prague",
+		},
+	}
+
+	err = rpc.UpdateNotificationConfig(context.Background(), subscriptions, nil)
+
+	assert.NoError(t, err)
+	assert.Equal(t, subscriptions, handler.subscriptions)
+}
+
 func TestHostWithAgentGroupAndDefaultName(t *testing.T) {
 	rpc, err := NewClient("passthrough://bufnet||Production", certs, grpc.WithContextDialer(bufDialer))
 	if err != nil {
