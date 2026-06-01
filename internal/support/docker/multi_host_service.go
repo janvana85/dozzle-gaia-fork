@@ -412,6 +412,7 @@ func (m *MultiHostService) broadcastNotificationConfig() {
 		subscriptions[i] = types.SubscriptionConfig{
 			ID:                        sub.ID,
 			Name:                      sub.Name,
+			AlertGroup:                sub.AlertGroup,
 			Enabled:                   sub.Enabled,
 			DispatcherID:              sub.DispatcherID,
 			LogExpression:             sub.LogExpression,

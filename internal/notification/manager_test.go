@@ -51,6 +51,7 @@ func TestUpdateSubscriptionPreservesAdvancedFields(t *testing.T) {
 
 	sub := &Subscription{
 		Name:                   "api errors",
+		AlertGroup:             "EasyJukebox",
 		Enabled:                true,
 		DispatcherID:           7,
 		ContainerExpression:    "name == 'app'",
@@ -84,6 +85,7 @@ func TestUpdateSubscriptionPreservesAdvancedFields(t *testing.T) {
 	updated, ok := manager.subscriptions.Load(sub.ID)
 	require.True(t, ok)
 	assert.False(t, updated.Enabled)
+	assert.Equal(t, "EasyJukebox", updated.AlertGroup)
 	assert.Equal(t, "api-alerts", updated.NtfyTopic)
 	assert.Equal(t, 5, updated.NtfyPriority)
 	assert.Equal(t, []string{"api", "quiet"}, updated.NtfyTags)
@@ -115,6 +117,7 @@ func TestLoadConfigPreservesAdvancedSubscriptionFields(t *testing.T) {
 subscriptions:
   - id: 12
     name: api errors
+    alertGroup: EasyJukebox
     enabled: true
     dispatcherId: 0
     containerExpression: name == 'app'
@@ -145,6 +148,7 @@ subscriptions:
 
 	loaded, ok := manager.subscriptions.Load(12)
 	require.True(t, ok)
+	assert.Equal(t, "EasyJukebox", loaded.AlertGroup)
 	assert.Equal(t, "api-alerts", loaded.NtfyTopic)
 	assert.Equal(t, 5, loaded.NtfyPriority)
 	assert.Equal(t, []string{"api", "quiet"}, loaded.NtfyTags)

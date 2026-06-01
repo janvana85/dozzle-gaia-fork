@@ -9,6 +9,7 @@ export interface AlertFormOptions {
   alert?: NotificationRule;
   prefill?: {
     name?: string;
+    alertGroup?: string;
     containerExpression?: string;
     logExpression?: string;
     metricExpression?: string;
@@ -25,6 +26,7 @@ export interface ContainerResult {
 export function useAlertForm(options: AlertFormOptions) {
   const isEditing = computed(() => !!options.alert);
   const alertName = ref(options.alert?.name ?? options.prefill?.name ?? "");
+  const alertGroup = ref(options.alert?.alertGroup ?? options.prefill?.alertGroup ?? "");
   const containerExpression = ref(options.alert?.containerExpression ?? options.prefill?.containerExpression ?? "");
   const dispatcherId = ref(options.alert?.dispatcher?.id ?? options.prefill?.dispatcherId ?? -1);
   const isSaving = ref(false);
@@ -47,9 +49,9 @@ export function useAlertForm(options: AlertFormOptions) {
   const imageNames = computed(() => [...new Set(containers.value.map((c) => c.image))]);
 
   const { hosts } = useHosts();
-  const hostNames = computed(() =>
-    [...new Set(containers.value.map((c) => hosts.value[c.host]?.name).filter((n): n is string => !!n))],
-  );
+  const hostNames = computed(() => [
+    ...new Set(containers.value.map((c) => hosts.value[c.host]?.name).filter((n): n is string => !!n)),
+  ]);
   const hostGroups = computed(() => [
     ...new Set(
       Object.values(hosts.value)
@@ -86,6 +88,7 @@ export function useAlertForm(options: AlertFormOptions) {
     try {
       const input = {
         name: alertName.value.trim(),
+        alertGroup: alertGroup.value.trim(),
         containerExpression: containerExpression.value,
         dispatcherId: dispatcherId.value,
         enabled: true,
@@ -151,6 +154,7 @@ export function useAlertForm(options: AlertFormOptions) {
   return {
     isEditing,
     alertName,
+    alertGroup,
     containerExpression,
     dispatcherId,
     destinations,

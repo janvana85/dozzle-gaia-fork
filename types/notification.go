@@ -93,6 +93,7 @@ type NotificationEvent struct {
 type SubscriptionConfig struct {
 	ID                        int        `json:"id"`
 	Name                      string     `json:"name"`
+	AlertGroup                string     `json:"alertGroup,omitempty"`
 	Enabled                   bool       `json:"-"`
 	DispatcherID              int        `json:"-"`
 	LogExpression             string     `json:"logExpression,omitempty"`

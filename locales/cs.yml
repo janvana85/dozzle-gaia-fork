@@ -140,6 +140,7 @@ notifications:
   prefill-expression: level == "error"
   default-alert-created: "Vytvořili jsme výchozí alert. Dostanete zprávu, když kontejner skončí chybou. Kdykoliv ho můžete upravit nebo pozastavit."
   default-alert-failed: "Alert se nepodařilo vytvořit automaticky, otevírám formulář."
+  search-placeholder: Hledat alerty, skupiny, cíle, výrazy...
   filter:
     all: Vše ({count})
     enabled: Zapnuté ({count})
@@ -148,6 +149,9 @@ notifications:
     list: Seznam
     grouped: Skupiny
     all-containers: Všechny kontejnery
+    manual-group: Ruční skupina
+    ungrouped: Bez skupiny
+    ungrouped-description: Alerty bez ručně zadané skupiny
     alert-count: "{count} alertů"
     paused-count: "{count} pozastaveno"
     triggered-count: "{count} spuštění"
@@ -178,6 +182,9 @@ notifications:
     description: Odebírat události v logu podle zadaných pravidel
     alert-name: Název alertu
     alert-name-placeholder: např. Chyby test API
+    alert-group: Skupina
+    alert-group-placeholder: např. EasyJukebox, Backup, Proxy
+    alert-group-hint: Volitelné. Alerty se stejným názvem skupiny budou spolu ve skupinovém zobrazení.
     container-filter: Filtr kontejnerů
     containers-match: "{count} kontejnerů odpovídá: {names}"
     no-containers-match: Tomuto filtru neodpovídá žádný kontejner
@@ -226,6 +233,9 @@ notifications:
     unique-enabled: Poslat jednou pro unikátní hodnotu
     unique-hint: Z matching logu vytáhne hodnotu a v daném okně potlačí opakování. Volitelný threshold pošle alert až po dostatečném počtu hitů.
     unique-regex: Regex pro unique klíč
+    unique-matches: "{count} matchů unique klíče"
+    unique-no-matches: V aktuálním náhledu logů se nenašel žádný unique klíč
+    unique-key: Klíč
     unique-window: Unique okno
     unique-window-value: "{duration}, než může stejný unique klíč znovu poslat notifikaci"
     unique-window-hint: Stejný unique klíč může znovu poslat notifikaci až po vypršení tohoto okna.

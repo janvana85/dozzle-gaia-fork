@@ -47,6 +47,7 @@
             </div>
           </h4>
           <span v-if="isPaused" class="badge badge-warning badge-sm">{{ pauseLabel }}</span>
+          <span v-if="alert.alertGroup" class="badge badge-outline badge-sm">{{ alert.alertGroup }}</span>
           <span class="badge badge-ghost badge-sm">{{ deliveryScheduleLabel }}</span>
         </div>
         <input
@@ -220,8 +221,10 @@ function formatTimeAgo(dateStr: string): string {
   return toRelativeTime(date, undefined);
 }
 
-async function toggleEnabled() {
-  if (isAlertActive.value) {
+async function toggleEnabled(event: Event) {
+  const checked = (event.target as HTMLInputElement).checked;
+  if (!checked) {
+    (event.target as HTMLInputElement).checked = true;
     pauseDialog.value?.showModal();
     return;
   }
@@ -254,6 +257,7 @@ function editAlert() {
 function duplicateAlertPayload(alert: NotificationRule) {
   return {
     name: `Copy of ${alert.name}`,
+    alertGroup: alert.alertGroup ?? "",
     enabled: alert.enabled ?? true,
     dispatcherId: alert.dispatcher?.id ?? -1,
     containerExpression: alert.containerExpression ?? "",

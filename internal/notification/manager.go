@@ -408,6 +408,7 @@ func (m *Manager) UpdateSubscription(id int, updates map[string]any) error {
 		updated := &Subscription{
 			ID:                        sub.ID,
 			Name:                      sub.Name,
+			AlertGroup:                sub.AlertGroup,
 			Enabled:                   sub.Enabled,
 			DispatcherID:              sub.DispatcherID,
 			ContainerExpression:       sub.ContainerExpression,
@@ -482,6 +483,10 @@ func (m *Manager) UpdateSubscription(id int, updates map[string]any) error {
 			case "name":
 				if name, ok := value.(string); ok {
 					updated.Name = name
+				}
+			case "alertGroup":
+				if group, ok := value.(string); ok {
+					updated.AlertGroup = strings.TrimSpace(group)
 				}
 			case "enabled":
 				if enabled, ok := value.(bool); ok {

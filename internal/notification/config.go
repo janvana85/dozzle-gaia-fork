@@ -51,6 +51,7 @@ func (m *Manager) LoadConfig(r io.Reader) error {
 		subscriptions[i] = types.SubscriptionConfig{
 			ID:                        sub.ID,
 			Name:                      sub.Name,
+			AlertGroup:                sub.AlertGroup,
 			Enabled:                   sub.Enabled,
 			DispatcherID:              sub.DispatcherID,
 			LogExpression:             sub.LogExpression,
@@ -164,6 +165,7 @@ func (m *Manager) HandleNotificationConfig(subscriptions []types.SubscriptionCon
 		s := &Subscription{
 			ID:                        sub.ID,
 			Name:                      sub.Name,
+			AlertGroup:                sub.AlertGroup,
 			Enabled:                   sub.Enabled,
 			DispatcherID:              sub.DispatcherID,
 			LogExpression:             sub.LogExpression,

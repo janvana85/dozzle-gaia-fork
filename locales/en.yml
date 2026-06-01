@@ -253,6 +253,7 @@ notifications:
   prefill-expression: level == "error"
   default-alert-created: "We created a default alert for you. You'll get notified when any container exits with an error. Edit or pause it anytime."
   default-alert-failed: "Couldn't auto-create your alert — here's the form instead."
+  search-placeholder: Search alerts, groups, destinations, expressions...
   filter:
     all: All ({count})
     enabled: Enabled ({count})
@@ -261,6 +262,9 @@ notifications:
     list: List
     grouped: Grouped
     all-containers: All containers
+    manual-group: Manual group
+    ungrouped: Ungrouped
+    ungrouped-description: Alerts without a manual group
     alert-count: "{count} alerts"
     paused-count: "{count} paused"
     triggered-count: "{count} triggered"
@@ -296,6 +300,9 @@ notifications:
     description: Subscribe to log events matching your criteria
     alert-name: Alert Name
     alert-name-placeholder: e.g., Test API Errors
+    alert-group: Group
+    alert-group-placeholder: e.g., EasyJukebox, Backup, Proxy
+    alert-group-hint: Optional. Alerts with the same group name appear together in grouped view.
     container-filter: Container Filter
     containers-match: "{count} containers match: {names}"
     no-containers-match: No containers match this filter
@@ -346,6 +353,9 @@ notifications:
     unique-enabled: Notify once per unique value
     unique-hint: Extract a value from the matched log line and suppress repeats in the selected window. Add a threshold to notify only after enough hits.
     unique-regex: Unique key regex
+    unique-matches: "{count} unique key matches"
+    unique-no-matches: No unique keys matched in the current log preview
+    unique-key: Key
     unique-window: Unique window
     unique-window-value: "{duration} before the same unique key can notify again"
     unique-window-hint: The same unique key can notify again after this window expires.

@@ -1,6 +1,7 @@
 export interface NotificationRule {
   id: number;
   name: string;
+  alertGroup?: string;
   enabled: boolean;
   containerExpression: string;
   logExpression: string;
@@ -68,6 +69,7 @@ export interface Dispatcher {
 
 export interface NotificationRuleInput {
   name: string;
+  alertGroup?: string;
   enabled: boolean;
   dispatcherId: number;
   logExpression: string;
@@ -126,6 +128,7 @@ export interface PreviewResult {
   logError?: string;
   metricError?: string;
   eventError?: string;
+  uniqueRegexError?: string;
   matchedContainers: {
     id: string;
     name: string;
@@ -140,6 +143,10 @@ export interface PreviewResult {
     ts: number;
     l: string;
     s: string;
+  }[];
+  uniqueMatches?: {
+    key: string;
+    message: string;
   }[];
   totalLogs: number;
   messageKeys?: string[];

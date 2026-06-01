@@ -122,6 +122,7 @@ func extractMessage(l container.LogEvent) any {
 type Subscription struct {
 	ID                  int        `json:"id" yaml:"id"`
 	Name                string     `json:"name" yaml:"name"`
+	AlertGroup          string     `json:"alertGroup,omitempty" yaml:"alertGroup,omitempty"`
 	Enabled             bool       `json:"enabled" yaml:"enabled"`
 	DispatcherID        int        `json:"dispatcherId" yaml:"dispatcherId"`
 	LogExpression       string     `json:"logExpression" yaml:"logExpression"`

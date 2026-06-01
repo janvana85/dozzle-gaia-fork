@@ -179,16 +179,27 @@
 
         <!-- Filter Tabs -->
         <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <div class="tabs tabs-box">
-            <button class="tab" :class="{ 'tab-active': filter === 'all' }" @click="filter = 'all'">
-              {{ $t("notifications.filter.all", { count: alerts.length }) }}
-            </button>
-            <button class="tab" :class="{ 'tab-active': filter === 'enabled' }" @click="filter = 'enabled'">
-              {{ $t("notifications.filter.enabled", { count: enabledCount }) }}
-            </button>
-            <button class="tab" :class="{ 'tab-active': filter === 'paused' }" @click="filter = 'paused'">
-              {{ $t("notifications.filter.paused", { count: pausedCount }) }}
-            </button>
+          <div class="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+            <div class="tabs tabs-box">
+              <button class="tab" :class="{ 'tab-active': filter === 'all' }" @click="filter = 'all'">
+                {{ $t("notifications.filter.all", { count: alerts.length }) }}
+              </button>
+              <button class="tab" :class="{ 'tab-active': filter === 'enabled' }" @click="filter = 'enabled'">
+                {{ $t("notifications.filter.enabled", { count: enabledCount }) }}
+              </button>
+              <button class="tab" :class="{ 'tab-active': filter === 'paused' }" @click="filter = 'paused'">
+                {{ $t("notifications.filter.paused", { count: pausedCount }) }}
+              </button>
+            </div>
+            <label class="input input-sm input-bordered flex w-full max-w-md items-center gap-2 md:w-80">
+              <mdi:magnify class="text-base-content/50 shrink-0" />
+              <input
+                v-model="alertSearch"
+                type="search"
+                class="grow"
+                :placeholder="$t('notifications.search-placeholder')"
+              />
+            </label>
           </div>
           <div class="join">
             <button
@@ -225,7 +236,7 @@
                     <mdi:folder-multiple-outline class="text-info shrink-0" />
                     <h4 class="truncate text-base font-semibold">{{ group.label }}</h4>
                   </div>
-                  <code class="text-base-content/60 mt-1 block truncate font-mono text-xs">{{ group.expression }}</code>
+                  <div class="text-base-content/60 mt-1 text-xs">{{ group.description }}</div>
                 </div>
                 <div class="ml-auto flex shrink-0 flex-wrap items-center gap-2 pr-6">
                   <span class="badge badge-neutral badge-sm">
@@ -418,6 +429,7 @@ const quietHoursActiveLabel = computed(() => {
 // Local state
 const filter = ref<"all" | "enabled" | "paused">("all");
 const alertViewMode = useStorage<"list" | "grouped">("DOZZLE_ALERT_VIEW_MODE", "grouped");
+const alertSearch = ref("");
 
 function isAlertPaused(alert: NotificationRule) {
   return !alert.enabled || Boolean(alert.pausedUntil && new Date(alert.pausedUntil) > new Date());
@@ -427,15 +439,21 @@ const enabledCount = computed(() => alerts.value.filter((a) => !isAlertPaused(a)
 const pausedCount = computed(() => alerts.value.filter(isAlertPaused).length);
 
 const filteredAlerts = computed(() => {
-  if (filter.value === "enabled") return alerts.value.filter((a) => !isAlertPaused(a));
-  if (filter.value === "paused") return alerts.value.filter(isAlertPaused);
-  return alerts.value;
+  const base =
+    filter.value === "enabled"
+      ? alerts.value.filter((a) => !isAlertPaused(a))
+      : filter.value === "paused"
+        ? alerts.value.filter(isAlertPaused)
+        : alerts.value;
+  const query = alertSearch.value.trim().toLowerCase();
+  if (!query) return base;
+  return base.filter((alert) => alertSearchText(alert).includes(query));
 });
 
 type AlertGroup = {
   key: string;
   label: string;
-  expression: string;
+  description: string;
   alerts: NotificationRule[];
   pausedCount: number;
   triggeredCount: number;
@@ -444,14 +462,16 @@ type AlertGroup = {
 const groupedAlerts = computed<AlertGroup[]>(() => {
   const groups = new Map<string, AlertGroup>();
   for (const alert of filteredAlerts.value) {
-    const expression = normalizeContainerExpression(alert.containerExpression);
-    const key = expression.toLowerCase();
+    const groupName = alert.alertGroup?.trim();
+    const key = groupName ? `group:${groupName.toLowerCase()}` : "__ungrouped__";
     const group =
       groups.get(key) ??
       ({
         key,
-        label: containerExpressionLabel(expression),
-        expression,
+        label: groupName || t("notifications.grouping.ungrouped"),
+        description: groupName
+          ? t("notifications.grouping.manual-group")
+          : t("notifications.grouping.ungrouped-description"),
         alerts: [],
         pausedCount: 0,
         triggeredCount: 0,
@@ -465,26 +485,20 @@ const groupedAlerts = computed<AlertGroup[]>(() => {
   return [...groups.values()];
 });
 
-function normalizeContainerExpression(expression: string) {
-  const trimmed = expression.trim();
-  return trimmed || "true";
-}
-
-function containerExpressionLabel(expression: string) {
-  if (expression === "true") return t("notifications.grouping.all-containers");
-
-  const namedMatch = expression.match(/\b(?:name|service)\s*==\s*["']([^"']+)["']/i);
-  if (namedMatch?.[1]) return namedMatch[1];
-
-  const composeServiceMatch = expression.match(
-    /labels\[['"]com\.docker\.compose\.service['"]\]\s*==\s*["']([^"']+)["']/i,
-  );
-  if (composeServiceMatch?.[1]) return composeServiceMatch[1];
-
-  const coolifyServiceMatch = expression.match(/labels\[['"]coolify\.serviceName['"]\]\s*==\s*["']([^"']+)["']/i);
-  if (coolifyServiceMatch?.[1]) return coolifyServiceMatch[1];
-
-  return expression;
+function alertSearchText(alert: NotificationRule) {
+  return [
+    alert.name,
+    alert.alertGroup,
+    alert.dispatcher?.name,
+    alert.dispatcher?.type,
+    alert.containerExpression,
+    alert.logExpression,
+    alert.metricExpression,
+    alert.eventExpression,
+  ]
+    .filter(Boolean)
+    .join("\n")
+    .toLowerCase();
 }
 
 async function placeDuplicatedAlert(sourceId: number, duplicate: NotificationRule) {

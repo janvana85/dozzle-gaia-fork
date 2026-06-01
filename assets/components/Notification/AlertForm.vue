@@ -26,6 +26,19 @@
       />
     </fieldset>
 
+    <!-- Alert Group -->
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend text-lg">{{ $t("notifications.alert-form.alert-group") }}</legend>
+      <input
+        v-model="alertGroup"
+        type="text"
+        class="input focus:input-primary w-full"
+        :class="alertGroup.trim() ? 'input-primary' : ''"
+        :placeholder="$t('notifications.alert-form.alert-group-placeholder')"
+      />
+      <p class="fieldset-label">{{ $t("notifications.alert-form.alert-group-hint") }}</p>
+    </fieldset>
+
     <!-- Alert Type Toggle -->
     <fieldset class="fieldset">
       <legend class="fieldset-legend text-lg">{{ $t("notifications.alert-form.alert-type") }}</legend>
@@ -294,8 +307,33 @@
               v-model="uniqueKeyRegex"
               type="text"
               class="input focus:input-primary w-full text-base"
-              placeholder="(\\d{1,3}(?:\\.\\d{1,3}){3})"
+              :class="{ 'input-error!': uniqueRegexError }"
+              placeholder="(\d{1,3}(?:\.\d{1,3}){3})"
             />
+            <div v-if="uniqueRegexError || uniqueKeyRegex.trim()" class="fieldset-label">
+              <span v-if="uniqueRegexError" class="text-error">{{ uniqueRegexError }}</span>
+              <span v-else-if="uniqueMatches.length" class="text-success">
+                <mdi:check class="inline" />
+                {{ $t("notifications.alert-form.unique-matches", { count: uniqueMatches.length }) }}
+              </span>
+              <span v-else-if="!isLoading" class="text-warning">
+                <mdi:alert class="inline" />
+                {{ $t("notifications.alert-form.unique-no-matches") }}
+              </span>
+            </div>
+            <div v-if="uniqueMatches.length" class="mt-2 space-y-2">
+              <div
+                v-for="match in uniqueMatches"
+                :key="`${match.key}:${match.message}`"
+                class="bg-base-200 rounded-box p-2 text-xs"
+              >
+                <div class="mb-1 flex items-center gap-2">
+                  <span class="text-base-content/60">{{ $t("notifications.alert-form.unique-key") }}</span>
+                  <code class="text-success break-all">{{ match.key }}</code>
+                </div>
+                <code class="block max-h-16 overflow-hidden break-all opacity-80">{{ match.message }}</code>
+              </div>
+            </div>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
@@ -487,6 +525,7 @@ const props = defineProps<{
   alert?: NotificationRule;
   prefill?: {
     name?: string;
+    alertGroup?: string;
     containerExpression?: string;
     logExpression?: string;
     metricExpression?: string;
@@ -498,6 +537,7 @@ const props = defineProps<{
 const {
   isEditing,
   alertName,
+  alertGroup,
   containerExpression,
   dispatcherId,
   destinations,
@@ -539,6 +579,8 @@ const burstNtfyTopic = ref(props.alert?.burstNtfyTopic ?? "");
 
 const uniqueEnabled = ref(!!(props.alert?.uniqueKeyRegex && props.alert?.uniqueWindow));
 const uniqueKeyRegex = ref(props.alert?.uniqueKeyRegex ?? "");
+const uniqueRegexError = ref<string | null>(null);
+const uniqueMatches = ref<{ key: string; message: string }[]>([]);
 const uniqueWindow = ref(props.alert?.uniqueWindow ?? 24 * 60 * 60);
 const uniqueThreshold = ref(props.alert?.uniqueThreshold ?? 0);
 
@@ -641,8 +683,38 @@ const canSave = computed(
   () =>
     baseCanSave.value &&
     (fieldsRef.value?.canSave ?? false) &&
+    !uniqueRegexError.value &&
     hasValidPairAlert.value &&
     deliveryDays.value.length > 0,
+);
+
+const currentLogExpression = computed(() =>
+  alertType.value === "log"
+    ? (((fieldsRef.value?.typeFields as { logExpression?: string } | undefined)?.logExpression ?? "") as string)
+    : "",
+);
+
+async function validateUniqueRegex() {
+  if (alertType.value !== "log" || !uniqueEnabled.value || !uniqueKeyRegex.value.trim()) {
+    uniqueRegexError.value = null;
+    uniqueMatches.value = [];
+    return;
+  }
+  const { data } = await validatePreview({
+    logExpression: currentLogExpression.value || undefined,
+    uniqueKeyRegex: uniqueKeyRegex.value.trim(),
+  });
+  uniqueRegexError.value = data?.uniqueRegexError ?? null;
+  uniqueMatches.value = data?.uniqueMatches ?? [];
+}
+
+const debouncedValidateUniqueRegex = useDebounceFn(validateUniqueRegex, 500);
+watch(
+  [uniqueEnabled, uniqueKeyRegex, containerExpression, currentLogExpression],
+  () => debouncedValidateUniqueRegex(),
+  {
+    immediate: true,
+  },
 );
 
 function toggleDeliveryDay(day: string) {

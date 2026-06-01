@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/amir20/dozzle/internal/cache"
@@ -25,6 +27,7 @@ import (
 type NotificationRuleResponse struct {
 	ID                        int                 `json:"id"`
 	Name                      string              `json:"name"`
+	AlertGroup                string              `json:"alertGroup,omitempty"`
 	Enabled                   bool                `json:"enabled"`
 	ContainerExpression       string              `json:"containerExpression"`
 	LogExpression             string              `json:"logExpression"`
@@ -95,6 +98,7 @@ type DispatcherResponse struct {
 
 type NotificationRuleInput struct {
 	Name                      string   `json:"name"`
+	AlertGroup                string   `json:"alertGroup,omitempty"`
 	Enabled                   bool     `json:"enabled"`
 	DispatcherID              int      `json:"dispatcherId"`
 	LogExpression             string   `json:"logExpression"`
@@ -138,6 +142,7 @@ type NotificationRuleInput struct {
 
 type NotificationRuleUpdateInput struct {
 	Name                      *string  `json:"name,omitempty"`
+	AlertGroup                *string  `json:"alertGroup,omitempty"`
 	Enabled                   *bool    `json:"enabled,omitempty"`
 	DispatcherID              *int     `json:"dispatcherId,omitempty"`
 	LogExpression             *string  `json:"logExpression,omitempty"`
@@ -198,6 +203,7 @@ type PreviewInput struct {
 	LogExpression       *string `json:"logExpression,omitempty"`
 	MetricExpression    *string `json:"metricExpression,omitempty"`
 	EventExpression     *string `json:"eventExpression,omitempty"`
+	UniqueKeyRegex      *string `json:"uniqueKeyRegex,omitempty"`
 }
 
 type PreviewResult struct {
@@ -205,10 +211,17 @@ type PreviewResult struct {
 	LogError          *string               `json:"logError,omitempty"`
 	MetricError       *string               `json:"metricError,omitempty"`
 	EventError        *string               `json:"eventError,omitempty"`
+	UniqueRegexError  *string               `json:"uniqueRegexError,omitempty"`
 	MatchedContainers []container.Container `json:"matchedContainers"`
 	MatchedLogs       []container.LogEvent  `json:"matchedLogs"`
+	UniqueMatches     []UniqueRegexMatch    `json:"uniqueMatches,omitempty"`
 	TotalLogs         int                   `json:"totalLogs"`
 	MessageKeys       []string              `json:"messageKeys,omitempty"`
+}
+
+type UniqueRegexMatch struct {
+	Key     string `json:"key"`
+	Message string `json:"message"`
 }
 
 type TestWebhookInput struct {
@@ -277,6 +290,7 @@ func subscriptionToResponse(sub *notification.Subscription, dispatchers []notifi
 	return &NotificationRuleResponse{
 		ID:                        sub.ID,
 		Name:                      sub.Name,
+		AlertGroup:                sub.AlertGroup,
 		Enabled:                   sub.Enabled,
 		Dispatcher:                disp,
 		LogExpression:             sub.LogExpression,
@@ -466,6 +480,7 @@ func (h *handler) createNotificationRule(w http.ResponseWriter, r *http.Request)
 
 	sub := &notification.Subscription{
 		Name:                      input.Name,
+		AlertGroup:                strings.TrimSpace(input.AlertGroup),
 		Enabled:                   input.Enabled,
 		DispatcherID:              input.DispatcherID,
 		LogExpression:             input.LogExpression,
@@ -540,6 +555,7 @@ func (h *handler) replaceNotificationRule(w http.ResponseWriter, r *http.Request
 	sub := &notification.Subscription{
 		ID:                        id,
 		Name:                      input.Name,
+		AlertGroup:                strings.TrimSpace(input.AlertGroup),
 		Enabled:                   input.Enabled,
 		DispatcherID:              input.DispatcherID,
 		LogExpression:             input.LogExpression,
@@ -605,6 +621,9 @@ func (h *handler) updateNotificationRule(w http.ResponseWriter, r *http.Request)
 	updates := make(map[string]any)
 	if input.Name != nil {
 		updates["name"] = *input.Name
+	}
+	if input.AlertGroup != nil {
+		updates["alertGroup"] = *input.AlertGroup
 	}
 	if input.Enabled != nil {
 		updates["enabled"] = *input.Enabled
@@ -1038,6 +1057,17 @@ func (h *handler) previewExpression(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var uniqueRegex *regexp.Regexp
+	if input.UniqueKeyRegex != nil && strings.TrimSpace(*input.UniqueKeyRegex) != "" {
+		re, err := regexp.Compile(strings.TrimSpace(*input.UniqueKeyRegex))
+		if err != nil {
+			errStr := err.Error()
+			result.UniqueRegexError = &errStr
+		} else {
+			uniqueRegex = re
+		}
+	}
+
 	// Find matching running containers
 	if sub.ContainerProgram != nil {
 		hostMap := make(map[string]container.Host)
@@ -1062,6 +1092,7 @@ func (h *handler) previewExpression(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 
 		const maxLogs = 10
+		const maxUniqueMatches = 10
 		totalMatched := 0
 		keySet := make(map[string]struct{})
 
@@ -1096,13 +1127,23 @@ func (h *handler) previewExpression(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 
+				matchedLog := false
 				if sub.LogProgram != nil {
 					notificationLog := notification.FromLogEvent(*logEvent)
 					if sub.MatchesLog(notificationLog) {
+						matchedLog = true
 						totalMatched++
 						if len(result.MatchedLogs) < maxLogs {
 							result.MatchedLogs = append(result.MatchedLogs, *logEvent)
 						}
+					}
+				}
+				if uniqueRegex != nil && (sub.LogProgram == nil || matchedLog) && len(result.UniqueMatches) < maxUniqueMatches {
+					if key, ok := previewUniqueKey(uniqueRegex, *logEvent); ok {
+						result.UniqueMatches = append(result.UniqueMatches, UniqueRegexMatch{
+							Key:     key,
+							Message: previewLogMessage(*logEvent),
+						})
 					}
 				}
 			}
@@ -1121,6 +1162,35 @@ func (h *handler) previewExpression(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+func previewUniqueKey(re *regexp.Regexp, logEvent container.LogEvent) (string, bool) {
+	matches := re.FindStringSubmatch(previewLogMessage(logEvent))
+	if len(matches) == 0 {
+		return "", false
+	}
+	key := matches[0]
+	if len(matches) > 1 {
+		key = matches[1]
+	}
+	key = strings.TrimSpace(key)
+	return key, key != ""
+}
+
+func previewLogMessage(logEvent container.LogEvent) string {
+	if logEvent.RawMessage != "" {
+		return container.StripANSI(logEvent.RawMessage)
+	}
+	switch message := logEvent.Message.(type) {
+	case string:
+		return container.StripANSI(message)
+	default:
+		b, err := json.Marshal(message)
+		if err != nil {
+			return fmt.Sprintf("%v", message)
+		}
+		return container.StripANSI(string(b))
+	}
 }
 
 func (h *handler) testWebhook(w http.ResponseWriter, r *http.Request) {

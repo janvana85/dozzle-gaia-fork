@@ -1,9 +1,11 @@
 package web
 
 import (
+	"regexp"
 	"testing"
 	"time"
 
+	"github.com/amir20/dozzle/internal/container"
 	"github.com/amir20/dozzle/internal/notification"
 	"github.com/stretchr/testify/assert"
 )
@@ -12,6 +14,7 @@ func TestSubscriptionToResponseIncludesAdvancedAlertSettings(t *testing.T) {
 	sub := &notification.Subscription{
 		ID:                     42,
 		Name:                   "api-errors",
+		AlertGroup:             "EasyJukebox",
 		Enabled:                true,
 		DispatcherID:           7,
 		ContainerExpression:    "true",
@@ -42,6 +45,7 @@ func TestSubscriptionToResponseIncludesAdvancedAlertSettings(t *testing.T) {
 	resp := subscriptionToResponse(sub, nil, nil)
 
 	assert.Equal(t, "api-alerts", resp.NtfyTopic)
+	assert.Equal(t, "EasyJukebox", resp.AlertGroup)
 	assert.Equal(t, 3, resp.NtfyPriority)
 	assert.Equal(t, []string{"api", "error"}, resp.NtfyTags)
 	assert.True(t, resp.BypassQuietHours)
@@ -66,4 +70,31 @@ func TestSubscriptionToResponseIncludesAdvancedAlertSettings(t *testing.T) {
 
 func ptrTime(t time.Time) *time.Time {
 	return &t
+}
+
+func TestPreviewUniqueKeyUsesFirstCaptureGroup(t *testing.T) {
+	key, ok := previewUniqueKey(
+		mustCompileRegex(t, `(\d{1,3}(?:\.\d{1,3}){3})`),
+		container.LogEvent{RawMessage: "blocked client 192.168.1.20 from /login"},
+	)
+
+	assert.True(t, ok)
+	assert.Equal(t, "192.168.1.20", key)
+}
+
+func TestPreviewUniqueKeyCanUseUnescapedRegexInput(t *testing.T) {
+	key, ok := previewUniqueKey(
+		mustCompileRegex(t, `timeout after (\d+)ms`),
+		container.LogEvent{RawMessage: "request timeout after 2500ms"},
+	)
+
+	assert.True(t, ok)
+	assert.Equal(t, "2500", key)
+}
+
+func mustCompileRegex(t *testing.T, pattern string) *regexp.Regexp {
+	t.Helper()
+	re, err := regexp.Compile(pattern)
+	assert.NoError(t, err)
+	return re
 }
