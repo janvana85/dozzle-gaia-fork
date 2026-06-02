@@ -71,7 +71,7 @@ func (pm *PatternMatcher) MarkInLogEvent(logEvent *container.LogEvent) bool {
 		return pm.markMap(value)
 
 	case map[string]string:
-		panic("not implemented")
+		return pm.markStringMap(value)
 
 	default:
 		log.Debug().Type("type", value).Msg("unknown logEvent type")
@@ -110,6 +110,8 @@ func (pm *PatternMatcher) markMapAny(orderedMap *orderedmap.OrderedMap[string, a
 				found = true
 			}
 
+		case nil:
+
 		case int, float64, bool:
 			formatted := fmt.Sprintf("%v", value)
 			if pm.Regex.MatchString(formatted) {
@@ -144,6 +146,8 @@ func (pm *PatternMatcher) markMap(data map[string]interface{}) bool {
 				found = true
 			}
 
+		case nil:
+
 		case int, float64, bool:
 			formatted := fmt.Sprintf("%v", value)
 			if pm.Regex.MatchString(formatted) {
@@ -164,6 +168,17 @@ func (pm *PatternMatcher) markMapString(orderedMap *orderedmap.OrderedMap[string
 		if replaced, matched := pm.markString(pair.Value); matched {
 			found = true
 			orderedMap.Set(pair.Key, replaced)
+		}
+	}
+	return found
+}
+
+func (pm *PatternMatcher) markStringMap(data map[string]string) bool {
+	found := false
+	for key, value := range data {
+		if replaced, matched := pm.markString(value); matched {
+			found = true
+			data[key] = replaced
 		}
 	}
 	return found
@@ -192,6 +207,7 @@ func (pm *PatternMatcher) markArray(data []any) bool {
 			if pm.markMap(value) {
 				found = true
 			}
+		case nil:
 		}
 	}
 

@@ -33,10 +33,10 @@ func EscapeHTMLValues(logEvent *container.LogEvent) {
 		escapeStringMap(value)
 
 	case map[string]interface{}:
-		panic("not implemented")
+		escapeMapStringInterface(value)
 
 	case map[string]string:
-		panic("not implemented")
+		escapeStringMapString(value)
 
 	default:
 		log.Trace().Type("type", value).Msg("unknown logEvent type")

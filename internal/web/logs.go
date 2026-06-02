@@ -579,6 +579,7 @@ func (h *handler) streamLogsForContainers(w http.ResponseWriter, r *http.Request
 			}
 		}
 		start := utils.Max(absoluteTime, c.StartedAt)
+		streamStart := start
 
 		if h.logStore != nil && h.logStore.HasLogs(c.Host, c.ID) {
 			if cachedLogs, err := h.logStore.LogsBetweenDates(r.Context(), c.Host, c.ID, start, time.Now()); err == nil {
@@ -597,12 +598,15 @@ func (h *handler) streamLogsForContainers(w http.ResponseWriter, r *http.Request
 					}
 				}
 			}
+			if lastCached, ok := h.logStore.LastTimestampForContainer(c); ok && !lastCached.Before(streamStart) {
+				streamStart = lastCached.Add(time.Millisecond)
+			}
 		}
 
 		localLogs := make(chan *container.LogEvent, 100)
 		go func() {
 			defer close(localLogs)
-			err = containerService.StreamLogs(r.Context(), start, stdTypes, localLogs)
+			err = containerService.StreamLogs(r.Context(), streamStart, stdTypes, localLogs)
 			if err != nil {
 				if errors.Is(err, io.EOF) {
 					log.Debug().Str("container", c.ID).Msg("streaming ended")

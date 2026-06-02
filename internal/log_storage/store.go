@@ -28,6 +28,7 @@ type Store struct {
 	mu      sync.Mutex
 	files   map[string]*os.File
 	writers map[string]*bufio.Writer
+	recent  map[string]logEventKey
 }
 
 func NewStore(dataDir string) *Store {
@@ -36,7 +37,19 @@ func NewStore(dataDir string) *Store {
 		dbPath:  filepath.Join(dataDir, "index.sqlite"),
 		files:   make(map[string]*os.File),
 		writers: make(map[string]*bufio.Writer),
+		recent:  make(map[string]logEventKey),
 	}
+}
+
+type logEventKey struct {
+	valid     bool
+	timestamp int64
+	id        uint32
+	raw       string
+}
+
+func eventKey(ev *container.LogEvent) logEventKey {
+	return logEventKey{valid: true, timestamp: ev.Timestamp, id: ev.Id, raw: ev.RawMessage}
 }
 
 func (s *Store) openDB() error {
@@ -251,12 +264,38 @@ func (s *Store) write(host string, ev *container.LogEvent, identity string) erro
 		s.files[path] = f
 		w = bufio.NewWriterSize(f, 64*1024)
 		s.writers[path] = w
+		s.recent[path] = s.lastEventKey(path)
+	}
+
+	key := eventKey(ev)
+	if key == s.recent[path] {
+		return nil
 	}
 
 	if err := json.NewEncoder(w).Encode(ev); err != nil {
 		return err
 	}
+	s.recent[path] = key
 	return s.upsertIndex(host, ev.ContainerID, identity, day, path, ev.Timestamp)
+}
+
+func (s *Store) lastEventKey(path string) logEventKey {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return logEventKey{}
+	}
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 {
+		return logEventKey{}
+	}
+	if i := bytes.LastIndexByte(data, '\n'); i >= 0 {
+		data = data[i+1:]
+	}
+	var ev container.LogEvent
+	if err := json.Unmarshal(data, &ev); err != nil {
+		return logEventKey{}
+	}
+	return eventKey(&ev)
 }
 
 func (s *Store) upsertIndex(host, containerID, identity, day, path string, ts int64) error {

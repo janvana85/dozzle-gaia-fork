@@ -89,3 +89,31 @@ func TestSearchBeforeForContainerReturnsNewestMatchesWithMore(t *testing.T) {
 	require.Len(t, older, 1)
 	assert.Equal(t, "needle old", older[0].Message)
 }
+
+func TestAppendForContainerSkipsConsecutiveDuplicateEvent(t *testing.T) {
+	store := NewStore(t.TempDir())
+	now := time.Now().UTC()
+	c := container.Container{ID: "abc123456789", Name: "api", Host: "earth"}
+	event := &container.LogEvent{
+		ContainerID: c.ID,
+		Timestamp:   now.UnixMilli(),
+		Id:          42,
+		Message:     "same event",
+		RawMessage:  "same event",
+		Stream:      "stdout",
+		Level:       "info",
+	}
+
+	require.NoError(t, store.AppendForContainer(c, event))
+	require.NoError(t, store.AppendForContainer(c, event))
+	store.flush()
+
+	events, err := store.LogsBetweenDatesForContainer(t.Context(), c, now.Add(-time.Second), now.Add(time.Second))
+	require.NoError(t, err)
+
+	messages := make([]string, 0)
+	for event := range events {
+		messages = append(messages, event.Message.(string))
+	}
+	assert.Equal(t, []string{"same event"}, messages)
+}
