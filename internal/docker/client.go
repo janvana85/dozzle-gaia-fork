@@ -63,7 +63,11 @@ func NewClient(cli DockerCLI, host container.Host) *DockerClient {
 		id = info.Swarm.NodeID
 	}
 
-	host.ID = id
+	// Allow an explicit host ID (set by NewLocalClient from --host-id) to win over
+	// the daemon-derived ID, so multiple agents on one daemon can be distinct hosts.
+	if host.ID == "" {
+		host.ID = id
+	}
 	host.NCPU = info.NCPU
 	host.MemTotal = info.MemTotal
 	host.DockerVersion = info.ServerVersion
@@ -78,7 +82,7 @@ func NewClient(cli DockerCLI, host container.Host) *DockerClient {
 }
 
 // NewLocalClient creates a new instance of Client with docker filters
-func NewLocalClient(hostname string, hostGroup string) (*DockerClient, error) {
+func NewLocalClient(hostname string, hostGroup string, hostID string) (*DockerClient, error) {
 	cli, err := client.New(client.FromEnv, client.WithUserAgent("Docker-Client/Dozzle"))
 
 	if err != nil {
@@ -105,6 +109,8 @@ func NewLocalClient(hostname string, hostGroup string) (*DockerClient, error) {
 		host.Name = hostname
 	}
 	host.Group = hostGroup
+	// When set, NewClient keeps this instead of the daemon-derived ID.
+	host.ID = hostID
 
 	return NewClient(cli, host), nil
 }

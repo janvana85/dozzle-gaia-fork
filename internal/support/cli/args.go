@@ -14,6 +14,7 @@ type Args struct {
 	Addr             string              `arg:"env:DOZZLE_ADDR" default:":8080" help:"sets host:port to bind for server. This is rarely needed inside a docker container."`
 	Base             string              `arg:"env:DOZZLE_BASE" default:"/" help:"sets the base for http router."`
 	Hostname         string              `arg:"env:DOZZLE_HOSTNAME" help:"sets the hostname for display. This is useful with multiple Dozzle instances."`
+	HostID           string              `arg:"--host-id,env:DOZZLE_HOST_ID" help:"overrides the host ID (normally derived from the Docker daemon ID). Useful for running multiple agents against the same daemon as distinct hosts."`
 	HostGroup        string              `arg:"--host-group,env:DOZZLE_HOST_GROUP" help:"sets the host group for display. This is useful with multiple Dozzle instances."`
 	Level            string              `arg:"env:DOZZLE_LEVEL" default:"info" help:"set Dozzle log level. Use debug for more logging, or alert to show only alert/notification logs."`
 	AuthProvider     string              `arg:"--auth-provider,env:DOZZLE_AUTH_PROVIDER" default:"none" help:"sets the auth provider to use. Currently only forward-proxy is supported."`

@@ -37,7 +37,7 @@ func CreateMultiHostService(embeddedCerts embed.FS, args Args) *docker_support.M
 		}
 	}
 
-	localClient, err := docker.NewLocalClient(args.Hostname, args.HostGroup)
+	localClient, err := docker.NewLocalClient(args.Hostname, args.HostGroup, args.HostID)
 	if err == nil {
 		ctx, cancel := context.WithTimeout(context.Background(), args.Timeout)
 		defer cancel()
