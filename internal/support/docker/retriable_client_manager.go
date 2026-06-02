@@ -36,7 +36,7 @@ type failedAgentState struct {
 }
 
 const (
-	failedAgentRetryDefault = time.Minute
+	failedAgentRetryDefault = 15 * time.Second
 	failedAgentRetrySlow    = 10 * time.Minute
 	failedAgentLogThrottle  = 10 * time.Minute
 )
@@ -116,6 +116,37 @@ func NewRetriableClientManager(agents []string, timeout time.Duration, certs tls
 
 func (m *RetriableClientManager) Subscribe(ctx context.Context, channel chan<- container.Host) {
 	m.subscribers.Store(ctx, channel)
+
+	go func() {
+		for _, client := range m.List() {
+			hostCtx, cancel := context.WithTimeout(context.Background(), m.timeout)
+			host, err := client.Host(hostCtx)
+			cancel()
+			if err != nil {
+				continue
+			}
+			host.Available = true
+			select {
+			case channel <- host:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	go func() {
+		_, _ = m.RetryAndList()
+		ticker := time.NewTicker(failedAgentRetryDefault)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				_, _ = m.RetryAndList()
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
 	go func() {
 		<-ctx.Done()
@@ -200,6 +231,7 @@ func (m *RetriableClientManager) RetryAndList() ([]container_support.ClientServi
 		}
 		if _, ok := m.clients[r.host.ID]; ok {
 			log.Warn().Str("name", r.host.Name).Str("id", r.host.ID).Msg("An agent with an existing ID was found. Removing the duplicate host. For more details, see http://localhost:5173/guide/agent#agent-not-showing-up.")
+			delete(newFailed, r.endpoint)
 			continue
 		}
 		m.clients[r.host.ID] = r.service

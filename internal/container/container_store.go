@@ -3,6 +3,7 @@ package container
 import (
 	"context"
 	"errors"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -157,21 +158,25 @@ func (s *ContainerStore) ListContainers(labels ContainerLabels) ([]Container, er
 		return nil, err
 	}
 
-	containers := make([]Container, 0)
+	validContainers, err := s.client.ListContainers(s.ctx, labels)
+	if err != nil {
+		return nil, err
+	}
+
+	if labels.Exists() && len(validContainers) == 0 {
+		log.Warn().Interface("userLabels", labels).Msg("no containers found with user labels")
+	}
+
+	validIDMap := lo.KeyBy(validContainers, func(item Container) string {
+		return item.ID
+	})
+
+	if reflect.DeepEqual(labels, s.labels) {
+		s.syncContainers(validIDMap)
+	}
+
+	containers := make([]Container, 0, len(validContainers))
 	if labels.Exists() {
-		validContainers, err := s.client.ListContainers(s.ctx, labels)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(validContainers) == 0 {
-			log.Warn().Interface("userLabels", labels).Msg("no containers found with user labels")
-		}
-
-		validIDMap := lo.KeyBy(validContainers, func(item Container) string {
-			return item.ID
-		})
-
 		s.containers.Range(func(_ string, c *Container) bool {
 			if _, ok := validIDMap[c.ID]; ok {
 				containers = append(containers, *c)
@@ -186,6 +191,48 @@ func (s *ContainerStore) ListContainers(labels ContainerLabels) ([]Container, er
 	}
 
 	return containers, nil
+}
+
+func (s *ContainerStore) syncContainers(validContainers map[string]Container) {
+	s.containers.Range(func(id string, current *Container) bool {
+		if listed, ok := validContainers[id]; ok {
+			s.containers.Store(id, mergeListedContainer(*current, listed))
+		} else {
+			s.containers.Delete(id)
+		}
+		return true
+	})
+
+	for id, listed := range validContainers {
+		s.containers.Compute(id, func(current *Container, loaded bool) (*Container, xsync.ComputeOp) {
+			if loaded {
+				return current, xsync.CancelOp
+			}
+			return &listed, xsync.UpdateOp
+		})
+	}
+}
+
+func mergeListedContainer(current Container, listed Container) *Container {
+	updated := current
+	updated.Name = listed.Name
+	updated.Image = listed.Image
+	updated.Command = listed.Command
+	updated.Created = listed.Created
+	updated.StartedAt = listed.StartedAt
+	updated.FinishedAt = listed.FinishedAt
+	if updated.State == "" {
+		updated.State = listed.State
+	}
+	if updated.Health == "" {
+		updated.Health = listed.Health
+	}
+	updated.Host = listed.Host
+	updated.Labels = listed.Labels
+	updated.MemoryLimit = listed.MemoryLimit
+	updated.CPULimit = listed.CPULimit
+	updated.Group = listed.Group
+	return &updated
 }
 
 func (s *ContainerStore) FindContainer(id string, labels ContainerLabels) (Container, error) {

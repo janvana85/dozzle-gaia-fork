@@ -16,6 +16,9 @@ export default defineConfig(() => ({
   define: {
     __CLOUD_URL__: JSON.stringify(process.env.CLOUD_URL || "https://cloud.dozzle.dev"),
   },
+  server: {
+    allowedHosts: [".dozzle-gaia.test", ".dozzle-gaia.127.0.0.1.sslip.io"],
+  },
   resolve: {
     alias: {
       "@/": `${path.resolve(__dirname, "assets")}/`,

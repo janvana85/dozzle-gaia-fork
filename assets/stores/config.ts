@@ -48,4 +48,13 @@ const config: Config = {
 
 export default Object.freeze(config);
 
-export const withBase = (path: string) => `${config.base}${path}`;
+function normalizeBase(path: string): string {
+  if (!path || path === "/") {
+    return "";
+  }
+  const prefixed = path.startsWith("/") ? path : `/${path}`;
+  return prefixed.length > 1 ? prefixed.replace(/\/+$/, "") : prefixed;
+}
+
+const base = normalizeBase(config.base);
+export const withBase = (path: string) => `${base}${path.startsWith("/") ? path : `/${path}`}`;

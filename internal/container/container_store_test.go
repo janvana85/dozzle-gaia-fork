@@ -70,6 +70,43 @@ func TestContainerStore_List(t *testing.T) {
 	assert.Equal(t, containers[0].ID, "1234")
 }
 
+func TestContainerStore_ListRefreshesStaleCache(t *testing.T) {
+	client := new(mockedClient)
+	client.On("ListContainers", mock.Anything, mock.Anything).Return([]Container{
+		{
+			ID:    "1234",
+			Name:  "test",
+			State: "exited",
+		},
+		{
+			ID:    "stale",
+			Name:  "stale",
+			State: "exited",
+		},
+	}, nil).Once()
+	client.On("ListContainers", mock.Anything, mock.Anything).Return([]Container{
+		{
+			ID:    "1234",
+			Name:  "test",
+			State: "exited",
+		},
+	}, nil)
+	client.On("ContainerEvents", mock.Anything, mock.AnythingOfType("chan<- container.ContainerEvent")).Return(nil).Run(func(args mock.Arguments) {
+		ctx := args.Get(0).(context.Context)
+		<-ctx.Done()
+	})
+	client.On("Host").Return(Host{
+		ID: "localhost",
+	})
+
+	store := NewContainerStore(t.Context(), client, &fakeStatsCollector{}, ContainerLabels{})
+	containers, err := store.ListContainers(ContainerLabels{})
+
+	assert.NoError(t, err)
+	assert.Len(t, containers, 1)
+	assert.Equal(t, "1234", containers[0].ID)
+}
+
 func TestContainerStore_die(t *testing.T) {
 	client := new(mockedClient)
 	client.On("ListContainers", mock.Anything, mock.Anything).Return([]Container{

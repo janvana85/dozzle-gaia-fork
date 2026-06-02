@@ -88,20 +88,16 @@ const hostContainers = computed(() =>
 );
 
 const runtimeLabel = computed(() => (props.host.runtime === "podman" ? "Podman" : "Docker"));
-const hasVersionMismatch = computed(
-  () => props.host.type === "agent" && isMajorMismatch(props.host.agentVersion, config.version),
-);
+const hasVersionMismatch = computed(() => props.host.type === "agent" && isDifferentVersion(props.host.agentVersion));
 
-function parseMajor(version: string | undefined): string | null {
-  if (!version) return null;
-  const major = version.trim().replace(/^v/i, "").split(/[.-]/, 1)[0];
-  return major || null;
+function normalizeVersion(version: string | undefined): string {
+  return version?.trim().replace(/^v/i, "") ?? "";
 }
 
-function isMajorMismatch(agentVersion: string | undefined, serverVersion: string): boolean {
-  const agentMajor = parseMajor(agentVersion);
-  const serverMajor = parseMajor(serverVersion);
-  return !!agentMajor && !!serverMajor && agentMajor !== serverMajor;
+function isDifferentVersion(agentVersion: string | undefined): boolean {
+  const agent = normalizeVersion(agentVersion);
+  const server = normalizeVersion(config.version);
+  return !!agent && !!server && agent !== server;
 }
 
 function toContainerCores(container: Container): number {

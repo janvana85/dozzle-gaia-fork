@@ -88,6 +88,26 @@ func (m *SwarmClientManager) Subscribe(ctx context.Context, channel chan<- conta
 	m.agentManager.Subscribe(ctx, channel)
 
 	go func() {
+		for _, client := range m.List() {
+			hostCtx, cancel := context.WithTimeout(context.Background(), m.timeout)
+			host, err := client.Host(hostCtx)
+			cancel()
+			if err != nil {
+				continue
+			}
+			host.Available = true
+			if host.Type == "" {
+				host.Type = "swarm"
+			}
+			select {
+			case channel <- host:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	go func() {
 		<-ctx.Done()
 		m.subscribers.Delete(ctx)
 	}()

@@ -1,14 +1,75 @@
 package docker_support
 
 import (
+	"context"
+	"io"
 	"testing"
 	"time"
 
+	"github.com/amir20/dozzle/internal/container"
 	"github.com/amir20/dozzle/internal/notification"
+	container_support "github.com/amir20/dozzle/internal/support/container"
 	"github.com/amir20/dozzle/types"
+	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type stubClientService struct {
+	host container.Host
+}
+
+func (s stubClientService) FindContainer(ctx context.Context, id string, labels container.ContainerLabels) (container.Container, error) {
+	return container.Container{}, nil
+}
+
+func (s stubClientService) ListContainers(ctx context.Context, labels container.ContainerLabels) ([]container.Container, error) {
+	return nil, nil
+}
+
+func (s stubClientService) Host(ctx context.Context) (container.Host, error) {
+	return s.host, nil
+}
+
+func (s stubClientService) ContainerAction(ctx context.Context, container container.Container, action container.ContainerAction) error {
+	return nil
+}
+
+func (s stubClientService) UpdateContainer(ctx context.Context, container container.Container, progressCh chan<- container.UpdateProgress) (bool, error) {
+	close(progressCh)
+	return false, nil
+}
+
+func (s stubClientService) LogsBetweenDates(ctx context.Context, container container.Container, from time.Time, to time.Time, stdTypes container.StdType) (<-chan *container.LogEvent, error) {
+	return nil, nil
+}
+
+func (s stubClientService) RawLogs(ctx context.Context, container container.Container, from time.Time, to time.Time, stdTypes container.StdType) (io.ReadCloser, error) {
+	return nil, nil
+}
+
+func (s stubClientService) SubscribeStats(ctx context.Context, stats chan<- container.ContainerStat) {
+}
+
+func (s stubClientService) SubscribeEvents(ctx context.Context, events chan<- container.ContainerEvent) {
+}
+
+func (s stubClientService) SubscribeContainersStarted(ctx context.Context, containers chan<- container.Container) {
+}
+
+func (s stubClientService) StreamLogs(ctx context.Context, container container.Container, from time.Time, stdTypes container.StdType, events chan<- *container.LogEvent) error {
+	return nil
+}
+
+func (s stubClientService) Attach(ctx context.Context, container container.Container, events container.ExecEventReader, stdout io.Writer) error {
+	return nil
+}
+
+func (s stubClientService) Exec(ctx context.Context, container container.Container, cmd []string, events container.ExecEventReader, stdout io.Writer) error {
+	return nil
+}
+
+var _ container_support.ClientService = stubClientService{}
 
 func TestSubscriptionConfigsForAgentsCopiesAlertSettings(t *testing.T) {
 	pausedUntil := time.Date(2026, time.June, 1, 10, 30, 0, 0, time.UTC)
@@ -171,4 +232,36 @@ func TestSubscriptionConfigsForAgentsPreservesPerAlertQuietHours(t *testing.T) {
 	assert.Equal(t, "12:00", configs[0].AlertQuietStart)
 	assert.Equal(t, "13:00", configs[0].AlertQuietEnd)
 	assert.Equal(t, "UTC", configs[0].AlertQuietTimezone)
+}
+
+func TestRetriableClientManagerSubscribeReplaysCurrentHosts(t *testing.T) {
+	m := &RetriableClientManager{
+		clients: map[string]container_support.ClientService{
+			"host-1": stubClientService{
+				host: container.Host{
+					ID:       "host-1",
+					Name:     "agent-1",
+					Type:     "agent",
+					Endpoint: "agent-1:7007",
+				},
+			},
+		},
+		subscribers: xsync.NewMap[context.Context, chan<- container.Host](),
+		timeout:     time.Second,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch := make(chan container.Host, 1)
+
+	m.Subscribe(ctx, ch)
+
+	select {
+	case host := <-ch:
+		assert.Equal(t, "host-1", host.ID)
+		assert.True(t, host.Available)
+		assert.Equal(t, "agent", host.Type)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for replayed host")
+	}
 }

@@ -60,6 +60,17 @@ func (h *handler) streamEvents(w http.ResponseWriter, r *http.Request) {
 				log.Error().Err(err).Msg("error writing event to event stream")
 				return
 			}
+			if host.Available {
+				containers, err := h.hostService.ListContainersForHost(host.ID, userLabels)
+				if err != nil {
+					log.Warn().Err(err).Str("host", host.ID).Msg("error listing containers for available host")
+					continue
+				}
+				if err := sseWriter.Event("containers-changed", containers); err != nil {
+					log.Error().Err(err).Msg("error writing containers to event stream")
+					return
+				}
+			}
 		case stat := <-stats:
 			if err := sseWriter.Event("container-stat", stat); err != nil {
 				log.Error().Err(err).Msg("error writing event to event stream")

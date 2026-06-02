@@ -69,7 +69,10 @@ func main() {
 	if args.Mode == "server" {
 		multiHostService := cli.CreateMultiHostService(certs, args)
 		if multiHostService.TotalClients() == 0 {
-			log.Fatal().Msg("Could not connect to any Docker Engine")
+			if len(args.RemoteAgent) == 0 {
+				log.Fatal().Msg("Could not connect to any Docker Engine")
+			}
+			log.Info().Int("agents", len(args.RemoteAgent)).Msg("Waiting for remote agents to connect")
 		} else {
 			log.Info().Int("clients", multiHostService.TotalClients()).Msg("Connected to Docker")
 		}
