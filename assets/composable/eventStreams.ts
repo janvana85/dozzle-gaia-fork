@@ -17,7 +17,7 @@ import { Container, GroupedContainers } from "@/models/Container";
 import { parseMessage } from "@/composable/loadBetween";
 import { useLogLoader } from "@/composable/logLoader";
 
-const { isSearching, debouncedSearchFilter, inverseFilter } = useSearchFilter();
+const { isSearching, debouncedSearchFilter, inverseFilter, followingSearch, pendingSearchCount } = useSearchFilter();
 
 export function useContainerStream(container: Ref<Container>): LogStreamSource {
   const url = computed(() => `/api/hosts/${container.value.host}/containers/${container.value.id}/logs/stream`);
@@ -145,12 +145,33 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
   }
   const flushBuffer = debounce(flushNow, 250, { maxWait: 1000 });
   let es: EventSource | null = null;
+  // Background filtered stream used during a search snapshot to count how many new
+  // matching logs arrive (without rendering them), so the UI can offer to go live.
+  let counterEs: EventSource | null = null;
 
   function close() {
     if (es) {
       es.close();
       es = null;
     }
+  }
+
+  function closeCounter() {
+    if (counterEs) {
+      counterEs.close();
+      counterEs = null;
+    }
+  }
+
+  function connectSearchCounter() {
+    closeCounter();
+    if (!urlWithParams.value) return;
+    pendingSearchCount.value = 0;
+    counterEs = new EventSource(urlWithParams.value);
+    // Only count live matches (onmessage). Backfill/container events are ignored.
+    counterEs.onmessage = (e) => {
+      if (e.data) pendingSearchCount.value += 1;
+    };
   }
 
   function clearMessages() {
@@ -167,8 +188,12 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
   });
 
   function connect({ clear } = { clear: true }) {
-    if (isSearching.value) {
+    closeCounter();
+    if (isSearching.value && !followingSearch.value) {
+      // Static snapshot of results, plus a background stream that counts new
+      // matches so the UI can surface a "follow live" button.
       void loadSearch();
+      connectSearchCounter();
       return;
     }
     if (!urlWithParams.value) {
@@ -288,10 +313,17 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
 
   watch(urlWithParams, () => connect(), { immediate: true });
   watch(searchContainersKey, () => {
-    if (isSearching.value) void loadSearch();
+    if (isSearching.value) connect();
+  });
+  // Opting into (or out of) live-follow during a search reconnects in the right mode.
+  watch(followingSearch, () => {
+    if (isSearching.value) connect();
   });
 
-  onScopeDispose(() => close());
+  onScopeDispose(() => {
+    close();
+    closeCounter();
+  });
 
   watch(messages, () => {
     if (messages.value.length > 1) {

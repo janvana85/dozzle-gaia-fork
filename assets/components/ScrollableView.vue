@@ -14,7 +14,10 @@
         <span class="badge badge-outline" :class="cacheModeClass">
           {{ cacheModeLabel }}
         </span>
-        <span class="text-base-content/60" v-if="isSearching">search snapshot</span>
+        <span class="text-base-content/60" v-if="isSearching && followingSearch"
+          >following live (filtered) for {{ followRemainingLabel }}</span
+        >
+        <span class="text-base-content/60" v-else-if="isSearching">search snapshot</span>
         <span class="text-base-content/60" v-else-if="!followLogs">paused at history</span>
         <span class="text-base-content/60" v-else>following live for {{ followRemainingLabel }}</span>
       </div>
@@ -53,6 +56,20 @@
         </button>
       </transition>
     </div>
+
+    <!-- During a search snapshot, offer to follow new matching logs live -->
+    <div class="mr-16 text-right" v-if="!historical">
+      <transition name="fade">
+        <button
+          class="btn btn-secondary text-secondary-content animate-bounce-fast fixed right-20 bottom-8 gap-2 rounded-sm p-3 shadow-sm"
+          @click="followSearchResults()"
+          v-show="isSearching && !followingSearch && pendingSearchCount > 0"
+        >
+          <mdi:chevron-double-down />
+          <span class="text-sm">{{ pendingSearchCount }} new — follow live</span>
+        </button>
+      </transition>
+    </div>
   </section>
 </template>
 
@@ -69,7 +86,7 @@ const scrollableContent = ref<HTMLElement>();
 
 const scrollContext = provideScrollContext();
 const { cached, loadingMore, historical, cacheMode } = useLoggingContext();
-const { isSearching } = useSearchFilter();
+const { isSearching, followingSearch, pendingSearchCount, startFollowingSearch } = useSearchFilter();
 
 const cacheModeLabel = computed(() => {
   if (cacheMode.value === "mixed") return "live + cache";
@@ -141,6 +158,15 @@ function toggleFollowLogs() {
 function scrollToBottom(behavior: "auto" | "smooth" = "auto") {
   scrollObserver.value?.scrollIntoView({ behavior });
   hasMore.value = false;
+}
+
+// Switch a search from the static snapshot to live-following the filtered stream.
+function followSearchResults() {
+  followUntil.value = Date.now() + followDurationMs;
+  now.value = Date.now();
+  followLogs.value = true;
+  startFollowingSearch();
+  scrollToBottom("smooth");
 }
 
 defineExpose({
