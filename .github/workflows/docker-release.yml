@@ -1,6 +1,9 @@
 name: Docker Release
 
 on:
+  push:
+    tags:
+      - "v*-gaia"
   workflow_dispatch:
     inputs:
       tag:
@@ -37,19 +40,30 @@ jobs:
           username: janvana85
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Resolve tag
+        id: resolve
+        run: |
+          # On a tag push use the git tag name; on manual dispatch use the input.
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            tag="${{ inputs.tag }}"
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v6
         with:
           images: janvana85/dozzle-gaia
           tags: |
-            type=raw,value=${{ inputs.tag }}
+            type=raw,value=${{ steps.resolve.outputs.tag }}
 
       - name: Build version
         id: build-version
         run: |
           short_sha="${GITHUB_SHA::12}"
-          echo "version=${{ inputs.tag }}-${short_sha}" >> "$GITHUB_OUTPUT"
+          echo "version=${{ steps.resolve.outputs.tag }}-${short_sha}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v7.2.0
