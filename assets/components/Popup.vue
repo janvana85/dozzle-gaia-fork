@@ -1,10 +1,12 @@
 <template>
-  <slot></slot>
+  <span class="contents" @mouseenter="onMouseEnter" @mouseleave="onMouseLeave">
+    <slot></slot>
+  </span>
   <teleport to="body">
     <transition name="fade">
       <div
         v-show="show && (delayedShow || globalShow)"
-        class="ring-base-content/20 bg-base-100 fixed z-50 rounded-sm p-3 shadow-sm ring"
+        class="ring-base-content/20 bg-base-100 pointer-events-none fixed z-50 rounded-sm p-3 shadow-sm ring"
         ref="content"
       >
         <slot name="content"></slot>
@@ -14,19 +16,19 @@
 </template>
 
 <script lang="ts" setup>
-import { globalShowPopup } from "@/composable/popup";
+import { globalShowPopup, popupDelayMs } from "@/composable/popup";
 
 const globalShow = globalShowPopup();
 const show = ref(globalShow.value);
-const delayedShow = refDebounced(show, 1000);
+const delayedShow = refDebounced(show, popupDelayMs);
 const content = ref<HTMLElement>();
 
-const onMouseEnter = (e: Event) => {
+const onMouseEnter = (e: MouseEvent) => {
   show.value = true;
   globalShow.value = true;
 
-  if (content.value && e.target instanceof HTMLElement) {
-    const { left, top, width } = e.target.getBoundingClientRect();
+  if (content.value && e.currentTarget instanceof HTMLElement) {
+    const { left, top, width } = e.currentTarget.getBoundingClientRect();
     const x = left + width + 10;
     const y = top;
 
@@ -39,10 +41,6 @@ const onMouseLeave = () => {
   show.value = false;
   globalShow.value = false;
 };
-
-const el: Ref<HTMLElement> = useCurrentElement();
-useEventListener(() => el.value?.nextElementSibling, "mouseenter", onMouseEnter);
-useEventListener(() => el.value?.nextElementSibling, "mouseleave", onMouseLeave);
 </script>
 
 <style scoped>

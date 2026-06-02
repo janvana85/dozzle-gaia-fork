@@ -122,6 +122,7 @@ declare global {
   const pausableWatch: typeof import('@vueuse/core').pausableWatch
   const persistentVisibleKeysForContainer: typeof import('./composable/storage').persistentVisibleKeysForContainer
   const pinnedContainers: typeof import('./composable/storage').pinnedContainers
+  const popupDelayMs: typeof import('./composable/popup').popupDelayMs
   const provide: typeof import('vue').provide
   const provideLocal: typeof import('@vueuse/core').provideLocal
   const provideLoggingContext: typeof import('./composable/logContext').provideLoggingContext
@@ -562,6 +563,7 @@ declare module 'vue' {
     readonly pausableWatch: UnwrapRef<typeof import('@vueuse/core')['pausableWatch']>
     readonly persistentVisibleKeysForContainer: UnwrapRef<typeof import('./composable/storage')['persistentVisibleKeysForContainer']>
     readonly pinnedContainers: UnwrapRef<typeof import('./composable/storage')['pinnedContainers']>
+    readonly popupDelayMs: UnwrapRef<typeof import('./composable/popup')['popupDelayMs']>
     readonly provide: UnwrapRef<typeof import('vue')['provide']>
     readonly provideLocal: UnwrapRef<typeof import('@vueuse/core')['provideLocal']>
     readonly provideLoggingContext: UnwrapRef<typeof import('./composable/logContext')['provideLoggingContext']>

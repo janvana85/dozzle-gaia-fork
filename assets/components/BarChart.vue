@@ -116,21 +116,12 @@ function updateLastBar() {
 function onContainerHover(event: MouseEvent) {
   if (!chartContainer.value) return;
 
-  const bars = chartContainer.value.children;
-  if (bars.length === 0) return;
+  const count = downsampledBars.value.length;
+  if (count === 0) return;
 
-  const mouseX = event.clientX;
-  let index = 0;
-
-  // Find the bar whose column contains the mouse x position
-  for (let i = 0; i < bars.length; i++) {
-    const rect = bars[i].getBoundingClientRect();
-    if (mouseX >= rect.left) {
-      index = i;
-    } else {
-      break;
-    }
-  }
+  const rect = chartContainer.value.getBoundingClientRect();
+  const offset = Math.min(Math.max(event.clientX - rect.left, 0), rect.width);
+  const index = Math.min(Math.floor((offset / Math.max(rect.width, 1)) * count), count - 1);
 
   hoverValue(downsampledBars.value[index].value);
 }

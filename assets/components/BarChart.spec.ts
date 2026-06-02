@@ -72,4 +72,16 @@ describe("<BarChart />", () => {
     expect(wrapper.findAll(".bar").length).toBeGreaterThan(0);
     expect(heightOf(wrapper, 0)).toBeGreaterThan(50);
   });
+
+  test("hover maps the pointer to a bar without reading every bar layout", async () => {
+    const wrapper = await mountAndRender(ramp(0, 100));
+    const chart = wrapper.find(".flex");
+    const getBoundingClientRect = vi.fn(() => ({ left: 0, width: 100 }) as DOMRect);
+    Object.defineProperty(chart.element, "getBoundingClientRect", { value: getBoundingClientRect });
+
+    await chart.trigger("mousemove", { clientX: 75 });
+
+    expect(getBoundingClientRect).toHaveBeenCalledTimes(1);
+    expect(wrapper.emitted<number[]>().hoverValue?.[0]?.[0]).toBeGreaterThan(50);
+  });
 });

@@ -1,5 +1,6 @@
 const show = ref(false);
-const debouncedShow = debouncedRef(show, 1000);
+export const popupDelayMs = 150;
+const debouncedShow = debouncedRef(show, popupDelayMs);
 
 const delayedShow = computed({
   set(newVal: boolean) {
