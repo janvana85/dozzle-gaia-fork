@@ -286,6 +286,8 @@ function duplicateAlertPayload(alert: NotificationRule) {
     alertQuietStart: alert.alertQuietStart ?? "",
     alertQuietEnd: alert.alertQuietEnd ?? "",
     alertQuietTimezone: alert.alertQuietTimezone ?? "",
+    quietStackThreshold: alert.quietStackThreshold ?? 0,
+    quietStackWindow: alert.quietStackWindow ?? 0,
   };
 }
 

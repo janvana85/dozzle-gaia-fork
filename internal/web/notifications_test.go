@@ -38,6 +38,8 @@ func TestSubscriptionToResponseIncludesAdvancedAlertSettings(t *testing.T) {
 		AlertQuietStart:        "22:00",
 		AlertQuietEnd:          "07:00",
 		AlertQuietTimezone:     "Europe/Prague",
+		QuietStackThreshold:    4,
+		QuietStackWindow:       600,
 		PausedUntil:            ptrTime(time.Date(2026, time.May, 29, 13, 0, 0, 0, time.UTC)),
 		DeliveryDays:           []string{"mon", "fri"},
 	}
@@ -64,6 +66,8 @@ func TestSubscriptionToResponseIncludesAdvancedAlertSettings(t *testing.T) {
 	assert.Equal(t, "22:00", resp.AlertQuietStart)
 	assert.Equal(t, "07:00", resp.AlertQuietEnd)
 	assert.Equal(t, "Europe/Prague", resp.AlertQuietTimezone)
+	assert.Equal(t, 4, resp.QuietStackThreshold)
+	assert.Equal(t, 600, resp.QuietStackWindow)
 	assert.Equal(t, sub.PausedUntil, resp.PausedUntil)
 	assert.Equal(t, []string{"mon", "fri"}, resp.DeliveryDays)
 }

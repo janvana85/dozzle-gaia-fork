@@ -47,6 +47,9 @@ export interface NotificationRule {
   alertQuietStart?: string;
   alertQuietEnd?: string;
   alertQuietTimezone?: string;
+  // per-alert quiet-hours stacking override (0 = use global)
+  quietStackThreshold?: number;
+  quietStackWindow?: number;
 }
 
 export interface Dispatcher {
@@ -109,6 +112,8 @@ export interface NotificationRuleInput {
   alertQuietStart?: string;
   alertQuietEnd?: string;
   alertQuietTimezone?: string;
+  quietStackThreshold?: number;
+  quietStackWindow?: number;
 }
 
 export interface QuietHoursConfig {

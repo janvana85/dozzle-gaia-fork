@@ -70,6 +70,8 @@ type NotificationRuleResponse struct {
 	AlertQuietStart           string              `json:"alertQuietStart,omitempty"`
 	AlertQuietEnd             string              `json:"alertQuietEnd,omitempty"`
 	AlertQuietTimezone        string              `json:"alertQuietTimezone,omitempty"`
+	QuietStackThreshold       int                 `json:"quietStackThreshold,omitempty"`
+	QuietStackWindow          int                 `json:"quietStackWindow,omitempty"`
 }
 
 type QuietHoursResponse struct {
@@ -138,6 +140,8 @@ type NotificationRuleInput struct {
 	AlertQuietStart           string   `json:"alertQuietStart,omitempty"`
 	AlertQuietEnd             string   `json:"alertQuietEnd,omitempty"`
 	AlertQuietTimezone        string   `json:"alertQuietTimezone,omitempty"`
+	QuietStackThreshold       int      `json:"quietStackThreshold,omitempty"`
+	QuietStackWindow          int      `json:"quietStackWindow,omitempty"`
 }
 
 type NotificationRuleUpdateInput struct {
@@ -182,6 +186,8 @@ type NotificationRuleUpdateInput struct {
 	AlertQuietStart           *string  `json:"alertQuietStart,omitempty"`
 	AlertQuietEnd             *string  `json:"alertQuietEnd,omitempty"`
 	AlertQuietTimezone        *string  `json:"alertQuietTimezone,omitempty"`
+	QuietStackThreshold       *int     `json:"quietStackThreshold,omitempty"`
+	QuietStackWindow          *int     `json:"quietStackWindow,omitempty"`
 }
 
 type DispatcherInput struct {
@@ -333,6 +339,8 @@ func subscriptionToResponse(sub *notification.Subscription, dispatchers []notifi
 		AlertQuietStart:           sub.AlertQuietStart,
 		AlertQuietEnd:             sub.AlertQuietEnd,
 		AlertQuietTimezone:        sub.AlertQuietTimezone,
+		QuietStackThreshold:       sub.QuietStackThreshold,
+		QuietStackWindow:          sub.QuietStackWindow,
 	}
 }
 
@@ -520,6 +528,8 @@ func (h *handler) createNotificationRule(w http.ResponseWriter, r *http.Request)
 		AlertQuietStart:           input.AlertQuietStart,
 		AlertQuietEnd:             input.AlertQuietEnd,
 		AlertQuietTimezone:        input.AlertQuietTimezone,
+		QuietStackThreshold:       input.QuietStackThreshold,
+		QuietStackWindow:          input.QuietStackWindow,
 	}
 
 	if err := h.hostService.AddSubscription(sub); err != nil {
@@ -595,6 +605,8 @@ func (h *handler) replaceNotificationRule(w http.ResponseWriter, r *http.Request
 		AlertQuietStart:           input.AlertQuietStart,
 		AlertQuietEnd:             input.AlertQuietEnd,
 		AlertQuietTimezone:        input.AlertQuietTimezone,
+		QuietStackThreshold:       input.QuietStackThreshold,
+		QuietStackWindow:          input.QuietStackWindow,
 	}
 
 	if err := h.hostService.ReplaceSubscription(sub); err != nil {
@@ -750,6 +762,12 @@ func (h *handler) updateNotificationRule(w http.ResponseWriter, r *http.Request)
 	}
 	if input.AlertQuietTimezone != nil {
 		updates["alertQuietTimezone"] = *input.AlertQuietTimezone
+	}
+	if input.QuietStackThreshold != nil {
+		updates["quietStackThreshold"] = *input.QuietStackThreshold
+	}
+	if input.QuietStackWindow != nil {
+		updates["quietStackWindow"] = *input.QuietStackWindow
 	}
 
 	if err := h.hostService.UpdateSubscription(id, updates); err != nil {

@@ -714,6 +714,14 @@ func (m *Manager) UpdateSubscription(id int, updates map[string]any) error {
 				if timezone, ok := value.(string); ok {
 					updated.AlertQuietTimezone = timezone
 				}
+			case "quietStackThreshold":
+				if threshold, ok := value.(int); ok {
+					updated.QuietStackThreshold = threshold
+				}
+			case "quietStackWindow":
+				if window, ok := value.(int); ok {
+					updated.QuietStackWindow = window
+				}
 			}
 		}
 

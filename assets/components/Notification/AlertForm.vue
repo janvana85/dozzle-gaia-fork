@@ -627,7 +627,9 @@ const hasLegacyDeliverySettings = computed(() =>
     ((props.alert.holdClearWindow ?? 0) > 0 ||
       props.alert.holdDuringQuiet ||
       (props.alert.quietPriority ?? 0) > 0 ||
-      props.alert.alertQuietEnabled),
+      props.alert.alertQuietEnabled ||
+      (props.alert.quietStackThreshold ?? 0) > 0 ||
+      (props.alert.quietStackWindow ?? 0) > 0),
   ),
 );
 
@@ -641,6 +643,8 @@ const legacyDeliveryFields = computed(() =>
         alertQuietStart: props.alert.alertQuietStart || undefined,
         alertQuietEnd: props.alert.alertQuietEnd || undefined,
         alertQuietTimezone: props.alert.alertQuietTimezone || undefined,
+        quietStackThreshold: props.alert.quietStackThreshold || undefined,
+        quietStackWindow: props.alert.quietStackWindow || undefined,
       }
     : {},
 );
