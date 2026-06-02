@@ -82,6 +82,8 @@ CREATE TABLE IF NOT EXISTS cached_containers (
   host TEXT NOT NULL,
   container_id TEXT NOT NULL,
   identity TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL DEFAULT '',
+  finished_at INTEGER NOT NULL DEFAULT 0,
   payload TEXT NOT NULL,
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (host, container_id)
@@ -97,6 +99,8 @@ CREATE TABLE IF NOT EXISTS cached_containers (
 	}{
 		{"log_chunks", "identity", "TEXT NOT NULL DEFAULT ''"},
 		{"cached_containers", "identity", "TEXT NOT NULL DEFAULT ''"},
+		{"cached_containers", "state", "TEXT NOT NULL DEFAULT ''"},
+		{"cached_containers", "finished_at", "INTEGER NOT NULL DEFAULT 0"},
 	} {
 		if err := ensureColumn(db, col.table, col.name, col.def); err != nil {
 			_ = db.Close()
@@ -328,19 +332,25 @@ func (s *Store) RecordContainer(c container.Container) error {
 	c.Stats = nil
 	c.Env = nil
 	c.Ports = nil
+	finishedAt := int64(0)
+	if !c.FinishedAt.IsZero() {
+		finishedAt = c.FinishedAt.UTC().Unix()
+	}
 	payload, err := json.Marshal(c)
 	if err != nil {
 		return err
 	}
 	identity := c.LogIdentity()
 	_, err = s.db.Exec(`
-INSERT INTO cached_containers(host, container_id, identity, payload, updated_at)
-VALUES(?, ?, ?, ?, ?)
+INSERT INTO cached_containers(host, container_id, identity, state, finished_at, payload, updated_at)
+VALUES(?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(host, container_id) DO UPDATE SET
   identity=excluded.identity,
+  state=excluded.state,
+  finished_at=excluded.finished_at,
   payload=excluded.payload,
   updated_at=excluded.updated_at
-`, c.Host, c.ID, identity, string(payload), time.Now().Unix())
+`, c.Host, c.ID, identity, c.State, finishedAt, string(payload), time.Now().Unix())
 	return err
 }
 
@@ -389,6 +399,8 @@ WHERE NOT EXISTS (
     )
 )
 `)
+			exitedCutoff := time.Now().UTC().Add(-24 * time.Hour).Unix()
+			_, _ = s.db.Exec(`DELETE FROM cached_containers WHERE state = 'exited' AND finished_at > 0 AND finished_at < ?`, exitedCutoff)
 		}
 	}
 	cutoff := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -retentionDays)
@@ -473,6 +485,11 @@ func (s *Store) CachedContainers(host string) ([]container.Container, error) {
 		var c container.Container
 		if err := json.Unmarshal([]byte(payload), &c); err != nil {
 			continue
+		}
+		if c.State == "exited" && !c.FinishedAt.IsZero() {
+			if time.Since(c.FinishedAt.UTC()) > 24*time.Hour {
+				continue
+			}
 		}
 		c.State = "offline"
 		c.Stats = nil

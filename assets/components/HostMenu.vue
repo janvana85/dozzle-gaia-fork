@@ -54,12 +54,12 @@
           <li v-for="host in hosts" :key="host.id">
             <a
               @click.prevent="setHost(host.id)"
-              class="auto-cols-[max-content_minmax(0,1fr)_max-content]"
+              class="grid auto-cols-[max-content_minmax(0,1fr)_max-content] grid-flow-col items-center gap-2"
               :class="{ 'text-base-content/50': !host.available }"
             >
               <HostIcon :type="host.type" />
               <span class="truncate">{{ host.name }}</span>
-              <span class="badge badge-warning badge-xs p-1.5" v-if="hasVersionMismatch(host)">version mismatch</span>
+              <span class="badge badge-warning badge-xs p-1.5" v-if="hasVersionMismatch(host)">different version</span>
               <span class="badge badge-error badge-xs p-1.5" v-else-if="!host.available">offline</span>
             </a>
           </li>
@@ -91,13 +91,13 @@
                 <li v-for="host in groupHosts" :key="host.id">
                   <a
                     @click.prevent="setHost(host.id)"
-                    class="auto-cols-[max-content_minmax(0,1fr)_max-content]"
+                    class="grid auto-cols-[max-content_minmax(0,1fr)_max-content] grid-flow-col items-center gap-2"
                     :class="{ 'text-base-content/50': !host.available }"
                   >
                     <HostIcon :type="host.type" />
                     <span class="truncate">{{ host.name }}</span>
                     <span class="badge badge-warning badge-xs p-1.5" v-if="hasVersionMismatch(host)"
-                      >version mismatch</span
+                      >different version</span
                     >
                     <span class="badge badge-error badge-xs p-1.5" v-else-if="!host.available">offline</span>
                   </a>
@@ -109,12 +109,14 @@
             <li v-for="host in groupHosts" :key="host.id">
               <a
                 @click.prevent="setHost(host.id)"
-                class="auto-cols-[max-content_minmax(0,1fr)_max-content]"
+                class="grid auto-cols-[max-content_minmax(0,1fr)_max-content] grid-flow-col items-center gap-2"
                 :class="{ 'text-base-content/50': !host.available }"
               >
                 <HostIcon :type="host.type" />
                 <span class="truncate">{{ host.name }}</span>
-                <span class="badge badge-warning badge-xs p-1.5" v-if="hasVersionMismatch(host)">version mismatch</span>
+                <span class="badge badge-warning badge-xs p-1.5" v-if="hasVersionMismatch(host)"
+                  >different version</span
+                >
                 <span class="badge badge-error badge-xs p-1.5" v-else-if="!host.available">offline</span>
               </a>
             </li>
@@ -155,20 +157,19 @@
                     active-class="menu-active"
                     @click.alt.stop.prevent="pinnedStore.pinContainer(item)"
                     :title="item.name"
-                    class="group auto-cols-[max-content_minmax(0,1fr)_max-content_max-content]"
+                    class="group grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3"
                   >
-                    <svg-spinners:ring-resize v-if="item.isNew" class="text-secondary w-2" />
+                    <svg-spinners:ring-resize v-if="item.isNew" class="text-secondary size-2 shrink-0" />
                     <div
                       v-else
-                      class="status data-[state=exited]:status-error data-[state=running]:status-success data-[state=paused]:status-warning"
+                      class="status data-[state=exited]:status-error data-[state=running]:status-success data-[state=paused]:status-warning mr-1 shrink-0"
                       :data-state="item.state"
                     ></div>
-                    <div class="truncate">
+                    <div class="min-w-0 truncate pr-2">
                       {{ item.name }}
                     </div>
-                    <ContainerHealth :health="item.health" />
                     <span
-                      class="hover:text-secondary hidden group-hover:inline-block"
+                      class="hover:text-secondary inline-flex w-5 shrink-0 justify-end opacity-0 transition-opacity group-hover:opacity-100"
                       @click.stop.prevent="pinnedStore.pinContainer(item)"
                       v-show="!pinnedStore.isPinned(item)"
                       :title="$t('tooltip.pin-column')"
@@ -210,7 +211,19 @@ const { hosts } = useHosts();
 
 const setHost = (host: string | null) => (sessionHost.value = host);
 const hasVersionMismatch = (host: (typeof hosts.value)[string]) =>
-  host.type === "agent" && !!host.agentVersion && host.agentVersion !== config.version;
+  host.type === "agent" && isMajorMismatch(host.agentVersion, config.version);
+
+function parseMajor(version: string | undefined): string | null {
+  if (!version) return null;
+  const major = version.trim().replace(/^v/i, "").split(/[.-]/, 1)[0];
+  return major || null;
+}
+
+function isMajorMismatch(agentVersion: string | undefined, serverVersion: string): boolean {
+  const agentMajor = parseMajor(agentVersion);
+  const serverMajor = parseMajor(serverVersion);
+  return !!agentMajor && !!serverMajor && agentMajor !== serverMajor;
+}
 
 const hasHostGroups = computed(() => Object.values(hosts.value).some((h) => h.group));
 

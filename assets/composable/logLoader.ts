@@ -5,6 +5,15 @@ import { loadBetween, loadCachedSearch } from "@/composable/loadBetween";
 
 // Matches the rolling window size used for stats history
 const LOG_WINDOW_FOR_DELTA = 300;
+const SEARCH_PAGE_SIZE = 200;
+
+async function yieldToBrowser() {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+
+function sortByDateAsc<T extends { date: Date }>(logs: T[]) {
+  return logs.sort((a, b) => a.date.getTime() - b.date.getTime());
+}
 
 export function useLogLoader(
   messages: ShallowRef<LogEntry<LogMessage>[]>,
@@ -22,13 +31,16 @@ export function useLogLoader(
     const token = ++searchLoadToken;
     loadingMore.value = true;
     try {
+      if (containers.value.length > 1) {
+        await yieldToBrowser();
+      }
       const results = await Promise.all(containers.value.map((c) => loadCachedSearch(c, params, before, 200)));
       if (token !== searchLoadToken) return;
       const candidates = results
         .filter(({ signal }) => !signal.aborted)
         .flatMap(({ logs }) => logs)
         .sort((a, b) => b.date.getTime() - a.date.getTime());
-      const page = candidates.slice(0, 200).sort((a, b) => a.date.getTime() - b.date.getTime());
+      const page = sortByDateAsc(candidates.slice(0, SEARCH_PAGE_SIZE));
       const hasMore = results.some((result) => result.hasMore) || candidates.length > 200;
       cached.value = true;
       cacheMode.value = "cache";
@@ -50,6 +62,9 @@ export function useLogLoader(
     const token = ++searchLoadToken;
     loadingMore.value = true;
     try {
+      if (containers.value.length > 1) {
+        await yieldToBrowser();
+      }
       const before = existingLogs[0].date;
       const results = await Promise.all(containers.value.map((c) => loadCachedSearch(c, params, before, 200)));
       if (token !== searchLoadToken) return;
@@ -57,7 +72,7 @@ export function useLogLoader(
         .filter(({ signal }) => !signal.aborted)
         .flatMap(({ logs }) => logs)
         .sort((a, b) => b.date.getTime() - a.date.getTime());
-      const page = candidates.slice(0, 200).sort((a, b) => a.date.getTime() - b.date.getTime());
+      const page = sortByDateAsc(candidates.slice(0, SEARCH_PAGE_SIZE));
       const hasMore = results.some((result) => result.hasMore) || candidates.length > 200;
       if (page.length === 0) {
         messages.value = existingLogs;
@@ -97,6 +112,9 @@ export function useLogLoader(
 
     try {
       loadingMore.value = true;
+      if (containers.value.length > 1) {
+        await yieldToBrowser();
+      }
       const minPerContainer = Math.ceil(100 / containers.value.length);
 
       const results = await Promise.all(
@@ -139,6 +157,9 @@ export function useLogLoader(
 
     try {
       loadingMore.value = true;
+      if (containers.value.length > 1) {
+        await yieldToBrowser();
+      }
       const results = await Promise.all(
         containers.value.map((c) => {
           const lastSeenId = c.id === ownerContainerID ? entry.lastSkippedLog.id : undefined;

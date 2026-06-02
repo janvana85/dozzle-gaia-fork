@@ -8,7 +8,7 @@
 
           <span class="badge badge-warning badge-xs gap-1 p-2 font-normal" v-if="hasVersionMismatch">
             <carbon:warning />
-            version mismatch
+            different version
           </span>
           <span class="badge badge-error badge-xs gap-1 p-2 font-normal" v-else-if="!host.available">
             <carbon:warning />
@@ -16,7 +16,7 @@
           </span>
           <span
             class="badge badge-success badge-xs gap-1 p-2 font-normal"
-            :class="{ 'badge-warning': config.version != host.agentVersion }"
+            :class="{ 'badge-warning': hasVersionMismatch }"
             v-else-if="host.type == 'agent'"
             title="Dozzle Agent"
           >
@@ -89,8 +89,20 @@ const hostContainers = computed(() =>
 
 const runtimeLabel = computed(() => (props.host.runtime === "podman" ? "Podman" : "Docker"));
 const hasVersionMismatch = computed(
-  () => props.host.type === "agent" && !!props.host.agentVersion && props.host.agentVersion !== config.version,
+  () => props.host.type === "agent" && isMajorMismatch(props.host.agentVersion, config.version),
 );
+
+function parseMajor(version: string | undefined): string | null {
+  if (!version) return null;
+  const major = version.trim().replace(/^v/i, "").split(/[.-]/, 1)[0];
+  return major || null;
+}
+
+function isMajorMismatch(agentVersion: string | undefined, serverVersion: string): boolean {
+  const agentMajor = parseMajor(agentVersion);
+  const serverMajor = parseMajor(serverVersion);
+  return !!agentMajor && !!serverMajor && agentMajor !== serverMajor;
+}
 
 function toContainerCores(container: Container): number {
   if (container.cpuLimit && container.cpuLimit > 0) {

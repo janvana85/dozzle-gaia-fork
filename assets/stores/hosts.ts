@@ -24,7 +24,12 @@ const hosts = ref(
     ),
 );
 const updateHost = (host: Host) => {
-  delete hosts.value[host.endpoint];
+  delete hosts.value[host.id];
+  for (const [key, value] of Object.entries(hosts.value)) {
+    if (value.endpoint === host.endpoint) {
+      delete hosts.value[key];
+    }
+  }
   hosts.value[host.id] = host;
   return host;
 };

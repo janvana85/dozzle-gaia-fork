@@ -50,11 +50,23 @@ export async function loadBetween(
 
   if (!logs) return { logs: [] as LogEntry<LogMessage>[], signal };
 
+  const parsedLogs: LogEntry<LogMessage>[] = [];
+  const lines = logs.trim().split("\n");
+  const batchSize = 250;
+  for (let i = 0; i < lines.length; i += batchSize) {
+    const batch = lines.slice(i, i + batchSize);
+    for (const line of batch) {
+      if (line) {
+        parsedLogs.push(parseMessage(line));
+      }
+    }
+    if (i + batchSize < lines.length) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+  }
+
   return {
-    logs: logs
-      .trim()
-      .split("\n")
-      .map((line) => parseMessage(line)),
+    logs: parsedLogs,
     signal,
   };
 }

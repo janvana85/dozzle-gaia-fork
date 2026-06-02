@@ -3,6 +3,7 @@
     <li
       v-for="item in messages"
       ref="list"
+      v-memo="[item.id, (item as any).state, (item as any).isNew, (item as any).health]"
       :key="item.id"
       :id="item.id.toString()"
       :data-time="item.date.getTime()"
