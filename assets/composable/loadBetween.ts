@@ -45,7 +45,17 @@ export async function loadBetween(
 
   const fullUrl = buildUrl();
   const stopWatcher = watchOnce(params, () => abortController.abort("stream changed"));
-  const logs = await (await fetch(fullUrl, { signal })).text();
+  let logs: string;
+  try {
+    logs = await (await fetch(fullUrl, { signal })).text();
+  } catch (e) {
+    stopWatcher();
+    // Aborting an in-flight request when the stream/view changes is expected;
+    // resolve with an empty result (callers filter on signal.aborted) instead
+    // of leaking an uncaught rejection to the console.
+    if (signal.aborted) return { logs: [] as LogEntry<LogMessage>[], signal };
+    throw e;
+  }
   stopWatcher();
 
   if (!logs) return { logs: [] as LogEntry<LogMessage>[], signal };
@@ -87,13 +97,23 @@ export async function loadCachedSearch(
   const abortController = new AbortController();
   const signal = abortController.signal;
   const stopWatcher = watchOnce(params, () => abortController.abort("search changed"));
-  const response = await fetch(withBase(`/api/hosts/${c.host}/containers/${c.id}/logs?${searchParams.toString()}`), {
-    signal,
-  });
+  let response: Response;
+  let text: string;
+  try {
+    response = await fetch(withBase(`/api/hosts/${c.host}/containers/${c.id}/logs?${searchParams.toString()}`), {
+      signal,
+    });
+    text = await response.text();
+  } catch (e) {
+    stopWatcher();
+    // Aborting an in-flight request when the search/view changes is expected;
+    // resolve with an empty result (callers filter on signal.aborted) instead
+    // of leaking an uncaught rejection to the console.
+    if (signal.aborted) return { logs: [] as LogEntry<LogMessage>[], hasMore: false, signal };
+    throw e;
+  }
   stopWatcher();
   if (!response.ok) throw new Error(`cached search failed: ${response.status}`);
-
-  const text = await response.text();
   const logs = text
     ? text
         .trim()

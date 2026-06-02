@@ -13,7 +13,10 @@ async function fetchCloudConfig() {
       cloudConfig.value = null;
       return;
     }
-    cloudConfig.value = await res.json();
+    // The endpoint returns 200 {linked:false} when cloud isn't configured;
+    // keep null semantics so `!cloudConfig` truthiness checks still work.
+    const data = await res.json();
+    cloudConfig.value = data?.linked ? data : null;
   } catch {
     cloudConfig.value = null;
   }

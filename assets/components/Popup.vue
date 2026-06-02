@@ -28,7 +28,11 @@ const onMouseEnter = (e: MouseEvent) => {
   globalShow.value = true;
 
   if (content.value && e.currentTarget instanceof HTMLElement) {
-    const { left, top, width } = e.currentTarget.getBoundingClientRect();
+    // The wrapper span uses `display: contents`, so it has no box of its own and
+    // getBoundingClientRect() returns zeros (which parked the popup at the top-left
+    // of the viewport). Anchor to the actual rendered child element instead.
+    const anchor = e.currentTarget.firstElementChild ?? e.currentTarget;
+    const { left, top, width } = anchor.getBoundingClientRect();
     const x = left + width + 10;
     const y = top;
 

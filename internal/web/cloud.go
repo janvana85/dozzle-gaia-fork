@@ -198,7 +198,12 @@ type cloudConfigResponse struct {
 func (h *handler) cloudConfig(w http.ResponseWriter, r *http.Request) {
 	cc := h.hostService.CloudConfig()
 	if cc == nil {
-		writeError(w, http.StatusNotFound, "no cloud configuration")
+		// Return 200 with linked=false instead of 404 so the browser console
+		// isn't littered with "Failed to load resource" on every page load when
+		// Dozzle Cloud simply isn't configured. The frontend maps !linked to null.
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(cloudConfigResponse{Linked: false})
 		return
 	}
 
