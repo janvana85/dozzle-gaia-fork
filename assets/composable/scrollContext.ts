@@ -1,5 +1,6 @@
 type ScrollContext = {
   paused: boolean;
+  hasProgress: boolean;
   progress: number;
   currentDate: Date;
 };
@@ -21,6 +22,7 @@ export const useScrollContext = () => {
 function defaultValue() {
   return reactive({
     paused: false,
+    hasProgress: false,
     progress: 1,
     currentDate: new Date(),
   });

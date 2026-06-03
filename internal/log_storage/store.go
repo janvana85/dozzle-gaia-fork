@@ -581,6 +581,18 @@ func (s *Store) SearchBefore(ctx context.Context, host, containerID string, befo
 	return s.searchBefore(ctx, host, containerID, "", before, limit, match)
 }
 
+// PreviousChunkRangeForContainer returns the nearest cached chunk that ends
+// before the given time for the concrete container ID or stable service identity.
+func (s *Store) PreviousChunkRangeForContainer(c container.Container, before time.Time) (time.Time, time.Time, bool, error) {
+	return s.previousChunkRange(c.Host, c.ID, c.LogIdentity(), before)
+}
+
+// PreviousChunkRange returns the nearest cached chunk that ends before the given
+// time for the concrete host and container ID.
+func (s *Store) PreviousChunkRange(host, containerID string, before time.Time) (time.Time, time.Time, bool, error) {
+	return s.previousChunkRange(host, containerID, "", before)
+}
+
 func (s *Store) logsBetweenDates(ctx context.Context, host, containerID, identity string, from, to time.Time) (<-chan *container.LogEvent, error) {
 	if err := s.openDB(); err != nil {
 		return nil, err
@@ -666,6 +678,39 @@ ORDER BY MAX(last_ts) DESC`
 		return nil, false, err
 	}
 	return result, false, nil
+}
+
+func (s *Store) previousChunkRange(host, containerID, identity string, before time.Time) (time.Time, time.Time, bool, error) {
+	if before.IsZero() {
+		before = time.Now()
+	}
+	if err := s.openDB(); err != nil {
+		return time.Time{}, time.Time{}, false, err
+	}
+	from := before.UTC().AddDate(0, 0, -retentionDays)
+	dayFrom := from.Format("2006-01-02")
+	dayTo := before.UTC().Format("2006-01-02")
+	query := `
+SELECT first_ts, last_ts FROM log_chunks
+WHERE ((host = ? AND container_id = ?)`
+	args := []any{host, containerID}
+	if identity != "" {
+		query += ` OR (host = ? AND identity = ?)`
+		args = append(args, host, identity)
+	}
+	query += `) AND day >= ? AND day <= ? AND last_ts < ?
+ORDER BY last_ts DESC
+LIMIT 1`
+	args = append(args, dayFrom, dayTo, before.UnixMilli())
+
+	var firstTS, lastTS int64
+	if err := s.db.QueryRow(query, args...).Scan(&firstTS, &lastTS); err != nil {
+		if err == sql.ErrNoRows {
+			return time.Time{}, time.Time{}, false, nil
+		}
+		return time.Time{}, time.Time{}, false, err
+	}
+	return time.UnixMilli(firstTS).UTC(), time.UnixMilli(lastTS).UTC(), true, nil
 }
 
 // Append stores one log event for the given host/container.

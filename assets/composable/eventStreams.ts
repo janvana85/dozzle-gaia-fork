@@ -18,6 +18,7 @@ import { parseMessage } from "@/composable/loadBetween";
 import { useLogLoader } from "@/composable/logLoader";
 
 const { isSearching, debouncedSearchFilter, inverseFilter, followingSearch, pendingSearchCount } = useSearchFilter();
+const mergedLiveLateToleranceMs = 5_000;
 
 export function useContainerStream(container: Ref<Container>): LogStreamSource {
   const url = computed(() => `/api/hosts/${container.value.host}/containers/${container.value.id}/logs/stream`);
@@ -105,7 +106,34 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
     loadingMore,
   );
 
+  function mergeChronologically(existing: LogEntry<LogMessage>[], incoming: LogEntry<LogMessage>[]) {
+    const loader = existing[0] instanceof LoadMoreLogEntry ? existing[0] : undefined;
+    const rest = loader ? existing.slice(1) : existing;
+    const byKey = new Map<string, LogEntry<LogMessage>>();
+    for (const log of [...rest, ...incoming]) {
+      const key = `${log.containerID ?? ""}:${log.id}`;
+      if (!byKey.has(key)) {
+        byKey.set(key, log);
+      }
+    }
+    const merged = [...byKey.values()].sort((a, b) => a.date.getTime() - b.date.getTime());
+    return loader ? [loader, ...merged] : merged;
+  }
+
+  function filterLateMergedLiveLogs(existing: LogEntry<LogMessage>[], incoming: LogEntry<LogMessage>[]) {
+    if (scrollingPaused.value || containers.value.length <= 1 || incoming.length === 0) {
+      return incoming;
+    }
+    const rest = existing[0] instanceof LoadMoreLogEntry ? existing.slice(1) : existing;
+    const latestVisible = rest.at(-1)?.date.getTime();
+    if (!latestVisible) {
+      return incoming;
+    }
+    return incoming.filter((log) => log.date.getTime() >= latestVisible - mergedLiveLateToleranceMs);
+  }
+
   function flushNow() {
+    const liveIncoming = filterLateMergedLiveLogs(messages.value, buffer.value);
     if (messages.value.length + buffer.value.length > config.maxLogs) {
       if (scrollingPaused.value === true) {
         if (messages.value.at(-1) instanceof SkippedLogsEntry) {
@@ -122,10 +150,10 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
         }
         buffer.value = [];
       } else {
-        if (buffer.value.length > config.maxLogs / 2) {
-          messages.value = buffer.value.slice(-config.maxLogs / 2);
+        if (liveIncoming.length > config.maxLogs / 2) {
+          messages.value = mergeChronologically([], liveIncoming).slice(-config.maxLogs / 2);
         } else {
-          messages.value = [...messages.value, ...buffer.value].slice(-config.maxLogs);
+          messages.value = mergeChronologically(messages.value, liveIncoming).slice(-config.maxLogs);
         }
         buffer.value = [];
         // Trimming the live window drops the oldest entries, including the
@@ -146,7 +174,7 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
         }
         initial = false;
       }
-      messages.value = [...messages.value, ...buffer.value];
+      messages.value = mergeChronologically(messages.value, liveIncoming);
       buffer.value = [];
     }
   }
@@ -283,13 +311,17 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
     if (container || containers.value.length > 0) {
       ensureLoadMoreAtTop();
     }
-    if (messages.value[0] instanceof LoadMoreLogEntry) {
-      const loader = messages.value[0];
-      const rest = messages.value.slice(1);
-      messages.value = [loader, ...logs, ...rest];
-      return;
+    const loader = messages.value[0] instanceof LoadMoreLogEntry ? messages.value[0] : undefined;
+    const rest = loader ? messages.value.slice(1) : messages.value;
+    const byKey = new Map<string, LogEntry<LogMessage>>();
+    for (const log of [...logs, ...rest]) {
+      const key = `${log.containerID ?? ""}:${log.id}`;
+      if (!byKey.has(key)) {
+        byKey.set(key, log);
+      }
     }
-    messages.value = [...logs, ...messages.value];
+    const merged = [...byKey.values()].sort((a, b) => a.date.getTime() - b.date.getTime());
+    messages.value = loader ? [loader, ...merged] : merged;
   }
 
   let searchToken = 0;

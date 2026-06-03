@@ -31,7 +31,7 @@
       class="min-h-[300px] snap-y overflow-auto"
       @scroll.passive="handleScroll"
     >
-      <div class="invisible relative md:visible" v-show="scrollContext.paused">
+      <div class="invisible relative md:visible" v-show="scrollContext.paused && showScrollProgress">
         <div class="absolute top-4 right-44">
           <ScrollProgress
             :indeterminate="loadingMore"
@@ -91,7 +91,7 @@ const scrollObserver = ref<HTMLElement>();
 const scrollableContent = ref<HTMLElement>();
 
 const scrollContext = provideScrollContext();
-const { cached, loadingMore, historical, cacheMode } = useLoggingContext();
+const { cached, loadingMore, historical, cacheMode, containers } = useLoggingContext();
 const { isSearching, followingSearch, pendingSearchCount, startFollowingSearch } = useSearchFilter();
 
 const cacheModeLabel = computed(() => {
@@ -104,6 +104,7 @@ const cacheModeClass = computed(() => {
   if (cacheMode.value === "cache") return "badge-warning";
   return "badge-success";
 });
+const showScrollProgress = computed(() => containers.value.length === 1 && scrollContext.hasProgress);
 const followRemainingMs = computed(() => Math.max(0, followUntil.value - now.value));
 const followRemainingLabel = computed(() => {
   const totalSeconds = Math.ceil(followRemainingMs.value / 1000);

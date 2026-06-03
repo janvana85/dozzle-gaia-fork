@@ -133,6 +133,9 @@ export function useLogLoader(
       const results = await Promise.all(
         containers.value.map((c) => {
           const earliest = earliestByContainer.get(c.id);
+          if (earliest instanceof CacheGapLogEntry && earliest.nextFrom && earliest.nextTo) {
+            return loadBetween(c, params, earliest.nextFrom, earliest.nextTo, { min: minPerContainer });
+          }
           const to = earliest?.date ?? existingLogs[0].date;
           const nth = nthByContainer.get(c.id);
           const delta = to.getTime() - (nth?.date ?? to).getTime();

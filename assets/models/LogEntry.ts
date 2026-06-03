@@ -41,6 +41,8 @@ export interface LogEvent {
   readonly rm: string;
   readonly from?: string;
   readonly to?: string;
+  readonly nextFrom?: string;
+  readonly nextTo?: string;
 }
 
 export abstract class LogEntry<T extends LogMessage> {
@@ -254,6 +256,8 @@ export class CacheGapLogEntry extends LogEntry<string> {
     date: Date,
     public readonly from: Date,
     public readonly to: Date,
+    public readonly nextFrom?: Date,
+    public readonly nextTo?: Date,
   ) {
     super(message, containerID, id, date, "stderr", message, "info");
   }
@@ -275,6 +279,8 @@ export function asLogEntry(event: LogEvent): LogEntry<LogMessage> {
         new Date(event.ts),
         new Date(event.from ?? event.ts),
         new Date(event.to ?? event.ts),
+        event.nextFrom ? new Date(event.nextFrom) : undefined,
+        event.nextTo ? new Date(event.nextTo) : undefined,
       );
     case "complex":
       return new ComplexLogEntry(event.m as JSONObject, event.c, event.id, new Date(event.ts), event.l, std, event.rm);

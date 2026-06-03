@@ -38,6 +38,8 @@ type cacheGapEvent struct {
 	ContainerID string `json:"c"`
 	From        string `json:"from"`
 	To          string `json:"to"`
+	NextFrom    string `json:"nextFrom,omitempty"`
+	NextTo      string `json:"nextTo,omitempty"`
 }
 
 func parseStdTypes(r *http.Request) container.StdType {
@@ -86,6 +88,15 @@ func newCacheGapEvent(containerID string, from, to time.Time) cacheGapEvent {
 		From:        from.Format(time.RFC3339Nano),
 		To:          to.Format(time.RFC3339Nano),
 	}
+}
+
+func newCacheGapEventWithNext(containerID string, from, to, nextFrom, nextTo time.Time) cacheGapEvent {
+	event := newCacheGapEvent(containerID, from, to)
+	if !nextFrom.IsZero() && !nextTo.IsZero() {
+		event.NextFrom = nextFrom.Format(time.RFC3339Nano)
+		event.NextTo = nextTo.Format(time.RFC3339Nano)
+	}
+	return event
 }
 
 func (h *handler) scheduleCacheGapFill(containerService *container_support.ContainerService, from, to time.Time, stdTypes container.StdType) {
@@ -379,7 +390,11 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 		}
 		h.scheduleCacheGapFill(containerService, from, to, stdTypes)
 		if !plainText && containerService != nil && !from.IsZero() && !to.IsZero() && from.Before(to) {
-			if err := encoder.Encode(newCacheGapEvent(containerService.Container.ID, from, to)); err != nil {
+			gapEvent := newCacheGapEvent(containerService.Container.ID, from, to)
+			if nextFrom, nextTo, ok, err := h.logStore.PreviousChunkRangeForContainer(containerService.Container, from); err == nil && ok {
+				gapEvent = newCacheGapEventWithNext(containerService.Container.ID, nextTo, to, nextFrom, nextTo)
+			}
+			if err := encoder.Encode(gapEvent); err != nil {
 				log.Error().Err(err).Msg("error encoding log cache gap event")
 			}
 		}

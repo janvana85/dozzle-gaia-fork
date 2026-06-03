@@ -157,4 +157,34 @@ describe("useLogLoader.loadOlderLogs (merged history)", () => {
     expect(messages.value[1]).toBeInstanceOf(CacheGapLogEntry);
     expect(messages.value.map((log) => log.id)).toEqual([loader.id, -50, 100]);
   });
+
+  test("uses cache-gap next chunk hints to jump directly across large retained gaps", async () => {
+    const loader = new LoadMoreLogEntry(new Date(), async () => {});
+    const jumpGap = new CacheGapLogEntry(
+      "not found in cache, fetching from docker logs",
+      "a",
+      -20,
+      new Date(20 * 1000),
+      new Date(20 * 1000),
+      new Date(100 * 1000),
+      new Date(10 * 1000),
+      new Date(20 * 1000),
+    );
+    const messages = shallowRef<LogEntry<LogMessage>[]>([loader, jumpGap, entry("a", 100, 100)]);
+    const containers = shallowRef([container("a")]);
+    const { loadOlderLogs } = setup(messages, containers);
+
+    loadBetween.mockResolvedValue(ok([entry("a", 10, 10), entry("a", 11, 20)]));
+
+    await loadOlderLogs(loader);
+
+    expect(loadBetween).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "a" }),
+      expect.anything(),
+      new Date(10 * 1000),
+      new Date(20 * 1000),
+      { min: 100 },
+    );
+    expect(messages.value.slice(1).map((log) => log.id)).toEqual([10, 11, 100]);
+  });
 });

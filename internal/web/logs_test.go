@@ -375,6 +375,8 @@ func Test_handler_between_dates_empty_cache_range_returns_gap_without_waiting_fo
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), `"t":"cache-gap"`)
 	assert.Contains(t, rr.Body.String(), `"m":"not found in cache, fetching from docker logs"`)
+	assert.Contains(t, rr.Body.String(), `"nextFrom":"2017-12-31T10:00:00Z"`)
+	assert.Contains(t, rr.Body.String(), `"nextTo":"2017-12-31T10:00:00Z"`)
 	select {
 	case <-fetchStarted:
 	case <-time.After(time.Second):

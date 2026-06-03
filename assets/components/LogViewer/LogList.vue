@@ -3,9 +3,9 @@
     <li
       v-for="item in renderableMessages"
       ref="list"
-      v-memo="[item.id, (item as any).state, (item as any).isNew, (item as any).health]"
-      :key="item.id"
-      :id="item.id.toString()"
+      v-memo="[entryKey(item), (item as any).state, (item as any).isNew, (item as any).health]"
+      :key="entryKey(item)"
+      :id="entryDomId(item)"
       :data-time="item.date.getTime()"
       class="group/entry"
       :class="{ 'log-permalink-target': permalinkLogId === item.id.toString() }"
@@ -16,9 +16,22 @@
 </template>
 
 <script lang="ts" setup>
-import type { LogEntry, LogMessage } from "@/models/LogEntry";
+import {
+  CacheGapLogEntry,
+  LoadMoreLogEntry,
+  type LogEntry,
+  type LogMessage,
+  SkippedLogsEntry,
+} from "@/models/LogEntry";
 
-const { progress, currentDate } = useScrollContext();
+const scrollContext = useScrollContext() as Partial<{
+  progress: Ref<number>;
+  currentDate: Ref<Date>;
+  hasProgress: Ref<boolean>;
+}>;
+const progress = scrollContext.progress ?? ref(1);
+const currentDate = scrollContext.currentDate ?? ref(new Date());
+const hasProgress = scrollContext.hasProgress ?? ref(false);
 
 const { messages } = defineProps<{
   messages: LogEntry<LogMessage>[];
@@ -32,16 +45,48 @@ const { containers } = useLoggingContext();
 const renderableMessages = computed(() => messages.filter((m) => m != null));
 
 const route = useRoute();
-const permalinkLogId = computed(() => (typeof route.query.logId === "string" ? route.query.logId : ""));
+const permalinkLogId = computed(() => (typeof route?.query?.logId === "string" ? route.query.logId : ""));
+const multipleContainers = computed(() => containers.value.length > 1);
+const realMessages = computed(() =>
+  renderableMessages.value.filter(
+    (message) =>
+      !(message instanceof LoadMoreLogEntry) &&
+      !(message instanceof SkippedLogsEntry) &&
+      !(message instanceof CacheGapLogEntry),
+  ),
+);
 
 const list = ref<HTMLElement[]>([]);
 
+function entryKey(item: LogEntry<LogMessage>) {
+  return `${item.containerID || "system"}:${item.id}`;
+}
+
+function entryDomId(item: LogEntry<LogMessage>) {
+  if (!multipleContainers.value) {
+    return item.id.toString();
+  }
+  return `${item.containerID || "system"}-${item.id}`;
+}
+
 let previousDate = new Date();
+watchEffect(() => {
+  hasProgress.value = containers.value.length === 1 && realMessages.value.length > 1;
+  if (!hasProgress.value) {
+    progress.value = 1;
+    currentDate.value = new Date();
+  }
+});
+
 useIntersectionObserver(
   list,
   (entries) => {
     if (containers.value.length != 1) return;
-    const container = containers.value[0];
+    const firstLog = realMessages.value[0];
+    const lastLog = realMessages.value.at(-1);
+    if (!firstLog || !lastLog) return;
+    const totalSpan = lastLog.date.getTime() - firstLog.date.getTime();
+    if (totalSpan <= 0) return;
     for (const entry of entries) {
       if (entry.isIntersecting) {
         const time = entry.target.getAttribute("data-time");
@@ -49,8 +94,7 @@ useIntersectionObserver(
           const date = new Date(parseInt(time));
           if (+date === +previousDate) break;
           previousDate = date;
-          const diff = new Date().getTime() - container.created.getTime();
-          progress.value = (date.getTime() - container.created.getTime()) / diff;
+          progress.value = Math.min(1, Math.max(0, (date.getTime() - firstLog.date.getTime()) / totalSpan));
           currentDate.value = date;
           break;
         }
