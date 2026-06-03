@@ -1,5 +1,5 @@
 import { ShallowRef, type Ref } from "vue";
-import { type LogMessage, LogEntry, LoadMoreLogEntry, SkippedLogsEntry } from "@/models/LogEntry";
+import { type LogMessage, LogEntry, LoadMoreLogEntry, SkippedLogsEntry, CacheGapLogEntry } from "@/models/LogEntry";
 import { Container } from "@/models/Container";
 import { loadBetween, loadCachedSearch } from "@/composable/loadBetween";
 
@@ -13,6 +13,15 @@ async function yieldToBrowser() {
 
 function sortByDateAsc<T extends { date: Date }>(logs: T[]) {
   return logs.sort((a, b) => a.date.getTime() - b.date.getTime());
+}
+
+function realLogOverlapsGap(log: LogEntry<LogMessage>, gap: CacheGapLogEntry) {
+  return (
+    !(log instanceof CacheGapLogEntry) &&
+    log.containerID === gap.containerID &&
+    log.date.getTime() >= gap.from.getTime() &&
+    log.date.getTime() < gap.to.getTime()
+  );
 }
 
 export function useLogLoader(
@@ -87,6 +96,10 @@ export function useLogLoader(
   }
 
   async function loadOlderLogs(entry: LoadMoreLogEntry) {
+    // Re-entrancy guard: the load-more sentinel can re-fire (scroll/intersection)
+    // while a previous load is still running. Without this, concurrent calls all
+    // compute the same window and each returns ~1 new log, so history crawls.
+    if (loadingMore.value) return;
     if (!(messages.value[0] instanceof LoadMoreLogEntry)) throw new Error("No loadMoreLogEntry on first item");
     if (containers.value.length === 0) return;
 
@@ -134,12 +147,28 @@ export function useLogLoader(
       const allNewLogs = results
         .filter(({ signal }) => !signal.aborted)
         .flatMap(({ logs }) => logs)
-        .sort((a, b) => a.date.getTime() - b.date.getTime());
+        .filter((l): l is LogEntry<LogMessage> => l != null);
 
       if (allNewLogs.length > 0) {
         cached.value = true;
         cacheMode.value = "mixed";
-        messages.value = [loader, ...allNewLogs, ...existingLogs];
+        // Per-container windows interleave with already-loaded ranges when
+        // containers sit at different history depths, so combine, drop holes,
+        // dedupe by container+id, and keep the whole list globally ordered.
+        // A naive prepend left the list unsorted (breaking earliest detection)
+        // and could accumulate duplicates or undefined holes that crash rendering.
+        const candidates = [...allNewLogs, ...existingLogs];
+        const byKey = new Map<string, LogEntry<LogMessage>>();
+        for (const log of candidates) {
+          if (log == null) continue;
+          if (log instanceof CacheGapLogEntry && candidates.some((candidate) => realLogOverlapsGap(candidate, log))) {
+            continue;
+          }
+          const key = `${log.containerID ?? ""}:${log.id}`;
+          if (!byKey.has(key)) byKey.set(key, log);
+        }
+        const merged = [...byKey.values()].sort((a, b) => a.date.getTime() - b.date.getTime());
+        messages.value = [loader, ...merged];
       }
     } catch (err) {
       console.error(err);

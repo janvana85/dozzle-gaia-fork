@@ -6,11 +6,12 @@ import GroupedLogItem from "@/components/LogViewer/GroupedLogItem.vue";
 import ContainerEventLogItem from "@/components/LogViewer/ContainerEventLogItem.vue";
 import SkippedEntriesLogItem from "@/components/LogViewer/SkippedEntriesLogItem.vue";
 import LoadMoreLogItem from "@/components/LogViewer/LoadMoreLogItem.vue";
+import CacheGapLogItem from "@/components/LogViewer/CacheGapLogItem.vue";
 
 export type JSONValue = string | number | boolean | JSONObject | Array<JSONValue>;
 export type JSONObject = { [x: string]: JSONValue };
 export type Std = "stdout" | "stderr";
-export type LogType = "single" | "group" | "complex";
+export type LogType = "single" | "group" | "complex" | "cache-gap";
 export type Position = "start" | "end" | "middle" | undefined;
 export type LogMessage = string | string[] | JSONObject;
 export type Level =
@@ -38,6 +39,8 @@ export interface LogEvent {
   readonly s: "stdout" | "stderr" | "unknown";
   readonly c: string;
   readonly rm: string;
+  readonly from?: string;
+  readonly to?: string;
 }
 
 export abstract class LogEntry<T extends LogMessage> {
@@ -243,10 +246,36 @@ export class LoadMoreLogEntry extends LogEntry<string> {
   }
 }
 
+export class CacheGapLogEntry extends LogEntry<string> {
+  constructor(
+    message: string,
+    containerID: string,
+    id: number,
+    date: Date,
+    public readonly from: Date,
+    public readonly to: Date,
+  ) {
+    super(message, containerID, id, date, "stderr", message, "info");
+  }
+
+  getComponent(): Component {
+    return CacheGapLogItem;
+  }
+}
+
 export function asLogEntry(event: LogEvent): LogEntry<LogMessage> {
   const std = event.s === "unknown" ? "stderr" : (event.s ?? "stderr");
 
   switch (event.t) {
+    case "cache-gap":
+      return new CacheGapLogEntry(
+        (event.m as string) || "not found in cache, fetching from docker logs",
+        event.c,
+        event.id,
+        new Date(event.ts),
+        new Date(event.from ?? event.ts),
+        new Date(event.to ?? event.ts),
+      );
     case "complex":
       return new ComplexLogEntry(event.m as JSONObject, event.c, event.id, new Date(event.ts), event.l, std, event.rm);
     case "group":

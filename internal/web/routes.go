@@ -3,10 +3,10 @@ package web
 import (
 	"context"
 	"io/fs"
-	"time"
-
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/amir20/dozzle/internal/auth"
 	"github.com/amir20/dozzle/internal/cloud"
@@ -124,6 +124,7 @@ type handler struct {
 	config      *Config
 	hostService HostService
 	logStore    *log_storage.Store
+	gapFillJobs sync.Map
 }
 
 func CreateServer(hostService HostService, content fs.FS, config Config) *http.Server {

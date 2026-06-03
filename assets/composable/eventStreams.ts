@@ -128,6 +128,13 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
           messages.value = [...messages.value, ...buffer.value].slice(-config.maxLogs);
         }
         buffer.value = [];
+        // Trimming the live window drops the oldest entries, including the
+        // load-more sentinel at the top. Without re-adding it, once the live
+        // window fills (fast on busy/host views) there is no way to scroll back
+        // into history. Re-add it for history-capable streams.
+        if (container || containers.value.length > 0) {
+          ensureLoadMoreAtTop();
+        }
       }
     } else {
       if (initial) {

@@ -28,6 +28,18 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+type cacheGapEvent struct {
+	Type        string `json:"t"`
+	Message     string `json:"m"`
+	Timestamp   int64  `json:"ts"`
+	Id          int64  `json:"id"`
+	Level       string `json:"l"`
+	Stream      string `json:"s"`
+	ContainerID string `json:"c"`
+	From        string `json:"from"`
+	To          string `json:"to"`
+}
+
 func parseStdTypes(r *http.Request) container.StdType {
 	var stdTypes container.StdType
 	if r.URL.Query().Has("stdout") {
@@ -61,6 +73,60 @@ func matchesStdType(event *container.LogEvent, stdTypes container.StdType) bool 
 	}
 }
 
+func newCacheGapEvent(containerID string, from, to time.Time) cacheGapEvent {
+	ts := from.UnixMilli()
+	return cacheGapEvent{
+		Type:        "cache-gap",
+		Message:     "not found in cache, fetching from docker logs",
+		Timestamp:   ts,
+		Id:          -ts,
+		Level:       "info",
+		Stream:      "stderr",
+		ContainerID: containerID,
+		From:        from.Format(time.RFC3339Nano),
+		To:          to.Format(time.RFC3339Nano),
+	}
+}
+
+func (h *handler) scheduleCacheGapFill(containerService *container_support.ContainerService, from, to time.Time, stdTypes container.StdType) {
+	if h.logStore == nil || containerService == nil || from.IsZero() || to.IsZero() || !from.Before(to) {
+		return
+	}
+
+	c := containerService.Container
+	key := fmt.Sprintf("%s:%s:%d:%d:%d", c.Host, c.ID, from.UnixNano(), to.UnixNano(), stdTypes)
+	if _, loaded := h.gapFillJobs.LoadOrStore(key, struct{}{}); loaded {
+		return
+	}
+
+	go func() {
+		defer h.gapFillJobs.Delete(key)
+
+		if err := h.logStore.RecordContainer(c); err != nil {
+			log.Debug().Err(err).Str("container", c.ID).Msg("failed to record cached container metadata")
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		events, err := containerService.LogsBetweenDates(ctx, from, to, stdTypes)
+		if err != nil {
+			log.Debug().Err(err).Str("container", c.ID).Time("from", from).Time("to", to).Msg("failed to fill log cache gap")
+			return
+		}
+
+		count := 0
+		for event := range events {
+			if err := h.logStore.AppendForContainer(c, event); err != nil {
+				log.Debug().Err(err).Str("container", c.ID).Msg("failed to append log cache gap event")
+				continue
+			}
+			count++
+		}
+		log.Debug().Str("container", c.ID).Int("lines", count).Time("from", from).Time("to", to).Msg("filled log cache gap")
+	}()
+}
+
 func (h *handler) resolveLabels(r *http.Request) container.ContainerLabels {
 	labels := h.config.Labels
 	if h.config.Authorization.Provider != NONE {
@@ -82,6 +148,12 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 
 	from, _ := time.Parse(time.RFC3339Nano, r.URL.Query().Get("from"))
 	to, _ := time.Parse(time.RFC3339Nano, r.URL.Query().Get("to"))
+	// Guard against an inverted range (from after to). The frontend can compute
+	// from > to on merged/unsorted windows; left as-is it makes the backward
+	// expansion loop below spin with empty fetches until from drifts past to.
+	if !from.IsZero() && !to.IsZero() && from.After(to) {
+		from, to = to, from
+	}
 	id := chi.URLParam(r, "id")
 
 	stdTypes := parseStdTypes(r)
@@ -91,12 +163,15 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 	}
 
 	containerService, findErr := h.hostService.FindContainer(hostKey(r), id, h.resolveLabels(r))
+	// Prefer the local log store: it is indexed by time, so historical scroll-back
+	// is fast, whereas reading old logs from the agent/Docker scans the json-file
+	// sequentially (seconds to minutes for old ranges).
 	usingStore := false
 	if h.logStore != nil {
-		if findErr != nil {
+		if containerService != nil {
+			usingStore = true
+		} else if findErr != nil {
 			usingStore = h.logStore.HasLogs(hostKey(r), id)
-		} else if containerService != nil {
-			usingStore = h.logStore.HasLogsForContainer(containerService.Container)
 		}
 	}
 	if findErr != nil && !usingStore {
@@ -237,7 +312,7 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Serve from local log store when the agent is offline
+	// Serve from the indexed local log store. It is fast for historical ranges.
 	if usingStore {
 		queryFrom := from
 		if everything {
@@ -253,17 +328,17 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
-		for event := range events {
+		writeStored := func(event *container.LogEvent) {
 			if everything {
 				if _, ok := event.Message.(string); onlyComplex && ok {
-					continue
+					return
 				}
 				if regex != nil && inverse == support_web.Search(regex, event) {
-					continue
+					return
 				}
 				if len(levels) > 0 {
 					if _, ok := levels[event.Level]; !ok {
-						continue
+						return
 					}
 				}
 				if plainText {
@@ -271,15 +346,41 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 				} else if err := encoder.Encode(event); err != nil {
 					log.Error().Err(err).Msg("error encoding stored log event")
 				}
-				continue
+				return
 			}
 			if !matchesFilter(event, regex, levels, inverse) {
-				continue
+				return
 			}
 			support_web.EscapeHTMLValues(event)
 			if err := encoder.Encode(event); err != nil {
 				log.Error().Err(err).Msg("error encoding stored log event")
-				return
+			}
+		}
+		// Peek the first event. If the store has data for this range, serve it.
+		// If it is empty (a gap in the cache), return immediately and fill the
+		// gap from Docker/agent in the background. The request path must stay
+		// cache-only so historical scrolling never waits on Docker log scans.
+		if first, ok := <-events; ok {
+			if !everything && !plainText && containerService != nil && !from.IsZero() && !to.IsZero() && from.Before(to) {
+				firstTime := time.UnixMilli(first.Timestamp)
+				if from.Before(firstTime) {
+					h.scheduleCacheGapFill(containerService, from, firstTime, stdTypes)
+					if err := encoder.Encode(newCacheGapEvent(containerService.Container.ID, from, firstTime)); err != nil {
+						log.Error().Err(err).Msg("error encoding leading log cache gap event")
+						return
+					}
+				}
+			}
+			writeStored(first)
+			for event := range events {
+				writeStored(event)
+			}
+			return
+		}
+		h.scheduleCacheGapFill(containerService, from, to, stdTypes)
+		if !plainText && containerService != nil && !from.IsZero() && !to.IsZero() && from.Before(to) {
+			if err := encoder.Encode(newCacheGapEvent(containerService.Container.ID, from, to)); err != nil {
+				log.Error().Err(err).Msg("error encoding log cache gap event")
 			}
 		}
 		return
@@ -291,15 +392,31 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 			log.Debug().Err(err).Str("container", id).Msg("failed to record cached container metadata")
 		}
 	}
+	// Reading old logs straight from the agent/Docker scans the json-file
+	// sequentially and can be very slow for ranges far in the past. Time-bound it
+	// so a slow range fails gracefully (returns what was gathered) instead of
+	// hanging the request indefinitely.
+	fetchCtx, cancelFetch := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancelFetch()
 	for {
 		if minimum > 0 && buffer.Len() >= minimum {
+			break
+		}
+		if fetchCtx.Err() != nil {
+			log.Warn().Str("container", id).Time("from", from).Time("to", to).Msg("timed out fetching historical logs from agent")
 			break
 		}
 
 		buffer.Clear()
 
-		events, err := containerService.LogsBetweenDates(r.Context(), from, to, stdTypes)
+		events, err := containerService.LogsBetweenDates(fetchCtx, from, to, stdTypes)
 		if err != nil {
+			// A deadline/cancel just means the slow fetch ran out of time; return
+			// whatever was already gathered rather than failing the whole request.
+			if fetchCtx.Err() != nil {
+				log.Warn().Str("container", id).Msg("timed out fetching historical logs from agent")
+				break
+			}
 			log.Error().Err(err).Msg("error fetching logs")
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

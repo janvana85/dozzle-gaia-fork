@@ -10,9 +10,9 @@ import (
 
 	"github.com/amir20/dozzle/internal/container"
 	docker_support "github.com/amir20/dozzle/internal/support/docker"
+	"github.com/go-chi/chi/v5"
 	docker_types "github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/system"
-	"github.com/go-chi/chi/v5"
 
 	"github.com/stretchr/testify/mock"
 
@@ -118,6 +118,7 @@ func createHandler(client docker_support.DockerUpdateClient, content fs.FS, conf
 		hostService: multiHostService,
 		content:     content,
 		config:      &config,
+		logStore:    config.LogStore,
 	})
 }
 

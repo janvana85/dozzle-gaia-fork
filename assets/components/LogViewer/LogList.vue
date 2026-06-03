@@ -1,7 +1,7 @@
 <template>
   <ul class="group pt-4" :class="{ 'disable-wrap': !softWrap, [size]: true, compact }" data-logs>
     <li
-      v-for="item in messages"
+      v-for="item in renderableMessages"
       ref="list"
       v-memo="[item.id, (item as any).state, (item as any).isNew, (item as any).health]"
       :key="item.id"
@@ -25,6 +25,11 @@ const { messages } = defineProps<{
 }>();
 
 const { containers } = useLoggingContext();
+
+// Defensive: never render undefined/null holes (which would throw on item.id).
+// Holes can slip into the merged stream from concurrent loaders; this guards the
+// render regardless of the source.
+const renderableMessages = computed(() => messages.filter((m) => m != null));
 
 const route = useRoute();
 const permalinkLogId = computed(() => (typeof route.query.logId === "string" ? route.query.logId : ""));

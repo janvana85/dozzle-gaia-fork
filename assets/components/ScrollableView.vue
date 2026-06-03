@@ -25,7 +25,12 @@
         {{ followLogs ? "Pause follow" : "Follow logs for 5m" }}
       </button>
     </div>
-    <main :data-scrolling="scrollable ? true : undefined" class="min-h-[300px] snap-y overflow-auto">
+    <main
+      ref="scrollRoot"
+      :data-scrolling="scrollable ? true : undefined"
+      class="min-h-[300px] snap-y overflow-auto"
+      @scroll.passive="handleScroll"
+    >
       <div class="invisible relative md:visible" v-show="scrollContext.paused">
         <div class="absolute top-4 right-44">
           <ScrollProgress
@@ -81,6 +86,7 @@ const hasMore = ref(false);
 const followLogs = ref(true);
 const followUntil = ref(Date.now() + followDurationMs);
 const now = ref(Date.now());
+const scrollRoot = ref<HTMLElement>();
 const scrollObserver = ref<HTMLElement>();
 const scrollableContent = ref<HTMLElement>();
 
@@ -107,6 +113,7 @@ const followRemainingLabel = computed(() => {
 });
 
 let followTimer: ReturnType<typeof setInterval> | undefined;
+let previousScrollTop = 0;
 
 if (!historical.value) {
   followTimer = setInterval(() => {
@@ -116,10 +123,20 @@ if (!historical.value) {
     }
   }, 1000);
 
-  useIntersectionObserver(scrollObserver, ([entry]) => (scrollContext.paused = entry.intersectionRatio == 0), {
-    threshold: [0, 1],
-    rootMargin: "40px 0px",
-  });
+  useIntersectionObserver(
+    scrollObserver,
+    ([entry]) => {
+      scrollContext.paused = entry.intersectionRatio == 0;
+      if (scrollContext.paused && followLogs.value) {
+        followLogs.value = false;
+      }
+    },
+    {
+      threshold: [0, 1],
+      rootMargin: "40px 0px",
+    },
+  );
+  useEventListener(window, "scroll", handleScroll, { passive: true });
 
   useMutationObserver(
     scrollableContent,
@@ -157,7 +174,32 @@ function toggleFollowLogs() {
 
 function scrollToBottom(behavior: "auto" | "smooth" = "auto") {
   scrollObserver.value?.scrollIntoView({ behavior });
+  const root = scrollContainer();
+  if (root) {
+    previousScrollTop = root.scrollTop;
+  }
   hasMore.value = false;
+}
+
+function scrollContainer() {
+  return scrollRoot.value && scrollRoot.value.scrollHeight > scrollRoot.value.clientHeight
+    ? scrollRoot.value
+    : document.scrollingElement;
+}
+
+function handleScroll() {
+  const root = scrollContainer();
+  if (!root) return;
+
+  const previous = previousScrollTop;
+  previousScrollTop = root.scrollTop;
+  if (historical.value || !followLogs.value) return;
+
+  const scrollingUp = root.scrollTop < previous - 24;
+  const awayFromBottom = root.scrollHeight - root.clientHeight - root.scrollTop > 40;
+  if (scrollingUp && awayFromBottom) {
+    followLogs.value = false;
+  }
 }
 
 // Switch a search from the static snapshot to live-following the filtered stream.

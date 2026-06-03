@@ -15,6 +15,7 @@ declare module 'vue' {
     AlertForm: typeof import('./components/Notification/AlertForm.vue')['default']
     Announcements: typeof import('./components/Announcements.vue')['default']
     BarChart: typeof import('./components/BarChart.vue')['default']
+    CacheGapLogItem: typeof import('./components/LogViewer/CacheGapLogItem.vue')['default']
     'Carbon:add': typeof import('~icons/carbon/add')['default']
     'Carbon:caretDown': typeof import('~icons/carbon/caret-down')['default']
     'Carbon:circleSolid': typeof import('~icons/carbon/circle-solid')['default']

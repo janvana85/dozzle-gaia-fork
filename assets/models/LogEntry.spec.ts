@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 import { ref } from "vue";
 import {
   asLogEntry,
+  CacheGapLogEntry,
   ComplexLogEntry,
   GroupedLogEntry,
   SimpleLogEntry,
@@ -42,6 +43,22 @@ describe("asLogEntry dispatch", () => {
   test("complex -> ComplexLogEntry", () => {
     const entry = asLogEntry(event({ t: "complex", m: { a: 1 } }));
     expect(entry).toBeInstanceOf(ComplexLogEntry);
+  });
+
+  test("cache-gap -> CacheGapLogEntry", () => {
+    const entry = asLogEntry(
+      event({
+        t: "cache-gap",
+        m: "not found in cache, fetching from docker logs",
+        id: -1,
+        from: "2026-06-03T10:00:00Z",
+        to: "2026-06-03T10:05:00Z",
+      }),
+    );
+    expect(entry).toBeInstanceOf(CacheGapLogEntry);
+    expect(entry.message).toBe("not found in cache, fetching from docker logs");
+    expect((entry as CacheGapLogEntry).from.toISOString()).toBe("2026-06-03T10:00:00.000Z");
+    expect((entry as CacheGapLogEntry).to.toISOString()).toBe("2026-06-03T10:05:00.000Z");
   });
 
   test("unknown type falls back to SimpleLogEntry", () => {
