@@ -46,8 +46,10 @@ export async function loadBetween(
   const fullUrl = buildUrl();
   const stopWatcher = watchOnce(params, () => abortController.abort("stream changed"));
   let logs: string;
+  let response: Response;
   try {
-    logs = await (await fetch(fullUrl, { signal })).text();
+    response = await fetch(fullUrl, { signal });
+    logs = await response.text();
   } catch (e) {
     stopWatcher();
     // Aborting an in-flight request when the stream/view changes is expected;
@@ -57,6 +59,13 @@ export async function loadBetween(
     throw e;
   }
   stopWatcher();
+
+  if (!response.ok) {
+    const snippet = logs.trim().slice(0, 200);
+    throw new Error(
+      `loadBetween failed: ${response.status} ${response.statusText} for ${fullUrl}${snippet ? `: ${snippet}` : ""}`,
+    );
+  }
 
   if (!logs) return { logs: [] as LogEntry<LogMessage>[], signal };
 

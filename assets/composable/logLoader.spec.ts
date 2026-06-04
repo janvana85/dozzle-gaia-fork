@@ -187,4 +187,24 @@ describe("useLogLoader.loadOlderLogs (merged history)", () => {
     );
     expect(messages.value.slice(1).map((log) => log.id)).toEqual([10, 11, 100]);
   });
+
+  test("does not forward a cache-gap placeholder id as lastSeenId", async () => {
+    const loader = new LoadMoreLogEntry(new Date(), async () => {});
+    const existingGap = gap("a", 50, 100);
+    const messages = shallowRef<LogEntry<LogMessage>[]>([loader, existingGap, entry("a", 101, 120)]);
+    const containers = shallowRef([container("a")]);
+    const { loadOlderLogs } = setup(messages, containers);
+
+    loadBetween.mockResolvedValue(ok([entry("a", 99, 75)]));
+
+    await loadOlderLogs(loader);
+
+    expect(loadBetween).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "a" }),
+      expect.anything(),
+      expect.any(Date),
+      expect.any(Date),
+      { min: 100, lastSeenId: undefined },
+    );
+  });
 });

@@ -3,6 +3,10 @@ import { LogMessage, LoadMoreLogEntry, LogEntry } from "@/models/LogEntry";
 import { ShallowRef } from "vue";
 import { loadBetween } from "@/composable/loadBetween";
 
+function getCursorLogId(log?: LogEntry<LogMessage>) {
+  return log && Number.isInteger(log.id) && log.id > 0 ? log.id : undefined;
+}
+
 export function useHistoricalContainerLog(historicalContainer: Ref<HistoricalContainer>): LogStreamSource {
   const messages: ShallowRef<LogEntry<LogMessage>[]> = shallowRef([]);
   const opened = ref(false);
@@ -31,7 +35,9 @@ export function useHistoricalContainerLog(historicalContainer: Ref<HistoricalCon
   async function loadLogs() {
     loadingMore.value = true;
     try {
-      const lastSeenId = route.query.logId ? +route.query.logId : undefined;
+      const routeLogId = route.query.logId ? +route.query.logId : undefined;
+      const lastSeenId =
+        typeof routeLogId === "number" && Number.isInteger(routeLogId) && routeLogId > 0 ? routeLogId : undefined;
       const [{ logs: before }, { logs: after }] = await Promise.all([
         loadBetween(
           container,
@@ -72,7 +78,7 @@ export function useHistoricalContainerLog(historicalContainer: Ref<HistoricalCon
         item.date,
         {
           min: 200,
-          lastSeenId: item.id,
+          lastSeenId: getCursorLogId(item),
         },
       );
 

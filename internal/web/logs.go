@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,6 +28,8 @@ import (
 
 	"github.com/rs/zerolog/log"
 )
+
+const cachedSearchDirectWindow = 2 * time.Hour
 
 type cacheGapEvent struct {
 	Type        string `json:"t"`
@@ -136,6 +139,128 @@ func (h *handler) scheduleCacheGapFill(containerService *container_support.Conta
 		}
 		log.Debug().Str("container", c.ID).Int("lines", count).Time("from", from).Time("to", to).Msg("filled log cache gap")
 	}()
+}
+
+func mergeCachedSearchWithDirect(
+	ctx context.Context,
+	containerService *container_support.ContainerService,
+	before time.Time,
+	limit int,
+	stdTypes container.StdType,
+	match func(*container.LogEvent) bool,
+	cached []*container.LogEvent,
+	cachedHasMore bool,
+) ([]*container.LogEvent, bool) {
+	if containerService == nil {
+		log.Debug().
+			Time("before", before).
+			Int("cachedHits", len(cached)).
+			Bool("cachedHasMore", cachedHasMore).
+			Msg("cached search fallback skipped: container unavailable")
+		return cached, cachedHasMore
+	}
+
+	from := before.Add(-cachedSearchDirectWindow)
+	if !containerService.Container.Created.IsZero() && from.Before(containerService.Container.Created) {
+		from = containerService.Container.Created
+	}
+	if !from.Before(before) {
+		log.Debug().
+			Str("container", containerService.Container.ID).
+			Time("before", before).
+			Time("from", from).
+			Int("cachedHits", len(cached)).
+			Bool("cachedHasMore", cachedHasMore).
+			Msg("cached search fallback skipped: empty direct scan window")
+		return cached, cachedHasMore
+	}
+
+	scanCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	directLogs, err := containerService.LogsBetweenDates(scanCtx, from, before, stdTypes)
+	if err != nil {
+		log.Debug().
+			Err(err).
+			Str("container", containerService.Container.ID).
+			Time("before", before).
+			Time("from", from).
+			Int("cachedHits", len(cached)).
+			Bool("cachedHasMore", cachedHasMore).
+			Msg("cached search fallback scan failed")
+		return cached, cachedHasMore
+	}
+
+	candidates := append([]*container.LogEvent{}, cached...)
+	directMatches := 0
+	for event := range directLogs {
+		if event == nil || !match(event) {
+			continue
+		}
+		candidates = append(candidates, event)
+		directMatches++
+	}
+	if len(candidates) == 0 {
+		log.Debug().
+			Str("container", containerService.Container.ID).
+			Time("before", before).
+			Time("from", from).
+			Int("cachedHits", len(cached)).
+			Int("directHits", directMatches).
+			Bool("cachedHasMore", cachedHasMore).
+			Msg("cached search fallback found no matches")
+		return cached, cachedHasMore
+	}
+
+	byKey := make(map[string]*container.LogEvent, len(candidates))
+	for _, event := range candidates {
+		if event == nil {
+			continue
+		}
+		key := fmt.Sprintf("%s:%d:%d:%s", event.ContainerID, event.Timestamp, event.Id, event.RawMessage)
+		if _, exists := byKey[key]; !exists {
+			byKey[key] = event
+		}
+	}
+
+	merged := make([]*container.LogEvent, 0, len(byKey))
+	for _, event := range byKey {
+		merged = append(merged, event)
+	}
+	slices.SortFunc(merged, func(a, b *container.LogEvent) int {
+		if a.Timestamp != b.Timestamp {
+			if a.Timestamp > b.Timestamp {
+				return -1
+			}
+			return 1
+		}
+		if a.Id != b.Id {
+			if a.Id > b.Id {
+				return -1
+			}
+			return 1
+		}
+		return strings.Compare(a.RawMessage, b.RawMessage)
+	})
+
+	hasMore := cachedHasMore || len(merged) > limit
+	mergedCount := len(merged)
+	if len(merged) > limit {
+		merged = merged[:limit]
+	}
+	log.Debug().
+		Str("container", containerService.Container.ID).
+		Time("before", before).
+		Time("from", from).
+		Int("cachedHits", len(cached)).
+		Int("directHits", directMatches).
+		Int("mergedHits", mergedCount).
+		Int("returnedHits", len(merged)).
+		Int("limit", limit).
+		Bool("cachedHasMore", cachedHasMore).
+		Bool("hasMore", hasMore).
+		Msg("cached search fallback merged direct scan results")
+	return merged, hasMore
 }
 
 func (h *handler) resolveLabels(r *http.Request) container.ContainerLabels {
@@ -310,6 +435,7 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		events, hasMore = mergeCachedSearchWithDirect(r.Context(), containerService, before, limit, stdTypes, match, events, hasMore)
 		if hasMore {
 			w.Header().Set("X-Has-More", "true")
 		}

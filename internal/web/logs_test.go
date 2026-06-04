@@ -545,6 +545,75 @@ func Test_handler_between_dates_with_everything_complex(t *testing.T) {
 	mockedClient.AssertExpectations(t)
 }
 
+type cachedSearchFallbackClientService struct {
+	container_support.ClientService
+	events []*container.LogEvent
+}
+
+func (s *cachedSearchFallbackClientService) LogsBetweenDates(ctx context.Context, c container.Container, from time.Time, to time.Time, stdTypes container.StdType) (<-chan *container.LogEvent, error) {
+	ch := make(chan *container.LogEvent, len(s.events))
+	for _, event := range s.events {
+		ch <- event
+	}
+	close(ch)
+	return ch, nil
+}
+
+func Test_mergeCachedSearchWithDirect_merges_direct_hits_for_cache_holes(t *testing.T) {
+	id := "123456"
+	before := time.Date(2026, time.June, 4, 12, 0, 0, 0, time.UTC)
+	cached := []*container.LogEvent{
+		{
+			Type:        container.LogTypeSingle,
+			Message:     "needle newest cached",
+			RawMessage:  "needle newest cached",
+			Timestamp:   time.Date(2026, time.June, 4, 11, 50, 0, 0, time.UTC).UnixMilli(),
+			Id:          101,
+			Level:       "info",
+			Stream:      "stdout",
+			ContainerID: id,
+		},
+		{
+			Type:        container.LogTypeSingle,
+			Message:     "needle oldest cached",
+			RawMessage:  "needle oldest cached",
+			Timestamp:   time.Date(2026, time.June, 4, 7, 40, 0, 0, time.UTC).UnixMilli(),
+			Id:          102,
+			Level:       "info",
+			Stream:      "stdout",
+			ContainerID: id,
+		},
+	}
+	service := container_support.NewContainerService(&cachedSearchFallbackClientService{
+		events: []*container.LogEvent{
+			{
+				Type:        container.LogTypeSingle,
+				Message:     "needle missing direct hit",
+				RawMessage:  "needle missing direct hit",
+				Timestamp:   time.Date(2026, time.June, 4, 11, 32, 0, 0, time.UTC).UnixMilli(),
+				Id:          103,
+				Level:       "info",
+				Stream:      "stdout",
+				ContainerID: id,
+			},
+		},
+	}, container.Container{
+		ID:      id,
+		Host:    "localhost",
+		Created: time.Date(2026, time.June, 4, 6, 0, 0, 0, time.UTC),
+	})
+
+	events, hasMore := mergeCachedSearchWithDirect(t.Context(), service, before, 10, container.STDALL, func(event *container.LogEvent) bool {
+		return strings.Contains(event.RawMessage, "needle")
+	}, cached, false)
+
+	require.False(t, hasMore)
+	require.Len(t, events, 3)
+	assert.Equal(t, "needle newest cached", events[0].RawMessage)
+	assert.Equal(t, "needle missing direct hit", events[1].RawMessage)
+	assert.Equal(t, "needle oldest cached", events[2].RawMessage)
+}
+
 func Test_matchesFilter_inverse(t *testing.T) {
 	levels := map[string]struct{}{"info": {}}
 

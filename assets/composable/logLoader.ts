@@ -24,6 +24,10 @@ function realLogOverlapsGap(log: LogEntry<LogMessage>, gap: CacheGapLogEntry) {
   );
 }
 
+function getCursorLogId(log?: LogEntry<LogMessage>) {
+  return log && Number.isInteger(log.id) && log.id > 0 ? log.id : undefined;
+}
+
 export function useLogLoader(
   messages: ShallowRef<LogEntry<LogMessage>[]>,
   containers: Ref<Container[]>,
@@ -142,7 +146,7 @@ export function useLogLoader(
           const from = new Date(to.getTime() + (delta !== 0 ? delta : -60_000));
           return loadBetween(c, params, from, to, {
             min: minPerContainer,
-            lastSeenId: earliest?.id,
+            lastSeenId: getCursorLogId(earliest),
           });
         }),
       );
@@ -194,7 +198,7 @@ export function useLogLoader(
       }
       const results = await Promise.all(
         containers.value.map((c) => {
-          const lastSeenId = c.id === ownerContainerID ? entry.lastSkippedLog.id : undefined;
+          const lastSeenId = c.id === ownerContainerID ? getCursorLogId(entry.lastSkippedLog) : undefined;
           return loadBetween(c, params, from, to, { lastSeenId });
         }),
       );
