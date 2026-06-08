@@ -82,7 +82,7 @@ func newCacheGapEvent(containerID string, from, to time.Time) cacheGapEvent {
 	ts := from.UnixMilli()
 	return cacheGapEvent{
 		Type:        "cache-gap",
-		Message:     "not found in cache, fetching from docker logs",
+		Message:     "trying to fetch from docker logs",
 		Timestamp:   ts,
 		Id:          -ts,
 		Level:       "info",

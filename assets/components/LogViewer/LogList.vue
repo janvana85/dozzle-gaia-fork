@@ -55,6 +55,10 @@ const realMessages = computed(() =>
       !(message instanceof CacheGapLogEntry),
   ),
 );
+const enableProgressTracking = computed(
+  () => containers.value.length === 1 && realMessages.value.length > 1 && realMessages.value.length <= 1500,
+);
+const progressTargets = computed(() => (enableProgressTracking.value ? list.value : []));
 
 const list = ref<HTMLElement[]>([]);
 
@@ -71,7 +75,7 @@ function entryDomId(item: LogEntry<LogMessage>) {
 
 let previousDate = new Date();
 watchEffect(() => {
-  hasProgress.value = containers.value.length === 1 && realMessages.value.length > 1;
+  hasProgress.value = enableProgressTracking.value;
   if (!hasProgress.value) {
     progress.value = 1;
     currentDate.value = new Date();
@@ -79,9 +83,9 @@ watchEffect(() => {
 });
 
 useIntersectionObserver(
-  list,
+  progressTargets,
   (entries) => {
-    if (containers.value.length != 1) return;
+    if (!enableProgressTracking.value) return;
     const firstLog = realMessages.value[0];
     const lastLog = realMessages.value.at(-1);
     if (!firstLog || !lastLog) return;
@@ -122,6 +126,9 @@ ul {
 
   > li {
     @apply flex px-2 py-1 break-words last:snap-end odd:bg-gray-400/[0.07] md:px-4;
+    contain: layout style paint;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 28px;
     &:last-child {
       scroll-margin-block-end: 5rem;
     }

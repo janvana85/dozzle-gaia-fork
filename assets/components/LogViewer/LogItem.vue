@@ -5,14 +5,14 @@
     <LogStd :std="logEntry.std" class="shrink-0 select-none" v-if="showStd" />
 
     <div class="flex gap-x-2 gap-y-1 group-[.compact]:gap-y-0 has-[>_*:nth-of-type(2)]:flex-col-reverse md:flex-row!">
-      <RandomColorTag class="w-30 shrink-0 select-none md:w-40" :value="host.name" v-if="showHostname" />
+      <RandomColorTag class="w-30 shrink-0 select-none md:w-40" :value="hostName" v-if="showHostname" />
       <RandomColorTag
         v-if="showContainerName"
         class="w-30 shrink-0 select-none group-[.compact]:flex-1 md:w-40"
-        :value="container.id"
+        :value="containerId"
         truncateRight
       >
-        {{ container.name }}
+        {{ containerName }}
       </RandomColorTag>
       <LogDate v-if="showTimestamp" :date="logEntry.date" class="shrink-0 select-none" />
     </div>
@@ -31,5 +31,8 @@ const { currentContainer } = useContainerStore();
 const { hosts } = useHosts();
 
 const container = currentContainer(toRef(() => logEntry.containerID));
-const host = computed(() => hosts.value[container.value.host]);
+const host = computed(() => (container.value ? hosts.value[container.value.host] : undefined));
+const containerId = computed(() => container.value?.id ?? logEntry.containerID ?? "unknown");
+const containerName = computed(() => container.value?.name ?? logEntry.containerID ?? "unknown");
+const hostName = computed(() => host.value?.name ?? container.value?.host ?? "unknown");
 </script>

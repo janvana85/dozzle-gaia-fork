@@ -24,6 +24,7 @@ const root = ref<HTMLElement>();
 useIntersectionObserver(root, async (entries) => {
   if (entries[0].intersectionRatio <= 0) return;
   if (isLoading.value) return;
+  if (logEntry.disabled) return;
   const scrollingParent = root.value?.closest("[data-scrolling]") || document.documentElement;
   const previousHeight = scrollingParent.scrollHeight;
   isLoading.value = true;

@@ -23,7 +23,7 @@ function entry(containerID: string, id: number, tsSeconds: number): SimpleLogEnt
 
 function gap(containerID: string, fromSeconds: number, toSeconds: number): CacheGapLogEntry {
   return new CacheGapLogEntry(
-    "not found in cache, fetching from docker logs",
+    "trying to fetch from docker logs",
     containerID,
     -fromSeconds,
     new Date(fromSeconds * 1000),
@@ -139,8 +139,7 @@ describe("useLogLoader.loadOlderLogs (merged history)", () => {
 
     await loadOlderLogs(loader);
 
-    expect(messages.value.some((log) => log instanceof CacheGapLogEntry)).toBe(false);
-    expect(messages.value.map((log) => log.id)).toContain(99);
+    expect(messages.value.slice(1).map((log) => log.id)).toEqual([99, 101]);
   });
 
   test("keeps a cache gap placeholder when the only real log is on the gap boundary", async () => {
@@ -161,7 +160,7 @@ describe("useLogLoader.loadOlderLogs (merged history)", () => {
   test("uses cache-gap next chunk hints to jump directly across large retained gaps", async () => {
     const loader = new LoadMoreLogEntry(new Date(), async () => {});
     const jumpGap = new CacheGapLogEntry(
-      "not found in cache, fetching from docker logs",
+      "trying to fetch from docker logs",
       "a",
       -20,
       new Date(20 * 1000),
@@ -206,5 +205,33 @@ describe("useLogLoader.loadOlderLogs (merged history)", () => {
       expect.any(Date),
       { min: 100, lastSeenId: undefined },
     );
+  });
+
+  test("stops retrying when no older retained logs are available", async () => {
+    const loader = new LoadMoreLogEntry(new Date(), async () => {});
+    const messages = shallowRef<LogEntry<LogMessage>[]>([loader, entry("a", 100, 100)]);
+    const containers = shallowRef([container("a")]);
+    const { loadOlderLogs } = setup(messages, containers);
+
+    loadBetween.mockResolvedValue(ok([]));
+
+    await loadOlderLogs(loader);
+
+    expect(loader.disabled).toBe(true);
+    expect(loader.label).toBe("Start of retained history");
+  });
+
+  test("stops retrying when a fetch makes no progress", async () => {
+    const loader = new LoadMoreLogEntry(new Date(), async () => {});
+    const messages = shallowRef<LogEntry<LogMessage>[]>([loader, entry("a", 100, 100)]);
+    const containers = shallowRef([container("a")]);
+    const { loadOlderLogs } = setup(messages, containers);
+
+    loadBetween.mockResolvedValue(ok([entry("a", 100, 100)]));
+
+    await loadOlderLogs(loader);
+
+    expect(loader.disabled).toBe(true);
+    expect(loader.label).toBe("Start of retained history");
   });
 });

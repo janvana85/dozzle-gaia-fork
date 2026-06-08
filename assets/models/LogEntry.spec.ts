@@ -1,13 +1,14 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { ref } from "vue";
 import {
   asLogEntry,
   CacheGapLogEntry,
   ComplexLogEntry,
   GroupedLogEntry,
+  LoadMoreLogEntry,
   SimpleLogEntry,
   SkippedLogsEntry,
   type LogEvent,
@@ -49,14 +50,14 @@ describe("asLogEntry dispatch", () => {
     const entry = asLogEntry(
       event({
         t: "cache-gap",
-        m: "not found in cache, fetching from docker logs",
+        m: "trying to fetch from docker logs",
         id: -1,
         from: "2026-06-03T10:00:00Z",
         to: "2026-06-03T10:05:00Z",
       }),
     );
     expect(entry).toBeInstanceOf(CacheGapLogEntry);
-    expect(entry.message).toBe("not found in cache, fetching from docker logs");
+    expect(entry.message).toBe("trying to fetch from docker logs");
     expect((entry as CacheGapLogEntry).from.toISOString()).toBe("2026-06-03T10:00:00.000Z");
     expect((entry as CacheGapLogEntry).to.toISOString()).toBe("2026-06-03T10:05:00.000Z");
   });
@@ -115,6 +116,12 @@ describe("ComplexLogEntry filtering", () => {
     const entry = new ComplexLogEntry(message, "c", 1, new Date(), "info", "stdout", "raw", visibleKeys);
     expect(Object.keys(entry.message)).toEqual(["a.b", "c"]);
   });
+
+  test("legacy dotted-string keys do not crash filtering", () => {
+    const visibleKeys = ref(new Map<any, boolean>([["a.b", true]]));
+    const entry = new ComplexLogEntry(message, "c", 1, new Date(), "info", "stdout", "raw", visibleKeys as any);
+    expect(entry.message).toEqual({ "a.b": 1, c: 2 });
+  });
 });
 
 describe("SkippedLogsEntry", () => {
@@ -131,5 +138,19 @@ describe("SkippedLogsEntry", () => {
     expect(entry.message).toBe("Skipped 5 entries");
     expect(entry.totalSkipped).toBe(5);
     expect(entry.lastSkippedLog).toBe(newLast);
+  });
+});
+
+describe("LoadMoreLogEntry", () => {
+  test("can be stopped to prevent repeated history fetch attempts", async () => {
+    const loader = vi.fn();
+    const entry = new LoadMoreLogEntry(new Date(), loader);
+
+    entry.stop();
+    await entry.loadMore();
+
+    expect(entry.disabled).toBe(true);
+    expect(entry.label).toBe("Start of retained history");
+    expect(loader).not.toHaveBeenCalled();
   });
 });

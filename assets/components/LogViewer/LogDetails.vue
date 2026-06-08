@@ -72,6 +72,7 @@
 
 <script setup lang="ts">
 import { ComplexLogEntry } from "@/models/LogEntry";
+import { normalizeVisibleKeyPath } from "@/utils";
 import { UseClipboard } from "@vueuse/components";
 
 const { entry } = defineProps<{ entry: ComplexLogEntry }>();
@@ -104,8 +105,9 @@ const fields = computed({
       }
     } else {
       for (const [key, enabled] of visibleKeys.value) {
-        const value = getDeep(rawFields, key);
-        fieldsWithValue.push({ key, value, enabled });
+        const normalizedKey = normalizeVisibleKeyPath(key);
+        const value = getDeep(rawFields, normalizedKey);
+        fieldsWithValue.push({ key: normalizedKey, value, enabled });
       }
 
       for (const [key, value] of allFields) {

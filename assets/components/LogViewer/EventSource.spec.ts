@@ -306,7 +306,7 @@ describe("<ContainerEventSource />", () => {
     const wrapper = createLogEventSource();
     sources[sourceUrl].emitOpen();
     sources[sourceUrl].emit("logs-backfill", {
-      data: `[{"t":"cache-gap","m":"not found in cache, fetching from docker logs","ts":1560336882459,"id":-1,"l":"info","s":"stderr","c":"abc","rm":"not found in cache, fetching from docker logs","from":"2026-06-03T10:00:00Z","to":"2026-06-03T11:00:00Z","nextFrom":"2026-06-01T10:00:00Z","nextTo":"2026-06-01T10:01:00Z"}]`,
+      data: `[{"t":"cache-gap","m":"trying to fetch from docker logs","ts":1560336882459,"id":-1,"l":"info","s":"stderr","c":"abc","rm":"trying to fetch from docker logs","from":"2026-06-03T10:00:00Z","to":"2026-06-03T11:00:00Z","nextFrom":"2026-06-01T10:00:00Z","nextTo":"2026-06-01T10:01:00Z"}]`,
     });
     await nextTick();
 

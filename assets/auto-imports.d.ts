@@ -69,6 +69,7 @@ declare global {
   const globalShowPopup: typeof import('./composable/popup').globalShowPopup
   const groupContainers: typeof import('./stores/settings').groupContainers
   const h: typeof import('vue').h
+  const hasNormalizedVisibleKeys: typeof import('./utils/index').hasNormalizedVisibleKeys
   const hashCode: typeof import('./utils/index').hashCode
   const highlightSubstringInHtml: typeof import('./utils/index').highlightSubstringInHtml
   const hourStyle: typeof import('./stores/settings').hourStyle
@@ -97,6 +98,8 @@ declare global {
   const markRaw: typeof import('vue').markRaw
   const menuWidth: typeof import('./stores/settings').menuWidth
   const nextTick: typeof import('vue').nextTick
+  const normalizeVisibleKeyPath: typeof import('./utils/index').normalizeVisibleKeyPath
+  const normalizeVisibleKeysMap: typeof import('./utils/index').normalizeVisibleKeysMap
   const onActivated: typeof import('vue').onActivated
   const onBeforeMount: typeof import('vue').onBeforeMount
   const onBeforeRouteLeave: typeof import('vue-router').onBeforeRouteLeave
@@ -437,6 +440,9 @@ declare global {
   export type { Host } from './stores/hosts'
   import('./stores/hosts')
   // @ts-ignore
+  export type { K8sNamespace, K8sOwner } from './stores/k8s.js'
+  import('./stores/k8s.js')
+  // @ts-ignore
   export type { K8sNamespace, K8sOwner } from './stores/k8s'
   import('./stores/k8s')
   // @ts-ignore
@@ -511,6 +517,7 @@ declare module 'vue' {
     readonly globalShowPopup: UnwrapRef<typeof import('./composable/popup')['globalShowPopup']>
     readonly groupContainers: UnwrapRef<typeof import('./stores/settings')['groupContainers']>
     readonly h: UnwrapRef<typeof import('vue')['h']>
+    readonly hasNormalizedVisibleKeys: UnwrapRef<typeof import('./utils/index')['hasNormalizedVisibleKeys']>
     readonly hashCode: UnwrapRef<typeof import('./utils/index')['hashCode']>
     readonly hourStyle: UnwrapRef<typeof import('./stores/settings')['hourStyle']>
     readonly ignorableWatch: UnwrapRef<typeof import('@vueuse/core')['ignorableWatch']>
@@ -538,6 +545,8 @@ declare module 'vue' {
     readonly markRaw: UnwrapRef<typeof import('vue')['markRaw']>
     readonly menuWidth: UnwrapRef<typeof import('./stores/settings')['menuWidth']>
     readonly nextTick: UnwrapRef<typeof import('vue')['nextTick']>
+    readonly normalizeVisibleKeyPath: UnwrapRef<typeof import('./utils/index')['normalizeVisibleKeyPath']>
+    readonly normalizeVisibleKeysMap: UnwrapRef<typeof import('./utils/index')['normalizeVisibleKeysMap']>
     readonly onActivated: UnwrapRef<typeof import('vue')['onActivated']>
     readonly onBeforeMount: UnwrapRef<typeof import('vue')['onBeforeMount']>
     readonly onBeforeRouteLeave: UnwrapRef<typeof import('vue-router')['onBeforeRouteLeave']>

@@ -1,5 +1,5 @@
 import { Component, ComputedRef, Ref } from "vue";
-import { flattenJSON } from "@/utils";
+import { flattenJSON, normalizeVisibleKeyPath } from "@/utils";
 import ComplexLogItem from "@/components/LogViewer/ComplexLogItem.vue";
 import SimpleLogItem from "@/components/LogViewer/SimpleLogItem.vue";
 import GroupedLogItem from "@/components/LogViewer/GroupedLogItem.vue";
@@ -126,7 +126,7 @@ export class ComplexLogEntry extends LogEntry<JSONObject> {
           const flatJSON = flattenJSON(message);
           const filteredJSON: Record<string, any> = {};
           for (const [keys, enabled] of visibleKeys.value.entries()) {
-            const key = keys.join(".");
+            const key = normalizeVisibleKeyPath(keys).join(".");
             if (!enabled) {
               delete flatJSON[key];
               continue;
@@ -223,6 +223,7 @@ export class SkippedLogsEntry extends LogEntry<string> {
 }
 
 export class LoadMoreLogEntry extends LogEntry<string> {
+  private _disabled = false;
   constructor(
     date: Date,
     private readonly loader: (i: LoadMoreLogEntry) => Promise<void>,
@@ -239,11 +240,21 @@ export class LoadMoreLogEntry extends LogEntry<string> {
     return (this as { __label?: string }).__label;
   }
 
+  public get disabled(): boolean {
+    return this._disabled;
+  }
+
+  public stop(label = "Start of retained history") {
+    (this as { __label?: string }).__label = label;
+    this._disabled = true;
+  }
+
   getComponent(): Component {
     return LoadMoreLogItem;
   }
 
   async loadMore(): Promise<void> {
+    if (this._disabled) return;
     await this.loader(this);
   }
 }
@@ -273,7 +284,7 @@ export function asLogEntry(event: LogEvent): LogEntry<LogMessage> {
   switch (event.t) {
     case "cache-gap":
       return new CacheGapLogEntry(
-        (event.m as string) || "not found in cache, fetching from docker logs",
+        (event.m as string) || "trying to fetch from docker logs",
         event.c,
         event.id,
         new Date(event.ts),

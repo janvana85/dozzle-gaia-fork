@@ -2,20 +2,15 @@
   <div
     class="dropdown dropdown-hover absolute -left-2 z-10 font-sans"
     :class="shouldShowBelow ? 'dropdown-right' : 'dropdown-right dropdown-end'"
-    v-show="container"
     ref="dropdownRef"
     @mouseenter="checkDropdownPosition"
   >
     <router-link
-      v-if="isSearching"
+      v-if="isSearching && contextRoute"
       @click="resetSearch()"
       tabindex="0"
       class="btn btn-square btn-xs border-base-content/20 bg-base-100 pointer-events-auto! opacity-0 shadow-sm group-hover/entry:opacity-90"
-      :to="{
-        name: '/container/[id].time.[datetime]',
-        params: { id: container.id, datetime: logEntry.date.toISOString() },
-        query: { logId: logEntry.id },
-      }"
+      :to="contextRoute"
     >
       <material-symbols:eye-tracking />
     </router-link>
@@ -31,15 +26,8 @@
       class="menu dropdown-content rounded-box bg-base-200 border-base-content/20 z-50 w-52 border p-1 text-sm shadow-sm"
       @click="hideMenu"
     >
-      <li v-if="isSearching">
-        <router-link
-          @click="resetSearch()"
-          :to="{
-            name: '/container/[id].time.[datetime]',
-            params: { id: container.id, datetime: logEntry.date.toISOString() },
-            query: { logId: logEntry.id },
-          }"
-        >
+      <li v-if="isSearching && contextRoute">
+        <router-link @click="resetSearch()" :to="contextRoute">
           <material-symbols:eye-tracking />
           {{ $t("action.see-in-context") }}
         </router-link>
@@ -73,7 +61,7 @@
           {{ $t("action.show-details") }}
         </a>
       </li>
-      <li>
+      <li v-if="container">
         <a @click="createAlert()">
           <mdi:bell />
           {{ $t("action.create-alert") }}
@@ -92,7 +80,7 @@ import AlertForm from "@/components/Notification/AlertForm.vue";
 
 const { logEntry, container } = defineProps<{
   logEntry: LogEntry<string | JSONObject>;
-  container: Container;
+  container?: Container;
 }>();
 
 const { showToast } = useToast();
@@ -102,6 +90,17 @@ const { isSearching, resetSearch } = useSearchFilter();
 
 const { copy, isSupported, copied } = useClipboard();
 const { t } = useI18n();
+const contextRoute = computed(() => {
+  if (!logEntry.containerID) {
+    return undefined;
+  }
+
+  return {
+    name: "/container/[id].time.[datetime]" as const,
+    params: { id: logEntry.containerID, datetime: logEntry.date.toISOString() },
+    query: { logId: logEntry.id },
+  };
+});
 
 async function copyLogMessage() {
   if (!isSupported.value) {
@@ -129,14 +128,10 @@ async function copyLogMessage() {
 }
 
 async function copyPermalink() {
-  if (!isSupported.value) {
+  if (!isSupported.value || !contextRoute.value) {
     return;
   }
-  const url = router.resolve({
-    name: "/container/[id].time.[datetime]",
-    params: { id: container.id, datetime: logEntry.date.toISOString() },
-    query: { logId: logEntry.id },
-  }).href;
+  const url = router.resolve(contextRoute.value).href;
 
   const resolved = new URL(url, window.location.origin);
 
@@ -155,6 +150,9 @@ async function copyPermalink() {
 }
 
 function createAlert() {
+  if (!container) {
+    return;
+  }
   const containerExpr = `name contains "${container.name}"`;
   let logExpr = "";
   if (logEntry.level && logEntry.level !== "unknown") {

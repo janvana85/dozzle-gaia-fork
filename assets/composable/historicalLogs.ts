@@ -87,10 +87,18 @@ export function useHistoricalContainerLog(historicalContainer: Ref<HistoricalCon
       }
 
       if (!logs.length) {
+        entry.stop("Start of retained history");
+        messages.value = [...messages.value];
         return;
       }
 
       const [loader, ...rest] = messages.value;
+      const madeProgress = logs[0].date.getTime() < item.date.getTime();
+      if (!madeProgress) {
+        entry.stop("Start of retained history");
+        messages.value = [...messages.value];
+        return;
+      }
       messages.value = [loader, ...logs, ...rest];
     } catch (error) {
       console.error(error);

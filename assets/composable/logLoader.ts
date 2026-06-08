@@ -15,9 +15,13 @@ function sortByDateAsc<T extends { date: Date }>(logs: T[]) {
   return logs.sort((a, b) => a.date.getTime() - b.date.getTime());
 }
 
+function isCacheGapEntry(log: LogEntry<LogMessage> | undefined): log is CacheGapLogEntry {
+  return !!log && ("from" in log || log.constructor?.name === "CacheGapLogEntry");
+}
+
 function realLogOverlapsGap(log: LogEntry<LogMessage>, gap: CacheGapLogEntry) {
   return (
-    !(log instanceof CacheGapLogEntry) &&
+    !isCacheGapEntry(log) &&
     log.containerID === gap.containerID &&
     log.date.getTime() >= gap.from.getTime() &&
     log.date.getTime() < gap.to.getTime()
@@ -26,6 +30,15 @@ function realLogOverlapsGap(log: LogEntry<LogMessage>, gap: CacheGapLogEntry) {
 
 function getCursorLogId(log?: LogEntry<LogMessage>) {
   return log && Number.isInteger(log.id) && log.id > 0 ? log.id : undefined;
+}
+
+function stopAtRetainedHistory(loader: LoadMoreLogEntry, messages: ShallowRef<LogEntry<LogMessage>[]>) {
+  loader.stop("Start of retained history");
+  messages.value = [...messages.value];
+}
+
+function logKey(log: LogEntry<LogMessage>) {
+  return `${log.containerID ?? ""}:${log.id}`;
 }
 
 export function useLogLoader(
@@ -137,7 +150,7 @@ export function useLogLoader(
       const results = await Promise.all(
         containers.value.map((c) => {
           const earliest = earliestByContainer.get(c.id);
-          if (earliest instanceof CacheGapLogEntry && earliest.nextFrom && earliest.nextTo) {
+          if (isCacheGapEntry(earliest) && earliest.nextFrom && earliest.nextTo) {
             return loadBetween(c, params, earliest.nextFrom, earliest.nextTo, { min: minPerContainer });
           }
           const to = earliest?.date ?? existingLogs[0].date;
@@ -168,15 +181,27 @@ export function useLogLoader(
         const byKey = new Map<string, LogEntry<LogMessage>>();
         for (const log of candidates) {
           if (log == null) continue;
-          if (log instanceof CacheGapLogEntry && candidates.some((candidate) => realLogOverlapsGap(candidate, log))) {
+          if (isCacheGapEntry(log) && candidates.some((candidate) => realLogOverlapsGap(candidate, log))) {
             continue;
           }
-          const key = `${log.containerID ?? ""}:${log.id}`;
+          const key = logKey(log);
           if (!byKey.has(key)) byKey.set(key, log);
         }
         const merged = [...byKey.values()].sort((a, b) => a.date.getTime() - b.date.getTime());
+        const previousKeys = existingLogs.map((log) => logKey(log)).join("|");
+        const mergedKeys = merged.map((log) => logKey(log)).join("|");
+        const madeProgress =
+          mergedKeys !== previousKeys ||
+          (!!merged[0] && !!existingLogs[0] && merged[0].date.getTime() < existingLogs[0].date.getTime());
+        if (!madeProgress) {
+          stopAtRetainedHistory(loader, messages);
+          return;
+        }
         messages.value = [loader, ...merged];
+        return;
       }
+
+      stopAtRetainedHistory(loader, messages);
     } catch (err) {
       console.error(err);
     } finally {
