@@ -38,6 +38,7 @@ type Manager struct {
 	quietHours          QuietHoursConfig
 	logStoreCh          chan<- *container.LogEvent
 	quietHoursMu        sync.RWMutex
+	quietSummaryMu      sync.Mutex
 }
 
 // NewManager creates a new notification manager.
@@ -244,6 +245,8 @@ func (m *Manager) flushQueue() {
 	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	defer cancel()
 
+	m.flushQuietSummaries()
+
 	items, err := m.queue.DrainReady(ctx)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to drain notification queue")
@@ -258,6 +261,25 @@ func (m *Manager) flushQueue() {
 	m.queue.CleanupAlertState(25 * time.Hour)
 	m.queue.CleanupUniqueState(49 * time.Hour)
 	m.queue.CleanupCooldowns()
+	m.queue.CleanupQuietPeriodModes(time.Now())
+}
+
+func (m *Manager) flushQuietSummaries() {
+	summaries, err := m.queue.DueQuietSummaries(time.Now())
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to load quiet-hours summaries")
+		return
+	}
+	for _, summary := range summaries {
+		notification := renderQuietSummary(summary, m.GetQuietHours().MaxSummaryGroups())
+		if err := m.queue.Enqueue(notification, time.Now()); err != nil {
+			log.Warn().Err(err).Str("summary_key", summary.Key).Msg("Failed to queue quiet-hours summary")
+			continue
+		}
+		if err := m.queue.DeleteQuietSummary(summary.Key); err != nil {
+			log.Warn().Err(err).Str("summary_key", summary.Key).Msg("Failed to remove queued quiet-hours summary")
+		}
+	}
 }
 
 func (m *Manager) deliverQueuedNotification(item queue.QueuedNotification) {

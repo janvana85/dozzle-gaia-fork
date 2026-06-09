@@ -45,65 +45,92 @@
               </div>
               <p class="text-base-content/50 text-xs">{{ $t("notifications.settings.quiet-hours-hint") }}</p>
 
-              <!-- Stacking settings -->
-              <div class="divider my-2 text-xs">{{ $t("notifications.settings.stacking") }}</div>
-              <div class="flex items-center gap-3">
-                <div>
-                  <label class="label text-sm">{{ $t("notifications.settings.stack-threshold") }}</label>
-                  <input
-                    type="number"
-                    v-model.number="quietHours.stackThreshold"
-                    min="2"
-                    max="20"
-                    class="input input-sm focus:input-primary w-24"
-                    @change="saveQuietHours"
-                  />
-                </div>
-                <div>
-                  <label class="label text-sm">{{ $t("notifications.settings.stack-window") }}</label>
-                  <input
-                    type="number"
-                    v-model.number="quietHours.stackWindow"
-                    min="1"
-                    max="1440"
-                    class="input input-sm focus:input-primary w-24"
-                    @change="saveQuietHours"
-                  />
-                </div>
-                <div>
-                  <label class="label text-sm">{{ $t("notifications.settings.stacked-priority") }}</label>
-                  <input
-                    type="number"
-                    v-model.number="quietHours.stackedPriority"
-                    min="1"
-                    max="5"
-                    class="input input-sm focus:input-primary w-24"
-                    @change="saveQuietHours"
-                  />
-                </div>
-              </div>
-
-              <!-- Topic routing -->
-              <div class="divider my-2 text-xs">{{ $t("notifications.settings.topic-routing") }}</div>
-              <div>
-                <label class="label text-sm">{{ $t("notifications.settings.quiet-topic") }}</label>
-                <input
-                  type="text"
-                  v-model="quietHours.quietTopic"
-                  placeholder="alerts-quiet"
-                  class="input input-sm focus:input-primary w-full"
-                  @change="saveQuietHours"
-                />
-              </div>
-              <label class="mt-2 flex cursor-pointer items-center gap-3">
+              <div class="divider my-2 text-xs">{{ $t("notifications.settings.summary") }}</div>
+              <label class="flex cursor-pointer items-center gap-3">
                 <input
                   type="checkbox"
-                  v-model="quietHours.stackedUsesQuietTopic"
+                  v-model="quietHours.groupNotifications"
                   class="checkbox checkbox-primary checkbox-sm"
                   @change="saveQuietHours"
                 />
-                <span class="text-sm">{{ $t("notifications.settings.stacked-uses-quiet-topic") }}</span>
+                <span class="text-sm">{{ $t("notifications.settings.group-notifications") }}</span>
               </label>
+              <div v-if="quietHours.groupNotifications">
+                <label class="label text-sm">{{ $t("notifications.settings.summary-max-groups") }}</label>
+                <input
+                  type="number"
+                  v-model.number="quietHours.summaryMaxGroups"
+                  min="1"
+                  max="50"
+                  class="input input-sm focus:input-primary w-24"
+                  @change="saveQuietHours"
+                />
+                <p class="text-base-content/50 mt-1 text-xs">
+                  {{ $t("notifications.settings.summary-hint") }}
+                </p>
+              </div>
+
+              <template v-else>
+                <!-- Stacking settings -->
+                <div class="divider my-2 text-xs">{{ $t("notifications.settings.stacking") }}</div>
+                <div class="flex items-center gap-3">
+                  <div>
+                    <label class="label text-sm">{{ $t("notifications.settings.stack-threshold") }}</label>
+                    <input
+                      type="number"
+                      v-model.number="quietHours.stackThreshold"
+                      min="2"
+                      max="20"
+                      class="input input-sm focus:input-primary w-24"
+                      @change="saveQuietHours"
+                    />
+                  </div>
+                  <div>
+                    <label class="label text-sm">{{ $t("notifications.settings.stack-window") }}</label>
+                    <input
+                      type="number"
+                      v-model.number="quietHours.stackWindow"
+                      min="1"
+                      max="1440"
+                      class="input input-sm focus:input-primary w-24"
+                      @change="saveQuietHours"
+                    />
+                  </div>
+                  <div>
+                    <label class="label text-sm">{{ $t("notifications.settings.stacked-priority") }}</label>
+                    <input
+                      type="number"
+                      v-model.number="quietHours.stackedPriority"
+                      min="1"
+                      max="5"
+                      class="input input-sm focus:input-primary w-24"
+                      @change="saveQuietHours"
+                    />
+                  </div>
+                </div>
+
+                <!-- Topic routing -->
+                <div class="divider my-2 text-xs">{{ $t("notifications.settings.topic-routing") }}</div>
+                <div>
+                  <label class="label text-sm">{{ $t("notifications.settings.quiet-topic") }}</label>
+                  <input
+                    type="text"
+                    v-model="quietHours.quietTopic"
+                    placeholder="alerts-quiet"
+                    class="input input-sm focus:input-primary w-full"
+                    @change="saveQuietHours"
+                  />
+                </div>
+                <label class="mt-2 flex cursor-pointer items-center gap-3">
+                  <input
+                    type="checkbox"
+                    v-model="quietHours.stackedUsesQuietTopic"
+                    class="checkbox checkbox-primary checkbox-sm"
+                    @change="saveQuietHours"
+                  />
+                  <span class="text-sm">{{ $t("notifications.settings.stacked-uses-quiet-topic") }}</span>
+                </label>
+              </template>
 
               <!-- Timezone -->
               <div class="divider my-2 text-xs">{{ $t("notifications.settings.timezone-section") }}</div>
@@ -316,6 +343,8 @@ const quietHours = ref({
   start: "22:00",
   end: "08:00",
   timezone: "",
+  groupNotifications: true,
+  summaryMaxGroups: 10,
   stackThreshold: 3,
   stackWindow: 15,
   stackedPriority: 4,
@@ -353,6 +382,8 @@ async function fetchQuietHours() {
     serverNowLabel.value = data.serverNowLabel || "";
     quietHours.value = {
       ...data,
+      groupNotifications: data.groupNotifications ?? true,
+      summaryMaxGroups: data.summaryMaxGroups || 10,
       stackWindow: Math.round((data.stackWindow || 900) / 60),
     };
   }

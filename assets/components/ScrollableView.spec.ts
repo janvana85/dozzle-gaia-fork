@@ -45,6 +45,7 @@ describe("<ScrollableView />", () => {
 
   test("pauses live follow when the user scrolls up away from the bottom", async () => {
     const wrapper = mountView();
+    await vi.advanceTimersByTimeAsync(150);
     const scrollRoot = wrapper.find("main").element as HTMLElement;
 
     Object.defineProperty(scrollRoot, "scrollHeight", { configurable: true, value: 2_000 });
@@ -63,6 +64,7 @@ describe("<ScrollableView />", () => {
 
   test("follow button resumes live follow explicitly", async () => {
     const wrapper = mountView();
+    await vi.advanceTimersByTimeAsync(150);
     const scrollRoot = wrapper.find("main").element as HTMLElement;
 
     Object.defineProperty(scrollRoot, "scrollHeight", { configurable: true, value: 2_000 });
@@ -77,8 +79,17 @@ describe("<ScrollableView />", () => {
     expect(wrapper.text()).toContain("following live");
   });
 
+  test("starts a fresh five-minute follow when mounted", async () => {
+    const wrapper = mountView();
+    await nextTick();
+
+    expect(wrapper.text()).toContain("following live for 5:00");
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
+
   test("pauses live follow when the document scrolls up", async () => {
     const wrapper = mountView();
+    await vi.advanceTimersByTimeAsync(150);
     const scrollRoot = wrapper.find("main").element as HTMLElement;
     const documentRoot = document.documentElement;
 

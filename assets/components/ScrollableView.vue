@@ -114,6 +114,9 @@ const followRemainingLabel = computed(() => {
 });
 
 let followTimer: ReturnType<typeof setInterval> | undefined;
+let programmaticScrollTimer: ReturnType<typeof setTimeout> | undefined;
+let followScrollFrame: number | undefined;
+let programmaticScroll = false;
 let previousScrollTop = 0;
 
 if (!historical.value) {
@@ -128,7 +131,10 @@ if (!historical.value) {
     scrollObserver,
     ([entry]) => {
       scrollContext.paused = entry.intersectionRatio == 0;
-      if (scrollContext.paused && followLogs.value) {
+      if (!scrollContext.paused) {
+        programmaticScroll = false;
+        if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer);
+      } else if (followLogs.value && !programmaticScroll) {
         followLogs.value = false;
       }
     },
@@ -142,8 +148,8 @@ if (!historical.value) {
   useMutationObserver(
     scrollableContent,
     (records) => {
-      if (!scrollContext.paused && followLogs.value) {
-        scrollToBottom();
+      if (followLogs.value && (!scrollContext.paused || programmaticScroll)) {
+        scheduleFollowScroll();
       } else {
         const record = records[records.length - 1];
         const children = (record.target as HTMLElement).children;
@@ -156,9 +162,24 @@ if (!historical.value) {
   );
 }
 
+onMounted(() => {
+  if (historical.value) return;
+  followUntil.value = Date.now() + followDurationMs;
+  now.value = Date.now();
+  followLogs.value = true;
+  programmaticScroll = true;
+  nextTick(() => scrollToBottom());
+});
+
 onScopeDispose(() => {
   if (followTimer) {
     clearInterval(followTimer);
+  }
+  if (programmaticScrollTimer) {
+    clearTimeout(programmaticScrollTimer);
+  }
+  if (followScrollFrame !== undefined) {
+    cancelAnimationFrame(followScrollFrame);
   }
 });
 
@@ -174,12 +195,40 @@ function toggleFollowLogs() {
 }
 
 function scrollToBottom(behavior: "auto" | "smooth" = "auto") {
-  scrollObserver.value?.scrollIntoView({ behavior });
+  programmaticScroll = true;
+  if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer);
+  programmaticScrollTimer = setTimeout(
+    () => {
+      programmaticScroll = false;
+    },
+    behavior === "smooth" ? 1000 : 100,
+  );
   const root = scrollContainer();
   if (root) {
+    if (root === document.scrollingElement) {
+      // Chromium can ignore Element.scrollTo({ behavior: "smooth" }) on the
+      // root element while the page height is changing. A direct window scroll
+      // keeps live follow pinned deterministically.
+      window.scrollTo(0, root.scrollHeight);
+    } else {
+      root.scrollTo?.({ top: root.scrollHeight, behavior });
+    }
     previousScrollTop = root.scrollTop;
   }
   hasMore.value = false;
+}
+
+function scheduleFollowScroll() {
+  if (followScrollFrame !== undefined) return;
+  followScrollFrame = requestAnimationFrame(() => {
+    followScrollFrame = undefined;
+    const root = scrollContainer();
+    if (!root || !followLogs.value || (scrollContext.paused && !programmaticScroll)) return;
+    const bottomGap = root.scrollHeight - root.clientHeight - root.scrollTop;
+    if (bottomGap > 1) {
+      scrollToBottom();
+    }
+  });
 }
 
 function scrollContainer() {
@@ -194,7 +243,7 @@ function handleScroll() {
 
   const previous = previousScrollTop;
   previousScrollTop = root.scrollTop;
-  if (historical.value || !followLogs.value) return;
+  if (historical.value || !followLogs.value || programmaticScroll) return;
 
   const scrollingUp = root.scrollTop < previous - 24;
   const awayFromBottom = root.scrollHeight - root.clientHeight - root.scrollTop > 40;

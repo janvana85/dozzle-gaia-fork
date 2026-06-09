@@ -54,9 +54,9 @@
         </tr>
       </thead>
       <tbody ref="list">
-        <tr v-for="{ key, value, enabled } in fields" :key="key.join('.')" class="hover">
+        <tr v-for="{ key, value, enabled } in fields" :key="formatFieldKey(key)" class="hover">
           <td class="cursor-move font-mono break-all">
-            {{ key.join(".") }}
+            {{ formatFieldKey(key) }}
           </td>
           <td class="truncate max-md:hidden">
             <code>{{ JSON.stringify(value) }}</code>
@@ -83,6 +83,10 @@ const visibleKeys = persistentVisibleKeysForContainer(container);
 const { hosts } = useHosts();
 
 const { useSortable } = await import("@vueuse/integrations/useSortable");
+
+function formatFieldKey(key: unknown) {
+  return normalizeVisibleKeyPath(key).join(".");
+}
 
 function toggleField(key: string[]) {
   if (visibleKeys.value.size === 0) {

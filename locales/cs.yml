@@ -286,6 +286,10 @@ notifications:
   settings:
     title: Nastavení
     quiet-hours-enabled: Zapnout tiché hodiny
+    summary: Souhrn tichých hodin
+    group-notifications: Seskupovat notifikace během tichých hodin
+    summary-max-groups: Maximum podrobných skupin
+    summary-hint: Nejčastější skupiny obsahují počet, časové rozmezí a první/poslední příklad.
     quiet-start: Začátek
     quiet-end: Konec
     quiet-hours-hint: Během tichých hodin se alerty standardně podrží a označí tagem. Opakované alerty se můžou ve frontě eskalovat, ale pořád čekají na konec tichých hodin.

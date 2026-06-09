@@ -108,6 +108,30 @@ describe("useLogLoader.loadOlderLogs (merged history)", () => {
     expect(rest.map((m) => m.date.getTime())).toEqual([75 * 1000, 100 * 1000]); // sorted, deduped
   });
 
+  test("continues from a previous Docker ID in a single-container service history", async () => {
+    const loader = new LoadMoreLogEntry(new Date(), async () => {});
+    const messages = shallowRef<LogEntry<LogMessage>[]>([
+      loader,
+      entry("old-id", 90, 50),
+      entry("current-id", 100, 100),
+    ]);
+    const containers = shallowRef([container("current-id")]);
+    const { loadOlderLogs } = setup(messages, containers);
+
+    loadBetween.mockResolvedValue(ok([entry("older-id", 80, 25)]));
+
+    await loadOlderLogs(loader);
+
+    expect(loadBetween).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "current-id" }),
+      expect.anything(),
+      expect.any(Date),
+      new Date(50 * 1000),
+      { min: 100, lastSeenId: 90 },
+    );
+    expect(messages.value.slice(1).map((log) => log.containerID)).toEqual(["older-id", "old-id", "current-id"]);
+  });
+
   test("does not re-enter while a previous load is in flight", async () => {
     const loader = new LoadMoreLogEntry(new Date(), async () => {});
     const messages = shallowRef<LogEntry<LogMessage>[]>([loader, entry("a", 100, 100)]);
@@ -185,6 +209,33 @@ describe("useLogLoader.loadOlderLogs (merged history)", () => {
       { min: 100 },
     );
     expect(messages.value.slice(1).map((log) => log.id)).toEqual([10, 11, 100]);
+  });
+
+  test("automatically follows a newly returned cache-gap hint", async () => {
+    vi.useFakeTimers();
+    const loader = new LoadMoreLogEntry(new Date(), async () => {});
+    const messages = shallowRef<LogEntry<LogMessage>[]>([loader, entry("current-id", 100, 100)]);
+    const containers = shallowRef([container("current-id")]);
+    const { loadOlderLogs } = setup(messages, containers);
+    const hintedGap = new CacheGapLogEntry(
+      "trying to fetch from docker logs",
+      "current-id",
+      -50,
+      new Date(50 * 1000),
+      new Date(50 * 1000),
+      new Date(100 * 1000),
+      new Date(10 * 1000),
+      new Date(20 * 1000),
+    );
+
+    loadBetween.mockResolvedValueOnce(ok([hintedGap])).mockResolvedValueOnce(ok([entry("old-id", 10, 10)]));
+
+    await loadOlderLogs(loader);
+    await vi.runAllTimersAsync();
+
+    expect(loadBetween).toHaveBeenCalledTimes(2);
+    expect(messages.value.slice(1).map((log) => log.id)).toEqual([10, -50, 100]);
+    vi.useRealTimers();
   });
 
   test("does not forward a cache-gap placeholder id as lastSeenId", async () => {

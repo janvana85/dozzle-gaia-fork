@@ -56,6 +56,26 @@ CREATE TABLE IF NOT EXISTS unique_state (
     updated_at       INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_unique_state_updated ON unique_state(updated_at);
+
+CREATE TABLE IF NOT EXISTS quiet_summary (
+    summary_key     TEXT PRIMARY KEY,
+    subscription_id INTEGER NOT NULL,
+    dispatcher_id   INTEGER NOT NULL,
+    period_start    INTEGER NOT NULL,
+    period_end      INTEGER NOT NULL,
+    timezone        TEXT NOT NULL DEFAULT '',
+    payload         TEXT NOT NULL,
+    groups_json     TEXT NOT NULL DEFAULT '[]',
+    total_count     INTEGER NOT NULL DEFAULT 0,
+    updated_at      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_quiet_summary_period_end ON quiet_summary(period_end);
+
+CREATE TABLE IF NOT EXISTS quiet_period_mode (
+    period_key   TEXT PRIMARY KEY,
+    grouping     INTEGER NOT NULL,
+    period_end   INTEGER NOT NULL
+);
 `
 
 // QueuedNotification is a row from the notification_queue table.
@@ -89,6 +109,19 @@ type UniqueState struct {
 	Count          int
 	WindowStart    time.Time
 	Sent           bool
+	UpdatedAt      time.Time
+}
+
+type QuietSummary struct {
+	Key            string
+	SubscriptionID int
+	DispatcherID   int
+	PeriodStart    time.Time
+	PeriodEnd      time.Time
+	Timezone       string
+	Notification   types.Notification
+	GroupsJSON     string
+	TotalCount     int
 	UpdatedAt      time.Time
 }
 
@@ -436,6 +469,104 @@ func (q *Queue) CleanupUniqueState(retention time.Duration) {
 	cutoff := time.Now().Add(-retention).Unix()
 	if _, err := q.db.Exec(`DELETE FROM unique_state WHERE updated_at < ?`, cutoff); err != nil {
 		log.Warn().Err(err).Msg("Failed to clean unique_state")
+	}
+}
+
+func (q *Queue) UpsertQuietSummary(summary QuietSummary) error {
+	payload, err := json.Marshal(summary.Notification)
+	if err != nil {
+		return fmt.Errorf("marshal quiet summary notification: %w", err)
+	}
+	now := time.Now().UTC()
+	_, err = q.db.Exec(`
+		INSERT INTO quiet_summary
+			(summary_key, subscription_id, dispatcher_id, period_start, period_end, timezone, payload, groups_json, total_count, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(summary_key) DO UPDATE SET
+			payload = excluded.payload,
+			groups_json = excluded.groups_json,
+			total_count = excluded.total_count,
+			updated_at = excluded.updated_at`,
+		summary.Key, summary.SubscriptionID, summary.DispatcherID,
+		summary.PeriodStart.Unix(), summary.PeriodEnd.Unix(), summary.Timezone,
+		string(payload), summary.GroupsJSON, summary.TotalCount, now.Unix(),
+	)
+	return err
+}
+
+func (q *Queue) GetQuietSummary(key string) (*QuietSummary, error) {
+	row := q.db.QueryRow(`
+		SELECT subscription_id, dispatcher_id, period_start, period_end, timezone,
+		       payload, groups_json, total_count, updated_at
+		FROM quiet_summary WHERE summary_key = ?`, key)
+	var summary QuietSummary
+	var payload string
+	var periodStart, periodEnd, updatedAt int64
+	summary.Key = key
+	if err := row.Scan(&summary.SubscriptionID, &summary.DispatcherID, &periodStart, &periodEnd,
+		&summary.Timezone, &payload, &summary.GroupsJSON, &summary.TotalCount, &updatedAt); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(payload), &summary.Notification); err != nil {
+		return nil, fmt.Errorf("unmarshal quiet summary notification: %w", err)
+	}
+	summary.PeriodStart = time.Unix(periodStart, 0)
+	summary.PeriodEnd = time.Unix(periodEnd, 0)
+	summary.UpdatedAt = time.Unix(updatedAt, 0)
+	return &summary, nil
+}
+
+func (q *Queue) DueQuietSummaries(now time.Time) ([]QuietSummary, error) {
+	rows, err := q.db.Query(`
+		SELECT summary_key, subscription_id, dispatcher_id, period_start, period_end, timezone,
+		       payload, groups_json, total_count, updated_at
+		FROM quiet_summary WHERE period_end <= ? ORDER BY period_end ASC`, now.Unix())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var summaries []QuietSummary
+	for rows.Next() {
+		var summary QuietSummary
+		var payload string
+		var periodStart, periodEnd, updatedAt int64
+		if err := rows.Scan(&summary.Key, &summary.SubscriptionID, &summary.DispatcherID,
+			&periodStart, &periodEnd, &summary.Timezone, &payload, &summary.GroupsJSON,
+			&summary.TotalCount, &updatedAt); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(payload), &summary.Notification); err != nil {
+			return nil, fmt.Errorf("unmarshal quiet summary notification: %w", err)
+		}
+		summary.PeriodStart = time.Unix(periodStart, 0)
+		summary.PeriodEnd = time.Unix(periodEnd, 0)
+		summary.UpdatedAt = time.Unix(updatedAt, 0)
+		summaries = append(summaries, summary)
+	}
+	return summaries, rows.Err()
+}
+
+func (q *Queue) DeleteQuietSummary(key string) error {
+	_, err := q.db.Exec(`DELETE FROM quiet_summary WHERE summary_key = ?`, key)
+	return err
+}
+
+func (q *Queue) QuietPeriodGrouping(key string, periodEnd time.Time, configured bool) (bool, error) {
+	if _, err := q.db.Exec(`
+		INSERT OR IGNORE INTO quiet_period_mode (period_key, grouping, period_end)
+		VALUES (?, ?, ?)`, key, boolToInt(configured), periodEnd.Unix()); err != nil {
+		return false, err
+	}
+	var grouping int
+	if err := q.db.QueryRow(`SELECT grouping FROM quiet_period_mode WHERE period_key = ?`, key).Scan(&grouping); err != nil {
+		return false, err
+	}
+	return grouping != 0, nil
+}
+
+func (q *Queue) CleanupQuietPeriodModes(now time.Time) {
+	if _, err := q.db.Exec(`DELETE FROM quiet_period_mode WHERE period_end < ?`, now.Add(-24*time.Hour).Unix()); err != nil {
+		log.Warn().Err(err).Msg("Failed to clean quiet period modes")
 	}
 }
 

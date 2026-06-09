@@ -11,11 +11,11 @@ import { createRouter, createWebHistory } from "vue-router";
 import { default as Component } from "./EventSource.vue";
 import LogViewer from "@/components/LogViewer/LogViewer.vue";
 import { Container } from "@/models/Container";
-import { CacheGapLogEntry, Level, LoadMoreLogEntry } from "@/models/LogEntry";
+import { CacheGapLogEntry, Level, LoadMoreLogEntry, type LogEntry, type LogMessage } from "@/models/LogEntry";
 
 vi.mock("@/stores/config", () => ({
   __esModule: true,
-  default: { base: "", hosts: [{ name: "localhost", id: "localhost" }] },
+  default: { base: "", maxLogs: 400, hosts: [{ name: "localhost", id: "localhost" }] },
   withBase: (path: string) => path,
 }));
 
@@ -300,6 +300,50 @@ describe("<ContainerEventSource />", () => {
     expect(wrapper.vm.messages[1].message).toBe("Cached message.");
     // @ts-ignore
     expect(wrapper.vm.messages[2].message).toBe("Live message.");
+  });
+
+  test("caps reconnect cache backfill before rendering it", async () => {
+    const wrapper = createLogEventSource();
+    sources[sourceUrl].emitOpen();
+    const logs = Array.from({ length: config.maxLogs + 50 }, (_, index) => ({
+      ts: 1560336000000 + index,
+      m: `Cached ${index}`,
+      id: index + 1,
+      rm: `Cached ${index}`,
+      c: "abc",
+    }));
+
+    sources[sourceUrl].emit("logs-backfill", { data: JSON.stringify(logs) });
+    await nextTick();
+
+    // Loader + bounded log window. The oversized intermediate DOM that caused
+    // follow-mode flicker must never be rendered.
+    // @ts-ignore
+    expect(wrapper.vm.messages).toHaveLength(config.maxLogs + 1);
+    // @ts-ignore
+    expect(wrapper.vm.messages[1].message).toBe("Cached 50");
+  });
+
+  test("does not re-add old cache rows during a live reconnect", async () => {
+    const wrapper = createLogEventSource();
+    sources[sourceUrl].emitOpen();
+    sources[sourceUrl].emitMessage({
+      data: `{"ts":1560336942459, "m":"Live message.", "id":2, "rm":"Live message.", "c":"abc"}`,
+    });
+    vi.runAllTimers();
+    await nextTick();
+
+    sources[sourceUrl].emit("logs-backfill", {
+      data: `[{"ts":1560336902459, "m":"Initial backfill.", "id":3, "rm":"Initial backfill.", "c":"abc"}]`,
+    });
+    await nextTick();
+    sources[sourceUrl].emit("logs-backfill", {
+      data: `[{"ts":1560336882459, "m":"Old replay.", "id":1, "rm":"Old replay.", "c":"abc"}]`,
+    });
+    await nextTick();
+
+    // @ts-ignore
+    expect(wrapper.vm.messages.map((message: LogEntry<LogMessage>) => message.message)).not.toContain("Old replay.");
   });
 
   test("parses cache-gap next chunk hints from backfill events", async () => {

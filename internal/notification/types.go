@@ -292,6 +292,11 @@ type QuietHoursConfig struct {
 	End      string `json:"end" yaml:"end"`           // "07:00"
 	Timezone string `json:"timezone" yaml:"timezone"` // e.g. "Europe/Prague"; empty = local
 
+	// Summary grouping is enabled by default. A pointer preserves that default
+	// for existing configuration files where the field is absent.
+	GroupNotifications *bool `json:"groupNotifications,omitempty" yaml:"groupNotifications,omitempty"`
+	SummaryMaxGroups    int   `json:"summaryMaxGroups,omitempty" yaml:"summaryMaxGroups,omitempty"`
+
 	// Stacking
 	StackThreshold  int `json:"stackThreshold" yaml:"stackThreshold"`   // 0 = default 3
 	StackWindow     int `json:"stackWindow" yaml:"stackWindow"`         // seconds; 0 = default 900
@@ -300,6 +305,20 @@ type QuietHoursConfig struct {
 	// Topic routing
 	QuietTopic            string `json:"quietTopic" yaml:"quietTopic"`
 	StackedUsesQuietTopic bool   `json:"stackedUsesQuietTopic" yaml:"stackedUsesQuietTopic"`
+}
+
+func (q QuietHoursConfig) GroupingEnabled() bool {
+	return q.GroupNotifications == nil || *q.GroupNotifications
+}
+
+func (q QuietHoursConfig) MaxSummaryGroups() int {
+	if q.SummaryMaxGroups < 1 {
+		return defaultQuietSummaryGroups
+	}
+	if q.SummaryMaxGroups > 50 {
+		return 50
+	}
+	return q.SummaryMaxGroups
 }
 
 // TriggeredContainersCount returns the number of unique containers that triggered this subscription

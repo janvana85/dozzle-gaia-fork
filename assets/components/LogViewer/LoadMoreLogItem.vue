@@ -20,11 +20,14 @@ const { logEntry } = defineProps<{
 
 const isLoading = ref(false);
 const root = ref<HTMLElement>();
+const { paused } = useScrollContext();
+const { historical } = useLoggingContext();
 
 useIntersectionObserver(root, async (entries) => {
   if (entries[0].intersectionRatio <= 0) return;
   if (isLoading.value) return;
   if (logEntry.disabled) return;
+  if (!historical.value && !paused.value) return;
   const scrollingParent = root.value?.closest("[data-scrolling]") || document.documentElement;
   const previousHeight = scrollingParent.scrollHeight;
   isLoading.value = true;

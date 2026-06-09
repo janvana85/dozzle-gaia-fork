@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
@@ -335,9 +336,10 @@ func TestWatchdogClearMessageUsesQuietHoursQueuePolicy(t *testing.T) {
 	defer cancel()
 	defer manager.queue.Close()
 	manager.SetQuietHours(QuietHoursConfig{
-		Enabled: true,
-		Start:   "00:00",
-		End:     "23:59",
+		Enabled:            true,
+		Start:              "00:00",
+		End:                "23:59",
+		GroupNotifications: boolPointer(false),
 	})
 
 	dispatcher := &recordingDispatcher{}
@@ -484,6 +486,7 @@ func TestPerAlertQuietHoursQueuesToSQLiteWhenActive(t *testing.T) {
 	manager, _, cancel := newNotificationTestManagerWithDB(t, dbPath)
 	defer cancel()
 	defer manager.queue.Close()
+	manager.SetQuietHours(QuietHoursConfig{GroupNotifications: boolPointer(false)})
 
 	start, end := quietWindowContainingNow()
 	dispatcher := &recordingDispatcher{}
@@ -551,12 +554,13 @@ func TestQuietHoursQueuesRepeatedAlertWithEscalatedPriority(t *testing.T) {
 	defer cancel()
 	defer manager.queue.Close()
 	manager.SetQuietHours(QuietHoursConfig{
-		Enabled:         true,
-		Start:           "00:00",
-		End:             "23:59",
-		StackThreshold:  3,
-		StackWindow:     60,
-		StackedPriority: 5,
+		Enabled:            true,
+		Start:              "00:00",
+		End:                "23:59",
+		GroupNotifications: boolPointer(false),
+		StackThreshold:     3,
+		StackWindow:        60,
+		StackedPriority:    5,
 	})
 
 	dispatcher := &recordingDispatcher{}
@@ -596,7 +600,7 @@ func TestQuietHoursQueuesRepeatedAlertWithEscalatedPriority(t *testing.T) {
 	}
 }
 
-func TestQuietHoursTakesPrecedenceOverHoldWindow(t *testing.T) {
+func TestQuietHoursGroupsRepeatedAlertsByDefault(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "notifications.db")
 	manager, _, cancel := newNotificationTestManagerWithDB(t, dbPath)
 	defer cancel()
@@ -605,6 +609,44 @@ func TestQuietHoursTakesPrecedenceOverHoldWindow(t *testing.T) {
 		Enabled: true,
 		Start:   "00:00",
 		End:     "23:59",
+	})
+
+	dispatcher := &recordingDispatcher{}
+	dispatcherID := manager.AddDispatcher(dispatcher)
+	sub := &Subscription{
+		ID: 1, Name: "repeated-api-error", Enabled: true,
+		DispatcherID: dispatcherID, NtfyPriority: 4,
+	}
+	manager.subscriptions.Store(sub.ID, sub)
+
+	for range 3 {
+		notification := notificationForTest(sub)
+		notification.Detail = fmt.Sprintf("Request throttled; retry in %d seconds", 100+time.Now().Nanosecond()%10)
+		manager.sendOrQueue(dispatcher, notification, sub)
+	}
+
+	assert.Equal(t, 0, countPendingNotifications(t, dbPath))
+	periodStart, _, _ := manager.quietSummaryPeriod(sub, time.Now())
+	key := fmt.Sprintf("%d:%s:%s:%d", sub.ID, "host", "container-1", periodStart.Unix())
+	summary, err := manager.queue.GetQuietSummary(key)
+	require.NoError(t, err)
+	assert.Equal(t, 3, summary.TotalCount)
+	var groups []quietSummaryGroup
+	require.NoError(t, json.Unmarshal([]byte(summary.GroupsJSON), &groups))
+	require.Len(t, groups, 1)
+	assert.Equal(t, 3, groups[0].Count)
+}
+
+func TestQuietHoursTakesPrecedenceOverHoldWindow(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "notifications.db")
+	manager, _, cancel := newNotificationTestManagerWithDB(t, dbPath)
+	defer cancel()
+	defer manager.queue.Close()
+	manager.SetQuietHours(QuietHoursConfig{
+		Enabled:            true,
+		Start:              "00:00",
+		End:                "23:59",
+		GroupNotifications: boolPointer(false),
 	})
 
 	dispatcher := &recordingDispatcher{}
@@ -633,12 +675,13 @@ func TestQuietHoursQueuesEveryAlertWithQuietHoursTagAndSpacing(t *testing.T) {
 	defer cancel()
 	defer manager.queue.Close()
 	manager.SetQuietHours(QuietHoursConfig{
-		Enabled:         true,
-		Start:           "00:00",
-		End:             "23:59",
-		StackThreshold:  100,
-		StackWindow:     60,
-		StackedPriority: 5,
+		Enabled:            true,
+		Start:              "00:00",
+		End:                "23:59",
+		GroupNotifications: boolPointer(false),
+		StackThreshold:     100,
+		StackWindow:        60,
+		StackedPriority:    5,
 	})
 
 	dispatcher := &recordingDispatcher{}
@@ -678,11 +721,12 @@ func TestQuietHoursHoldsPriorityFiveNotificationsAndDrainsQueueSequentially(t *t
 	defer cancel()
 	defer manager.queue.Close()
 	manager.SetQuietHours(QuietHoursConfig{
-		Enabled:        true,
-		Start:          "00:00",
-		End:            "23:59",
-		StackThreshold: 100,
-		StackWindow:    60,
+		Enabled:            true,
+		Start:              "00:00",
+		End:                "23:59",
+		GroupNotifications: boolPointer(false),
+		StackThreshold:     100,
+		StackWindow:        60,
 	})
 
 	dispatcher := &recordingDispatcher{}
@@ -736,9 +780,10 @@ func TestBurstEscalationRespectsQuietHours(t *testing.T) {
 	defer cancel()
 	defer manager.queue.Close()
 	manager.SetQuietHours(QuietHoursConfig{
-		Enabled: true,
-		Start:   "00:00",
-		End:     "23:59",
+		Enabled:            true,
+		Start:              "00:00",
+		End:                "23:59",
+		GroupNotifications: boolPointer(false),
 	})
 
 	dispatcher := &recordingDispatcher{}
@@ -882,6 +927,10 @@ func quietWindowContainingNow() (string, string) {
 	start := now.Add(-time.Hour)
 	end := now.Add(time.Hour)
 	return start.Format("15:04"), end.Format("15:04")
+}
+
+func boolPointer(value bool) *bool {
+	return &value
 }
 
 func countPendingNotifications(t *testing.T, dbPath string) int {

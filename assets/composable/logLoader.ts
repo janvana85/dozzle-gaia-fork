@@ -124,11 +124,16 @@ export function useLogLoader(
     if (existingLogs.length === 0) return;
 
     const containerIDs = new Set(containers.value.map((c) => c.id));
+    const singleContainer = containers.value.length === 1;
     const earliestByContainer = new Map<string, LogEntry<LogMessage>>();
     const countByContainer = new Map<string, number>();
     const nthByContainer = new Map<string, LogEntry<LogMessage>>();
     for (const log of existingLogs) {
-      const id = log.containerID;
+      // Cached service history can span several Docker container IDs. In a
+      // single-container view, the backend resolves those IDs through the
+      // stable service identity, so treat every returned row as belonging to
+      // the selected container when calculating the next history window.
+      const id = singleContainer ? containers.value[0].id : log.containerID;
       if (!id || !containerIDs.has(id)) continue;
       if (!earliestByContainer.has(id)) {
         earliestByContainer.set(id, log);
@@ -198,6 +203,10 @@ export function useLogLoader(
           return;
         }
         messages.value = [loader, ...merged];
+        const nextGap = merged[0];
+        if (isCacheGapEntry(nextGap) && nextGap.nextFrom && nextGap.nextTo) {
+          setTimeout(() => void loadOlderLogs(loader), 0);
+        }
         return;
       }
 

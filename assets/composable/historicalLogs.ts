@@ -1,9 +1,12 @@
 import { HistoricalContainer } from "@/models/Container";
-import { LogMessage, LoadMoreLogEntry, LogEntry } from "@/models/LogEntry";
+import { CacheGapLogEntry, LogMessage, LoadMoreLogEntry, LogEntry, SkippedLogsEntry } from "@/models/LogEntry";
 import { ShallowRef } from "vue";
 import { loadBetween } from "@/composable/loadBetween";
 
 function getCursorLogId(log?: LogEntry<LogMessage>) {
+  if (log instanceof LoadMoreLogEntry || log instanceof CacheGapLogEntry || log instanceof SkippedLogsEntry) {
+    return undefined;
+  }
   return log && Number.isInteger(log.id) && log.id > 0 ? log.id : undefined;
 }
 
@@ -113,7 +116,7 @@ export function useHistoricalContainerLog(historicalContainer: Ref<HistoricalCon
       const item = messages.value.at(-2)!;
       const { logs, signal } = await loadBetween(container, params, item.date, new Date(), {
         maxStart: 100,
-        startId: item.id,
+        startId: getCursorLogId(item),
       });
 
       if (signal.aborted) {

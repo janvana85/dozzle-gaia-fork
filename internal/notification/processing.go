@@ -65,6 +65,9 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 			if sub.WatchdogProgram != nil && sub.MatchesWatchdog(notificationLog) {
 				wasActive := sub.CancelWatchdogTimer(logEvent.ContainerID)
 				if wasActive && sub.WatchdogClearMessage != "" {
+					if m.shouldAggregateQuiet(sub) {
+						return true
+					}
 					if d, ok := m.getDispatcher(sub.DispatcherID); ok {
 						clearNotif := types.Notification{
 							ID:           fmt.Sprintf("%s-watchdog-clear-%d", c.ID, time.Now().UnixNano()),
@@ -152,6 +155,18 @@ func (m *Manager) processLogEvent(logEvent *container.LogEvent) {
 
 		unique := m.evaluateUnique(sub, logEvent.ContainerID, formatLogMessage(notificationLog.Message))
 		if !unique.Allowed {
+			return true
+		}
+		if m.shouldAggregateQuiet(sub) {
+			notification := summaryNotification(sub, types.LogNotification, formatLogMessage(notificationLog.Message), notificationContainer)
+			notification.Log = &notificationLog
+			if err := m.aggregateQuietNotification(notification, sub); err != nil {
+				log.Warn().Err(err).Msg("Failed to aggregate quiet-hours log hit")
+			}
+			sub.AddTriggeredContainer(notificationContainer.ID)
+			sub.TriggerCount.Add(1)
+			now := time.Now()
+			sub.LastTriggeredAt.Store(&now)
 			return true
 		}
 
@@ -290,6 +305,18 @@ func (m *Manager) processStatEvent(event *ContainerStatEvent) {
 		if !unique.Allowed {
 			return true
 		}
+		if m.shouldAggregateQuiet(sub) {
+			notification := summaryNotification(sub, types.MetricNotification, detail, notificationContainer)
+			notification.Stat = &notificationStat
+			if err := m.aggregateQuietNotification(notification, sub); err != nil {
+				log.Warn().Err(err).Msg("Failed to aggregate quiet-hours metric hit")
+			}
+			sub.AddTriggeredContainer(event.Stat.ID)
+			sub.TriggerCount.Add(1)
+			now := time.Now()
+			sub.LastTriggeredAt.Store(&now)
+			return true
+		}
 
 		// Check per-container cooldown
 		if sub.IsMetricCooldownActive(event.Stat.ID) {
@@ -397,6 +424,9 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 			if sub.WatchdogEventProgram != nil && sub.MatchesWatchdogEvent(notificationEvent) {
 				wasActive := sub.CancelWatchdogTimer(event.Event.ActorID)
 				if wasActive && sub.WatchdogClearMessage != "" {
+					if m.shouldAggregateQuiet(sub) {
+						return true
+					}
 					if d, ok := m.getDispatcher(sub.DispatcherID); ok {
 						clearNotif := types.Notification{
 							ID:           fmt.Sprintf("%s-watchdog-clear-%d", event.Event.ActorID, time.Now().UnixNano()),
@@ -486,6 +516,18 @@ func (m *Manager) processDockerEvent(event *ContainerEventEntry) {
 
 		unique := m.evaluateUnique(sub, event.Event.ActorID, detail)
 		if !unique.Allowed {
+			return true
+		}
+		if m.shouldAggregateQuiet(sub) {
+			notification := summaryNotification(sub, types.EventNotification, detail, notificationContainer)
+			notification.Event = &notificationEvent
+			if err := m.aggregateQuietNotification(notification, sub); err != nil {
+				log.Warn().Err(err).Msg("Failed to aggregate quiet-hours event hit")
+			}
+			sub.AddTriggeredContainer(event.Event.ActorID)
+			sub.TriggerCount.Add(1)
+			now := time.Now()
+			sub.LastTriggeredAt.Store(&now)
 			return true
 		}
 
@@ -735,6 +777,12 @@ func (m *Manager) sendOrQueue(d dispatcher.Dispatcher, notification types.Notifi
 		addModifierTag(&notification, "quiet-hours")
 
 		if m.queue != nil {
+			if m.shouldAggregateQuiet(sub) {
+				if err := m.aggregateQuietNotification(notification, sub); err != nil {
+					log.Warn().Err(err).Msg("Failed to aggregate quiet-hours notification")
+				}
+				return
+			}
 			if err := m.applyQuietHoursBurstEscalation(&notification, sub); err != nil {
 				log.Warn().Err(err).Msg("Failed to evaluate quiet-hours burst")
 			}

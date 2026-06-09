@@ -39,7 +39,10 @@ function scheduleChunkedRender(source: LogEntry<LogMessage>[]) {
   cancelPendingRender = undefined;
 
   const total = source.length;
-  if (total <= INITIAL_RENDER_COUNT) {
+  // Chunk only the first large render. Once the full live window is visible,
+  // resetting to the first 300 rows for every incoming log briefly removes the
+  // newest rows and makes follow mode flash several minutes backwards.
+  if (total <= INITIAL_RENDER_COUNT || visibleMessages.value.length > INITIAL_RENDER_COUNT) {
     visibleMessages.value = source;
     return;
   }

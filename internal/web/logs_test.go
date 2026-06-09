@@ -548,9 +548,13 @@ func Test_handler_between_dates_with_everything_complex(t *testing.T) {
 type cachedSearchFallbackClientService struct {
 	container_support.ClientService
 	events []*container.LogEvent
+	from   time.Time
+	to     time.Time
 }
 
 func (s *cachedSearchFallbackClientService) LogsBetweenDates(ctx context.Context, c container.Container, from time.Time, to time.Time, stdTypes container.StdType) (<-chan *container.LogEvent, error) {
+	s.from = from
+	s.to = to
 	ch := make(chan *container.LogEvent, len(s.events))
 	for _, event := range s.events {
 		ch <- event
@@ -584,7 +588,7 @@ func Test_mergeCachedSearchWithDirect_merges_direct_hits_for_cache_holes(t *test
 			ContainerID: id,
 		},
 	}
-	service := container_support.NewContainerService(&cachedSearchFallbackClientService{
+	client := &cachedSearchFallbackClientService{
 		events: []*container.LogEvent{
 			{
 				Type:        container.LogTypeSingle,
@@ -597,10 +601,11 @@ func Test_mergeCachedSearchWithDirect_merges_direct_hits_for_cache_holes(t *test
 				ContainerID: id,
 			},
 		},
-	}, container.Container{
+	}
+	service := container_support.NewContainerService(client, container.Container{
 		ID:      id,
 		Host:    "localhost",
-		Created: time.Date(2026, time.June, 4, 6, 0, 0, 0, time.UTC),
+		Created: time.Date(2026, time.June, 1, 6, 0, 0, 0, time.UTC),
 	})
 
 	events, hasMore := mergeCachedSearchWithDirect(t.Context(), service, before, 10, container.STDALL, func(event *container.LogEvent) bool {
@@ -612,6 +617,8 @@ func Test_mergeCachedSearchWithDirect_merges_direct_hits_for_cache_holes(t *test
 	assert.Equal(t, "needle newest cached", events[0].RawMessage)
 	assert.Equal(t, "needle missing direct hit", events[1].RawMessage)
 	assert.Equal(t, "needle oldest cached", events[2].RawMessage)
+	assert.Equal(t, before.Add(-48*time.Hour), client.from)
+	assert.Equal(t, before, client.to)
 }
 
 func Test_matchesFilter_inverse(t *testing.T) {

@@ -183,6 +183,7 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
   // Background filtered stream used during a search snapshot to count how many new
   // matching logs arrive (without rendering them), so the UI can offer to go live.
   let counterEs: EventSource | null = null;
+  let receivedInitialBackfill = false;
 
   function close() {
     if (es) {
@@ -268,7 +269,19 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
 
     es.addEventListener("logs-backfill", (e) => {
       const data = JSON.parse((e as MessageEvent).data) as LogEvent[];
-      const logs = data.map((e) => asLogEntry(e));
+      let logs = data.map((e) => asLogEntry(e));
+      const existingLogs = messages.value.filter((message) => !(message instanceof LoadMoreLogEntry));
+      if (receivedInitialBackfill && existingLogs.length > 0) {
+        const latestTimestamp = existingLogs.at(-1)!.date.getTime();
+        // On SSE reconnect the server can replay an older cache block. Re-adding
+        // rows that the bounded live window just discarded makes the DOM
+        // oscillate between two sizes and visibly flashes several minutes back.
+        // Keep only genuinely missed events; history remains available via the
+        // load-more sentinel.
+        logs = logs.filter((log) => log.date.getTime() > latestTimestamp);
+      }
+      receivedInitialBackfill = true;
+      if (logs.length === 0) return;
       cached.value = true;
       cacheMode.value = "mixed";
       prependOlderLogs(logs);
@@ -320,7 +333,7 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
         byKey.set(key, log);
       }
     }
-    const merged = [...byKey.values()].sort((a, b) => a.date.getTime() - b.date.getTime());
+    const merged = [...byKey.values()].sort((a, b) => a.date.getTime() - b.date.getTime()).slice(-config.maxLogs);
     messages.value = loader ? [loader, ...merged] : merged;
   }
 

@@ -121,6 +121,8 @@ export interface QuietHoursConfig {
   start: string;
   end: string;
   timezone?: string;
+  groupNotifications?: boolean;
+  summaryMaxGroups?: number;
   stackThreshold?: number;
   stackWindow?: number;
   stackedPriority?: number;

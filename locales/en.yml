@@ -414,6 +414,10 @@ notifications:
   settings:
     title: Settings
     quiet-hours-enabled: Enable Quiet Hours
+    summary: Quiet-hours summary
+    group-notifications: Group notifications during quiet hours
+    summary-max-groups: Maximum detailed groups
+    summary-hint: The most frequent groups include counts, time ranges, and first/last examples.
     quiet-start: Start
     quiet-end: End
     quiet-hours-hint: During quiet hours, alerts are held by default and tagged. Repeated alerts can be escalated in the queue, but still wait until quiet hours end.

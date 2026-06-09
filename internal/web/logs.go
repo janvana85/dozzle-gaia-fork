@@ -29,7 +29,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const cachedSearchDirectWindow = 2 * time.Hour
+const cachedSearchDirectWindow = 48 * time.Hour
 
 type cacheGapEvent struct {
 	Type        string `json:"t"`
