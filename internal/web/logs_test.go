@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -791,4 +793,77 @@ func makeMessage(message string, stream container.StdType) []byte {
 	data = append(data, []byte(message)...)
 
 	return data
+}
+
+func Test_handler_between_dates_store_respects_min_maxStart_and_cursors(t *testing.T) {
+	id := "123456"
+	c := container.Container{ID: id, Host: "localhost"}
+	store := log_storage.NewStore(t.TempDir())
+	base, _ := time.Parse(time.RFC3339, "2018-01-01T05:00:00Z")
+	for i := 1; i <= 5; i++ {
+		require.NoError(t, store.AppendForContainer(c, &container.LogEvent{
+			Type:        container.LogTypeSingle,
+			Message:     fmt.Sprintf("log %d", i),
+			RawMessage:  fmt.Sprintf("log %d", i),
+			Timestamp:   base.Add(time.Duration(i) * time.Minute).UnixMilli(),
+			Id:          uint32(i),
+			Level:       "info",
+			Stream:      "stdout",
+			ContainerID: id,
+		}))
+	}
+
+	releaseFetch := make(chan struct{})
+	close(releaseFetch)
+	newHandler := func() *handler {
+		return &handler{
+			hostService: &gapFillHostService{c: c, clientService: &gapFillClientService{releaseFetch: releaseFetch, fetchStarted: make(chan struct{}, 1)}},
+			content:     emptyContent(),
+			config:      &Config{Base: "/", Authorization: Authorization{Provider: NONE}, LogStore: store},
+			logStore:    store,
+		}
+	}
+	doRequest := func(extra url.Values) []string {
+		req, err := http.NewRequest("GET", "/api/hosts/localhost/containers/"+id+"/logs", nil)
+		require.NoError(t, err)
+		q := req.URL.Query()
+		q.Add("from", base.Add(time.Minute).Format(time.RFC3339))
+		q.Add("to", base.Add(10*time.Minute).Format(time.RFC3339))
+		q.Add("stdout", "true")
+		q.Add("levels", "info")
+		for key, values := range extra {
+			for _, value := range values {
+				q.Add(key, value)
+			}
+		}
+		req.URL.RawQuery = q.Encode()
+		routeContext := chi.NewRouteContext()
+		routeContext.URLParams.Add("host", "localhost")
+		routeContext.URLParams.Add("id", id)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeContext))
+		rr := httptest.NewRecorder()
+		newHandler().fetchLogsBetweenDates(rr, req)
+		require.Equal(t, http.StatusOK, rr.Code)
+		messages := make([]string, 0)
+		for _, line := range strings.Split(strings.TrimSpace(rr.Body.String()), "\n") {
+			if line == "" {
+				continue
+			}
+			var event struct {
+				Type    string `json:"t"`
+				Message string `json:"m"`
+			}
+			require.NoError(t, json.Unmarshal([]byte(line), &event))
+			if event.Type == "cache-gap" {
+				continue
+			}
+			messages = append(messages, event.Message)
+		}
+		return messages
+	}
+
+	assert.Equal(t, []string{"log 4", "log 5"}, doRequest(url.Values{"min": {"2"}}), "min should keep only the newest events in range")
+	assert.Equal(t, []string{"log 1", "log 2"}, doRequest(url.Values{"maxStart": {"2"}}), "maxStart should stop after the oldest events in range")
+	assert.Equal(t, []string{"log 2", "log 3"}, doRequest(url.Values{"min": {"2"}, "lastSeenId": {"4"}}), "lastSeenId cursor should exclude the cursor row and newer")
+	assert.Equal(t, []string{"log 3", "log 4"}, doRequest(url.Values{"maxStart": {"2"}, "startId": {"2"}}), "startId cursor should skip rows up to the cursor")
 }

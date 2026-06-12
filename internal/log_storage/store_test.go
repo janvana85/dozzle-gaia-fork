@@ -117,3 +117,39 @@ func TestAppendForContainerSkipsConsecutiveDuplicateEvent(t *testing.T) {
 	}
 	assert.Equal(t, []string{"same event"}, messages)
 }
+
+func TestBatchedIndexIsVisibleToReadsWithoutExplicitFlush(t *testing.T) {
+	store := NewStore(t.TempDir())
+	now := time.Now().UTC()
+	c := container.Container{ID: "abc123456789", Name: "api", Host: "earth"}
+
+	require.NoError(t, store.RecordContainer(c))
+	require.NoError(t, store.AppendForContainer(c, &container.LogEvent{
+		ContainerID: c.ID,
+		Timestamp:   now.UnixMilli(),
+		Message:     "buffered write",
+		RawMessage:  "buffered write",
+		Stream:      "stdout",
+		Level:       "info",
+	}))
+
+	// No explicit flush: reads must sync buffered file writes and pending
+	// index deltas themselves.
+	assert.True(t, store.HasLogsForContainer(c))
+
+	last, ok := store.LastTimestampForContainer(c)
+	require.True(t, ok)
+	assert.Equal(t, now.UnixMilli(), last.UnixMilli())
+
+	events, err := store.LogsBetweenDatesForContainer(t.Context(), c, now.Add(-time.Second), now.Add(time.Second))
+	require.NoError(t, err)
+	messages := make([]string, 0)
+	for event := range events {
+		messages = append(messages, event.Message.(string))
+	}
+	assert.Equal(t, []string{"buffered write"}, messages)
+
+	_, _, found, err := store.PreviousChunkRangeForContainer(c, now.Add(time.Minute))
+	require.NoError(t, err)
+	assert.True(t, found)
+}

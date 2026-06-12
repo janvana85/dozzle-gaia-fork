@@ -475,39 +475,61 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		writeStored := func(event *container.LogEvent) {
-			if everything {
-				if _, ok := event.Message.(string); onlyComplex && ok {
-					return
-				}
-				if regex != nil && inverse == support_web.Search(regex, event) {
-					return
-				}
-				if len(levels) > 0 {
-					if _, ok := levels[event.Level]; !ok {
-						return
-					}
-				}
-				if plainText {
-					fmt.Fprintf(writer, "%s\n", event.RawMessage)
-				} else if err := encoder.Encode(event); err != nil {
-					log.Error().Err(err).Msg("error encoding stored log event")
-				}
+			if _, ok := event.Message.(string); onlyComplex && ok {
 				return
 			}
-			if !matchesFilter(event, regex, levels, inverse) {
+			if regex != nil && inverse == support_web.Search(regex, event) {
 				return
 			}
-			support_web.EscapeHTMLValues(event)
-			if err := encoder.Encode(event); err != nil {
+			if len(levels) > 0 {
+				if _, ok := levels[event.Level]; !ok {
+					return
+				}
+			}
+			if plainText {
+				fmt.Fprintf(writer, "%s\n", event.RawMessage)
+			} else if err := encoder.Encode(event); err != nil {
 				log.Error().Err(err).Msg("error encoding stored log event")
 			}
+		}
+		// Bounded collection mirroring the agent/Docker path below: respect the
+		// min/maxStart caps and the id cursors. Without this the store streams the
+		// whole range (anchor date to now can be days of logs), which floods the
+		// browser and makes the historical view crawl.
+		storeStartIdFound := startId == 0
+		collectStored := func(event *container.LogEvent) (stop bool) {
+			if !matchesFilter(event, regex, levels, inverse) {
+				return false
+			}
+			if !storeStartIdFound {
+				if event.Id == startId {
+					storeStartIdFound = true
+				}
+				return false
+			}
+			if lastSeenId != 0 && event.Id == lastSeenId {
+				return true
+			}
+			if buffer.Len() >= maxStart {
+				return true
+			}
+			support_web.EscapeHTMLValues(event)
+			buffer.Push(event)
+			return false
 		}
 		// Peek the first event. If the store has data for this range, serve it.
 		// If it is empty (a gap in the cache), return immediately and fill the
 		// gap from Docker/agent in the background. The request path must stay
 		// cache-only so historical scrolling never waits on Docker log scans.
 		if first, ok := <-events; ok {
-			if !everything && !plainText && containerService != nil && !from.IsZero() && !to.IsZero() && from.Before(to) {
+			if everything {
+				writeStored(first)
+				for event := range events {
+					writeStored(event)
+				}
+				return
+			}
+			if !plainText && containerService != nil && !from.IsZero() && !to.IsZero() && from.Before(to) {
 				firstTime := time.UnixMilli(first.Timestamp)
 				if from.Before(firstTime) {
 					h.scheduleCacheGapFill(containerService, from, firstTime, stdTypes)
@@ -517,9 +539,18 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 					}
 				}
 			}
-			writeStored(first)
-			for event := range events {
-				writeStored(event)
+			if !collectStored(first) {
+				for event := range events {
+					if collectStored(event) {
+						break
+					}
+				}
+			}
+			for _, event := range buffer.Data() {
+				if err := encoder.Encode(event); err != nil {
+					log.Error().Err(err).Msg("error encoding stored log event")
+					return
+				}
 			}
 			return
 		}

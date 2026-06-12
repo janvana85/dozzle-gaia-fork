@@ -29,6 +29,24 @@ type Store struct {
 	files   map[string]*os.File
 	writers map[string]*bufio.Writer
 	recent  map[string]logEventKey
+	pending map[chunkKey]*chunkDelta
+}
+
+// chunkKey mirrors the log_chunks primary key.
+type chunkKey struct {
+	host        string
+	containerID string
+	day         string
+}
+
+// chunkDelta accumulates index updates in memory so the SQLite index is
+// written once per flush instead of once per log line.
+type chunkDelta struct {
+	identity string
+	path     string
+	firstTS  int64
+	lastTS   int64
+	lines    int64
 }
 
 func NewStore(dataDir string) *Store {
@@ -38,6 +56,7 @@ func NewStore(dataDir string) *Store {
 		files:   make(map[string]*os.File),
 		writers: make(map[string]*bufio.Writer),
 		recent:  make(map[string]logEventKey),
+		pending: make(map[chunkKey]*chunkDelta),
 	}
 }
 
@@ -59,11 +78,15 @@ func (s *Store) openDB() error {
 	if err := os.MkdirAll(s.dataDir, 0o755); err != nil {
 		return err
 	}
-	db, err := sql.Open("sqlite", s.dbPath)
+	// WAL lets historical-scroll reads run while the live stream is writing;
+	// without it every cache read queues behind index writes. The pragmas are
+	// per-connection, so they go through the DSN to cover the whole pool.
+	dsn := "file:" + s.dbPath + "?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return err
 	}
-	db.SetMaxOpenConns(1)
+	db.SetMaxOpenConns(4)
 	if _, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS log_chunks (
   host TEXT NOT NULL,
@@ -206,7 +229,10 @@ func (s *Store) Start(ctx context.Context, ch <-chan *container.LogEvent) {
 		cleanupTicker := time.NewTicker(24 * time.Hour)
 		defer flushTicker.Stop()
 		defer cleanupTicker.Stop()
-		defer s.closeAll()
+		defer func() {
+			s.closeAll()
+			s.flushIndex()
+		}()
 
 		for {
 			select {
@@ -221,8 +247,10 @@ func (s *Store) Start(ctx context.Context, ch <-chan *container.LogEvent) {
 				}
 			case <-flushTicker.C:
 				s.flush()
+				s.flushIndex()
 			case <-cleanupTicker.C:
 				s.flush()
+				s.flushIndex()
 				s.closeAll() // close handles so day rollover opens new files
 				s.cleanup()
 			}
@@ -280,7 +308,19 @@ func (s *Store) write(host string, ev *container.LogEvent, identity string) erro
 		return err
 	}
 	s.recent[path] = key
-	return s.upsertIndex(host, ev.ContainerID, identity, day, path, ev.Timestamp)
+
+	ck := chunkKey{host: host, containerID: ev.ContainerID, day: day}
+	delta, ok := s.pending[ck]
+	if !ok {
+		delta = &chunkDelta{firstTS: ev.Timestamp, lastTS: ev.Timestamp}
+		s.pending[ck] = delta
+	}
+	delta.identity = identity
+	delta.path = path
+	delta.firstTS = min(delta.firstTS, ev.Timestamp)
+	delta.lastTS = max(delta.lastTS, ev.Timestamp)
+	delta.lines++
+	return nil
 }
 
 func (s *Store) lastEventKey(path string) logEventKey {
@@ -302,22 +342,75 @@ func (s *Store) lastEventKey(path string) logEventKey {
 	return eventKey(&ev)
 }
 
-func (s *Store) upsertIndex(host, containerID, identity, day, path string, ts int64) error {
-	if err := s.openDB(); err != nil {
-		return err
+// flushIndex applies accumulated chunk deltas to SQLite in one transaction.
+// On failure the deltas are merged back so the next flush retries them.
+func (s *Store) flushIndex() {
+	s.mu.Lock()
+	if len(s.pending) == 0 {
+		s.mu.Unlock()
+		return
 	}
-	_, err := s.db.Exec(`
+	pending := s.pending
+	s.pending = make(map[chunkKey]*chunkDelta)
+	s.mu.Unlock()
+
+	restore := func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for key, delta := range pending {
+			if newer, ok := s.pending[key]; ok {
+				newer.firstTS = min(newer.firstTS, delta.firstTS)
+				newer.lastTS = max(newer.lastTS, delta.lastTS)
+				newer.lines += delta.lines
+			} else {
+				s.pending[key] = delta
+			}
+		}
+	}
+
+	if err := s.openDB(); err != nil {
+		restore()
+		log.Error().Err(err).Msg("log_storage: failed to open sqlite index for flush")
+		return
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		restore()
+		log.Error().Err(err).Msg("log_storage: failed to begin index flush")
+		return
+	}
+	now := time.Now().Unix()
+	for key, delta := range pending {
+		if _, err := tx.Exec(`
 INSERT INTO log_chunks(host, container_id, identity, day, path, first_ts, last_ts, lines, updated_at)
-VALUES(?, ?, ?, ?, ?, ?, ?, 1, ?)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(host, container_id, day) DO UPDATE SET
   identity=excluded.identity,
   path=excluded.path,
   first_ts=MIN(log_chunks.first_ts, excluded.first_ts),
   last_ts=MAX(log_chunks.last_ts, excluded.last_ts),
-  lines=log_chunks.lines+1,
+  lines=log_chunks.lines+excluded.lines,
   updated_at=excluded.updated_at
-`, host, containerID, identity, day, path, ts, ts, time.Now().Unix())
-	return err
+`, key.host, key.containerID, delta.identity, key.day, delta.path, delta.firstTS, delta.lastTS, delta.lines, now); err != nil {
+			_ = tx.Rollback()
+			restore()
+			log.Error().Err(err).Msg("log_storage: failed to flush index delta")
+			return
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		restore()
+		log.Error().Err(err).Msg("log_storage: failed to commit index flush")
+	}
+}
+
+// syncForRead makes buffered writes visible to a reader: file buffers are
+// flushed to disk and pending index deltas are applied. Reads are rare
+// compared to writes, so this keeps read-your-writes without paying a SQLite
+// transaction per log line.
+func (s *Store) syncForRead() {
+	s.flush()
+	s.flushIndex()
 }
 
 // RecordContainer stores lightweight metadata so cached containers can remain visible
@@ -376,6 +469,7 @@ func (s *Store) closeAll() {
 }
 
 func (s *Store) cleanup() {
+	s.syncForRead()
 	if err := s.openDB(); err == nil {
 		cutoffTS := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -retentionDays).Unix()
 		rows, err := s.db.Query(`SELECT path FROM log_chunks WHERE last_ts < ?`, cutoffTS*1000)
@@ -453,6 +547,7 @@ WHERE NOT EXISTS (
 // marked offline because they only represent locally cached logs, not a live
 // Docker object.
 func (s *Store) CachedContainers(host string) ([]container.Container, error) {
+	s.syncForRead()
 	if err := s.openDB(); err != nil {
 		return nil, err
 	}
@@ -500,6 +595,7 @@ func (s *Store) CachedContainers(host string) ([]container.Container, error) {
 
 // HasLogs returns true if any stored log files exist for the container.
 func (s *Store) HasLogs(host, containerID string) bool {
+	s.syncForRead()
 	if err := s.openDB(); err != nil {
 		dir := s.containerDir(host, containerID)
 		entries, err := os.ReadDir(dir)
@@ -515,6 +611,7 @@ func (s *Store) HasLogs(host, containerID string) bool {
 // HasLogsForContainer returns true if cached logs exist for the concrete
 // container ID or for the stable Compose/Coolify service identity.
 func (s *Store) HasLogsForContainer(c container.Container) bool {
+	s.syncForRead()
 	if c.ID == "" {
 		return false
 	}
@@ -536,6 +633,7 @@ LIMIT 1`, c.Host, c.ID, identity).Scan(&exists)
 // LastTimestampForContainer returns the newest cached log timestamp for the
 // concrete container ID or stable service identity.
 func (s *Store) LastTimestampForContainer(c container.Container) (time.Time, bool) {
+	s.syncForRead()
 	if c.ID == "" {
 		return time.Time{}, false
 	}
@@ -594,6 +692,7 @@ func (s *Store) PreviousChunkRange(host, containerID string, before time.Time) (
 }
 
 func (s *Store) logsBetweenDates(ctx context.Context, host, containerID, identity string, from, to time.Time) (<-chan *container.LogEvent, error) {
+	s.syncForRead()
 	if err := s.openDB(); err != nil {
 		return nil, err
 	}
@@ -629,6 +728,7 @@ WHERE (host = ? AND container_id = ? AND day >= ? AND day <= ?)`
 }
 
 func (s *Store) searchBefore(ctx context.Context, host, containerID, identity string, before time.Time, limit int, match func(*container.LogEvent) bool) ([]*container.LogEvent, bool, error) {
+	s.syncForRead()
 	if limit <= 0 {
 		limit = 200
 	}
@@ -681,6 +781,7 @@ ORDER BY MAX(last_ts) DESC`
 }
 
 func (s *Store) previousChunkRange(host, containerID, identity string, before time.Time) (time.Time, time.Time, bool, error) {
+	s.syncForRead()
 	if before.IsZero() {
 		before = time.Now()
 	}
