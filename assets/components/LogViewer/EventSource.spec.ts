@@ -9,6 +9,7 @@ import { computed, nextTick } from "vue";
 import { createI18n } from "vue-i18n";
 import { createRouter, createWebHistory } from "vue-router";
 import { default as Component } from "./EventSource.vue";
+import SearchStatus from "./SearchStatus.vue";
 import LogViewer from "@/components/LogViewer/LogViewer.vue";
 import { Container } from "@/models/Container";
 import { CacheGapLogEntry, Level, LoadMoreLogEntry, type LogEntry, type LogMessage } from "@/models/LogEntry";
@@ -397,6 +398,32 @@ describe("<ContainerEventSource />", () => {
     // @ts-ignore
     const texts = wrapper.vm.messages.slice(1).map((message) => message.message);
     expect(texts).toEqual(["live"]);
+  });
+
+  describe("search status", () => {
+    test("shows no-logs when not searching and the stream is empty", async () => {
+      const wrapper = createLogEventSource();
+      sources[sourceUrl].emitOpen();
+
+      await vi.advanceTimersByTimeAsync(3500);
+      await nextTick();
+
+      expect(wrapper.find('[data-testid="no-logs"]').exists()).toBe(true);
+    });
+
+    test("suppresses no-logs while a search is still running", async () => {
+      const wrapper = createLogEventSource();
+      sources[sourceUrl].emitOpen();
+      sources[sourceUrl].emit("search-status", {
+        data: JSON.stringify({ scannedTo: "2026-06-01T14:31:00Z", matches: 0, done: false }),
+      });
+
+      vi.advanceTimersByTime(3000);
+      await nextTick();
+
+      expect(wrapper.find('[data-testid="no-logs"]').exists()).toBe(false);
+      expect(wrapper.findComponent(SearchStatus).exists()).toBe(true);
+    });
   });
 
   describe("render html correctly", () => {

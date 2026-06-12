@@ -16,6 +16,7 @@ import { Service, Stack } from "@/models/Stack";
 import { Container, GroupedContainers } from "@/models/Container";
 import { parseMessage } from "@/composable/loadBetween";
 import { useLogLoader } from "@/composable/logLoader";
+import { parseEventData } from "@/utils/events";
 
 const { isSearching, debouncedSearchFilter, inverseFilter, followingSearch, pendingSearchCount } = useSearchFilter();
 const mergedLiveLateToleranceMs = 5_000;
@@ -69,6 +70,14 @@ export function useOwnerStream(owner: Ref<{ name: string; kind: string }>): LogS
   return useLogStream(computed(() => `/api/labels/${labels.value}/logs/stream`));
 }
 
+export type SearchStatus = {
+  active: boolean;
+  done: boolean;
+  matches: number;
+  scannedTo?: string;
+  reason?: "capped" | "exhausted";
+};
+
 export type LogStreamSource = ReturnType<typeof useLogStream>;
 
 function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) {
@@ -77,6 +86,7 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
   const opened = ref(false);
   const loading = ref(true);
   const error = ref(false);
+  const searchStatus = ref<SearchStatus>({ active: false, done: false, matches: 0 });
   const { paused: scrollingPaused } = useScrollContext();
   const loggingContext = useLoggingContext();
   const { streamConfig, hasComplexLogs, levels, loadingMore, containers } = loggingContext;
@@ -248,13 +258,14 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
     loading.value = true;
     error.value = false;
     initial = true;
+    searchStatus.value = { active: isSearching.value, done: false, matches: 0 };
     es = new EventSource(urlWithParams.value);
     es.addEventListener("container-event", (e) => {
-      const event = JSON.parse((e as MessageEvent).data) as {
+      const event = parseEventData<{
         actorId: string;
         name: "container-stopped" | "container-started";
         time: string;
-      };
+      }>(e);
       const containerEvent = new ContainerEventLogEntry(
         event.name == "container-started" ? "Container started" : "Container stopped",
         event.actorId,
@@ -268,7 +279,7 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
     });
 
     es.addEventListener("logs-backfill", (e) => {
-      const data = JSON.parse((e as MessageEvent).data) as LogEvent[];
+      const data = parseEventData<LogEvent[]>(e);
       let logs = data.map((e) => asLogEntry(e));
       const existingLogs = messages.value.filter((message) => !(message instanceof LoadMoreLogEntry));
       if (receivedInitialBackfill && existingLogs.length > 0) {
@@ -285,6 +296,22 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
       cached.value = true;
       cacheMode.value = "mixed";
       prependOlderLogs(logs);
+    });
+
+    es.addEventListener("search-status", (e) => {
+      const data = parseEventData<{
+        scannedTo: string;
+        matches: number;
+        done: boolean;
+        reason?: "capped" | "exhausted";
+      }>(e);
+      searchStatus.value = {
+        active: !data.done,
+        done: data.done,
+        matches: data.matches,
+        scannedTo: data.scannedTo,
+        reason: data.reason,
+      };
     });
 
     es.onmessage = (e) => {
@@ -388,5 +415,6 @@ function useLogStream(url: Ref<string | undefined>, container?: Ref<Container>) 
     opened,
     error,
     loading,
+    searchStatus,
   };
 }

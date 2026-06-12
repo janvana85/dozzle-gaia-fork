@@ -125,6 +125,7 @@ exports[`<ContainerEventSource /> > render html correctly > should render messag
 
 exports[`<ContainerEventSource /> > should parse messages 1`] = `
 LoadMoreLogEntry {
+  "_disabled": false,
   "_message": "",
   "containerID": "",
   "date": 2019-06-12T10:55:42.709Z,

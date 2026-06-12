@@ -263,6 +263,15 @@ func mergeCachedSearchWithDirect(
 	return merged, hasMore
 }
 
+// searchStatus reports progress of the filtered backfill walk to the frontend.
+// scannedTo is the oldest boundary scanned so far; reason is only set when done.
+type searchStatus struct {
+	ScannedTo time.Time `json:"scannedTo"`
+	Matches   int       `json:"matches"`
+	Done      bool      `json:"done"`
+	Reason    string    `json:"reason,omitempty"`
+}
+
 func (h *handler) resolveLabels(r *http.Request) container.ContainerLabels {
 	labels := h.config.Labels
 	if h.config.Authorization.Provider != NONE {
@@ -582,8 +591,10 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 					}
 				}
 				if plainText {
-					// Strip ANSI and control bytes; a NUL byte truncates clipboard text on Windows
-					fmt.Fprintf(writer, "%s\n", container.SanitizeForPlainText(event.RawMessage))
+					// Expand grouped events into their fragment lines; grouped
+					// events store their lines in Message and have an empty
+					// RawMessage, so writing RawMessage alone drops every group.
+					fmt.Fprintf(writer, "%s\n", event.PlainText())
 				} else if err := encoder.Encode(event); err != nil {
 					log.Error().Err(err).Msg("error encoding log event")
 				}
@@ -744,6 +755,7 @@ func (h *handler) streamLogsForContainers(w http.ResponseWriter, r *http.Request
 	liveLogs := make(chan *container.LogEvent)
 	events := make(chan *container.ContainerEvent, 1)
 	backfill := make(chan []*container.LogEvent)
+	searchStatusCh := make(chan searchStatus)
 
 	levels := make(map[string]struct{})
 	for _, level := range r.URL.Query()["levels"] {
@@ -774,8 +786,25 @@ func (h *handler) streamLogsForContainers(w http.ResponseWriter, r *http.Request
 
 		go func() {
 			minimum := 50
+			found := 0
 			delta := -10 * time.Second
 			to := absoluteTime
+			// ctx-guarded send so the goroutine never blocks after the client disconnects
+			send := func(s searchStatus) {
+				select {
+				case searchStatusCh <- s:
+				case <-r.Context().Done():
+				}
+			}
+			// Always emit exactly one terminal status, whatever exit fires (ran out
+			// of logs, hit the cap, or errored). Without this the frontend would keep
+			// suppressing the empty state and spin forever. "exhausted" is the default
+			// for running out of logs and for error/early returns; "capped" is set only
+			// when the loop completes by reaching the match cap.
+			reason := "exhausted"
+			defer func() {
+				send(searchStatus{ScannedTo: to, Matches: found, Done: true, Reason: reason})
+			}()
 			for minimum > 0 {
 				events := make([]*container.LogEvent, 0)
 				stillRunning := false
@@ -808,19 +837,28 @@ func (h *handler) streamLogsForContainers(w http.ResponseWriter, r *http.Request
 				}
 
 				if !stillRunning {
+					// scanned past the oldest container's birth: nothing older exists
 					return
 				}
 
 				to = to.Add(delta)
 				delta *= 2
 				minimum -= len(events)
+				found += len(events)
 				sort.Slice(events, func(i, j int) bool {
 					return events[i].Timestamp < events[j].Timestamp
 				})
 				if len(events) > 0 {
-					backfill <- events
+					select {
+					case backfill <- events:
+					case <-r.Context().Done():
+						return
+					}
 				}
+				send(searchStatus{ScannedTo: to, Matches: found, Done: false})
 			}
+			// accumulated enough matches; more may exist further back
+			reason = "capped"
 		}()
 	}
 
@@ -925,6 +963,11 @@ loop:
 			}
 			if err := sseWriter.Event("logs-backfill", backfillEvents); err != nil {
 				log.Error().Err(err).Msg("error encoding container event")
+			}
+
+		case s := <-searchStatusCh:
+			if err := sseWriter.Event("search-status", s); err != nil {
+				log.Error().Err(err).Msg("error encoding search status")
 			}
 
 		case <-ticker.C:

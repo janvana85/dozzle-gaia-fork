@@ -8,7 +8,7 @@ import { Container } from "@/models/Container";
 
 vi.mock("@/stores/config", () => ({
   __esModule: true,
-  default: { base: "" },
+  default: { base: "", hosts: [] },
   withBase: (path: string) => path,
 }));
 

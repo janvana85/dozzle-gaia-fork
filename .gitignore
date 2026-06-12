@@ -16,3 +16,4 @@ coverage.out
 *.csr
 tmp
 .claude/
+.pnpm-store/
