@@ -6,6 +6,7 @@
     "strict": true,
     "esModuleInterop": true,
     "incremental": false,
+    "noEmit": true,
     "skipLibCheck": true,
     "moduleResolution": "Bundler",
     "resolveJsonModule": true,

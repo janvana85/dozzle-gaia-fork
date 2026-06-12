@@ -440,9 +440,6 @@ declare global {
   export type { Host } from './stores/hosts'
   import('./stores/hosts')
   // @ts-ignore
-  export type { K8sNamespace, K8sOwner } from './stores/k8s.js'
-  import('./stores/k8s.js')
-  // @ts-ignore
   export type { K8sNamespace, K8sOwner } from './stores/k8s'
   import('./stores/k8s')
   // @ts-ignore

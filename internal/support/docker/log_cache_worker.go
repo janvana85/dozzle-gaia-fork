@@ -109,7 +109,6 @@ func (m *MultiHostService) scheduleCacheBackfills(ctx context.Context, cfg logCa
 	for _, client := range m.manager.List() {
 		host, err := client.Host(ctx)
 		if err != nil {
-			log.Debug().Err(err).Msg("log cache: host unavailable during cache scan")
 			continue
 		}
 		containers, err := client.ListContainers(ctx, nil)
