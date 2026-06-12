@@ -832,6 +832,7 @@ func Test_handler_between_dates_store_respects_min_maxStart_and_cursors(t *testi
 		q.Add("stdout", "true")
 		q.Add("levels", "info")
 		for key, values := range extra {
+			q.Del(key)
 			for _, value := range values {
 				q.Add(key, value)
 			}
@@ -866,4 +867,66 @@ func Test_handler_between_dates_store_respects_min_maxStart_and_cursors(t *testi
 	assert.Equal(t, []string{"log 1", "log 2"}, doRequest(url.Values{"maxStart": {"2"}}), "maxStart should stop after the oldest events in range")
 	assert.Equal(t, []string{"log 2", "log 3"}, doRequest(url.Values{"min": {"2"}, "lastSeenId": {"4"}}), "lastSeenId cursor should exclude the cursor row and newer")
 	assert.Equal(t, []string{"log 3", "log 4"}, doRequest(url.Values{"maxStart": {"2"}, "startId": {"2"}}), "startId cursor should skip rows up to the cursor")
+	assert.Equal(t, []string{"log 4", "log 5"},
+		doRequest(url.Values{"min": {"2"}, "from": {base.Add(9 * time.Minute).Format(time.RFC3339)}}),
+		"min should return the newest cached events even when the requested window itself is empty")
+}
+
+func Test_handler_between_dates_store_reverse_emits_leading_gap(t *testing.T) {
+	id := "123456"
+	c := container.Container{ID: id, Host: "localhost"}
+	store := log_storage.NewStore(t.TempDir())
+	base, _ := time.Parse(time.RFC3339, "2018-01-01T05:00:00Z")
+	for i := 1; i <= 5; i++ {
+		require.NoError(t, store.AppendForContainer(c, &container.LogEvent{
+			Type:        container.LogTypeSingle,
+			Message:     fmt.Sprintf("log %d", i),
+			RawMessage:  fmt.Sprintf("log %d", i),
+			Timestamp:   base.Add(time.Duration(i) * time.Minute).UnixMilli(),
+			Id:          uint32(i),
+			Level:       "info",
+			Stream:      "stdout",
+			ContainerID: id,
+		}))
+	}
+
+	releaseFetch := make(chan struct{})
+	close(releaseFetch)
+	h := &handler{
+		hostService: &gapFillHostService{c: c, clientService: &gapFillClientService{releaseFetch: releaseFetch, fetchStarted: make(chan struct{}, 1)}},
+		content:     emptyContent(),
+		config:      &Config{Base: "/", Authorization: Authorization{Provider: NONE}, LogStore: store},
+		logStore:    store,
+	}
+
+	req, err := http.NewRequest("GET", "/api/hosts/localhost/containers/"+id+"/logs", nil)
+	require.NoError(t, err)
+	q := req.URL.Query()
+	q.Add("from", base.Format(time.RFC3339))
+	q.Add("to", base.Add(10*time.Minute).Format(time.RFC3339))
+	q.Add("stdout", "true")
+	q.Add("min", "10")
+	req.URL.RawQuery = q.Encode()
+	routeContext := chi.NewRouteContext()
+	routeContext.URLParams.Add("host", "localhost")
+	routeContext.URLParams.Add("id", id)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeContext))
+	rr := httptest.NewRecorder()
+	h.fetchLogsBetweenDates(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	lines := strings.Split(strings.TrimSpace(rr.Body.String()), "\n")
+	require.Len(t, lines, 6, "expected a leading cache-gap event followed by all five cached rows")
+	var gap struct {
+		Type string `json:"t"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &gap))
+	assert.Equal(t, "cache-gap", gap.Type, "exhausted cache with an older requested from should emit a leading gap")
+	for i, line := range lines[1:] {
+		var event struct {
+			Message string `json:"m"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(line), &event))
+		assert.Equal(t, fmt.Sprintf("log %d", i+1), event.Message)
+	}
 }

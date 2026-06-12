@@ -460,6 +460,78 @@ func (h *handler) fetchLogsBetweenDates(w http.ResponseWriter, r *http.Request) 
 
 	// Serve from the indexed local log store. It is fast for historical ranges.
 	if usingStore {
+		// Scroll-back requests ("newest min events before to") read the day files
+		// backwards and stop once the batch is full. The forward path below decodes
+		// whole day files just to keep the newest few hundred lines, and it cannot
+		// return anything older than the requested window, so sparse containers
+		// need many near-empty round trips. Reading in reverse ignores the lower
+		// bound of the window: one request always returns a full batch.
+		if !everything && minimum > 0 && maxStart == math.MaxInt && startId == 0 && !to.IsZero() {
+			seenCursor := lastSeenId == 0
+			scanned := 0
+			match := func(event *container.LogEvent) bool {
+				scanned++
+				if !seenCursor {
+					if event.Id == lastSeenId {
+						seenCursor = true
+					}
+					return false
+				}
+				return matchesFilter(event, regex, levels, inverse)
+			}
+			var events []*container.LogEvent
+			var hasMore bool
+			if containerService != nil {
+				events, hasMore, err = h.logStore.SearchBeforeForContainer(r.Context(), containerService.Container, to, minimum, match)
+			} else {
+				events, hasMore, err = h.logStore.SearchBefore(r.Context(), hostKey(r), id, to, minimum, match)
+			}
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			unfiltered := regex == nil && len(levels) == 0
+			if len(events) == 0 {
+				// Only treat this as a cache gap when nothing was cached at all;
+				// a filtered query that matched nothing must not trigger a
+				// Docker backfill over already-cached ranges.
+				if scanned == 0 {
+					h.scheduleCacheGapFill(containerService, from, to, stdTypes)
+					if !plainText && containerService != nil && !from.IsZero() && from.Before(to) {
+						gapEvent := newCacheGapEvent(containerService.Container.ID, from, to)
+						if nextFrom, nextTo, ok, err := h.logStore.PreviousChunkRangeForContainer(containerService.Container, from); err == nil && ok {
+							gapEvent = newCacheGapEventWithNext(containerService.Container.ID, nextTo, to, nextFrom, nextTo)
+						}
+						if err := encoder.Encode(gapEvent); err != nil {
+							log.Error().Err(err).Msg("error encoding log cache gap event")
+						}
+					}
+				}
+				return
+			}
+			// hasMore == false means the reverse read reached the start of the
+			// cache, so anything between the requested from and the oldest cached
+			// event only exists in Docker. Restricted to unfiltered requests where
+			// the oldest returned event really is the cache boundary.
+			if !hasMore && unfiltered && !plainText && containerService != nil && !from.IsZero() {
+				oldest := time.UnixMilli(events[len(events)-1].Timestamp)
+				if from.Before(oldest) {
+					h.scheduleCacheGapFill(containerService, from, oldest, stdTypes)
+					if err := encoder.Encode(newCacheGapEvent(containerService.Container.ID, from, oldest)); err != nil {
+						log.Error().Err(err).Msg("error encoding leading log cache gap event")
+						return
+					}
+				}
+			}
+			for i := len(events) - 1; i >= 0; i-- {
+				support_web.EscapeHTMLValues(events[i])
+				if err := encoder.Encode(events[i]); err != nil {
+					log.Error().Err(err).Msg("error encoding stored log event")
+					return
+				}
+			}
+			return
+		}
 		queryFrom := from
 		if everything {
 			queryFrom = time.Now().AddDate(0, 0, -4)
